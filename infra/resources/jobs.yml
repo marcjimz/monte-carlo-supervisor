@@ -8,24 +8,32 @@ resources:
       tasks:
         - task_key: validate_and_check_cache
           notebook_task:
-            notebook_path: ../notebooks/jobs/mc_01_validate.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-          existing_cluster_id: ${var.cluster_id}
-
-        - task_key: run_simulation
-          depends_on:
-            - task_key: validate_and_check_cache
-          notebook_task:
-            notebook_path: ../notebooks/jobs/mc_02_simulate.py
+            notebook_path: ../../notebooks/jobs/mc_01_validate.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
           new_cluster:
             spark_version: "15.4.x-scala2.12"
-            node_type_id: "i3.xlarge"
-            num_workers: 10
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 0
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
+
+        - task_key: run_simulation
+          depends_on:
+            - task_key: validate_and_check_cache
+          notebook_task:
+            notebook_path: ../../notebooks/jobs/mc_02_simulate.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 4
             spark_conf:
               spark.databricks.delta.optimizeWrite.enabled: "true"
 
@@ -33,11 +41,19 @@ resources:
           depends_on:
             - task_key: run_simulation
           notebook_task:
-            notebook_path: ../notebooks/jobs/mc_03_aggregate.py
+            notebook_path: ../../notebooks/jobs/mc_03_aggregate.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          existing_cluster_id: ${var.cluster_id}
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 0
+            spark_conf:
+              spark.databricks.cluster.profile: singleNode
+              spark.master: "local[*]"
+            custom_tags:
+              ResourceClass: SingleNode
 
       parameters:
         - name: simulation_type

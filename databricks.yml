@@ -1,0 +1,30 @@
+bundle:
+  name: monte-carlo-supervisor
+
+variables:
+  catalog:
+    description: "Unity Catalog catalog name"
+    default: "monte_carlo_sim"
+  schema:
+    description: "Unity Catalog schema name"
+    default: "hospital_data"
+
+workspace:
+  root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+  profile: monte-carlo-ws
+
+include:
+  - infra/resources/*.yml
+
+sync:
+  include:
+    - notebooks/**/*.py
+    - src/**/*.py
+    - data/**/*.csv
+
+targets:
+  dev:
+    default: true
+    mode: development
+    workspace:
+      host: https://adb-7405611426422298.18.azuredatabricks.net
