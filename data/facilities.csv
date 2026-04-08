@@ -1,0 +1,16 @@
+facility_id,facility_name,facility_type,bed_count,address,city,state
+FAC001,North Judithbury Medical Group,Clinic,4,18196 Anthony Forge,North Judithbury,IN
+FAC002,New Jamesside Urgent Care,Urgent Care,4,79402 Peterson Drives Apt. 511,New Jamesside,MS
+FAC003,West Melanieview Regional Hospital,Hospital,490,781 Miller Hill,West Melanieview,MP
+FAC004,Barbaraland Medical Group,Clinic,8,341 Michelle Light,Barbaraland,KY
+FAC005,Reidstad Memorial Hospital,Hospital,253,5341 Amanda Gardens,Reidstad,GA
+FAC006,Grayside Medical Center,Hospital,467,503 Linda Locks,Grayside,KY
+FAC007,East Robinshire Health Clinic,Clinic,9,76724 John Points Suite 969,East Robinshire,MO
+FAC008,Jeffreyberg Regional Hospital,Hospital,152,01226 Paul Ranch Suite 848,Jeffreyberg,VI
+FAC009,Lake Jenniferside Physicians Clinic,Clinic,0,514 Moore Alley Suite 828,Lake Jenniferside,PW
+FAC010,Port Colleenhaven Urgent Care,Urgent Care,3,52880 Burns Creek,Port Colleenhaven,MN
+FAC011,Johnbury Medical Group,Clinic,3,71822 Arroyo Expressway,Johnbury,KS
+FAC012,Brandtside Express Care,Urgent Care,5,465 Lam Mission,Brandtside,DE
+FAC013,East Caleb Physicians Clinic,Clinic,2,839 Adrian Station,East Caleb,SC
+FAC014,East Carloston Regional Hospital,Hospital,69,83473 Jennifer Ports Suite 376,East Carloston,ID
+FAC015,North Donnastad Community Hospital,Hospital,358,7010 Chandler Union Apt. 333,North Donnastad,ND

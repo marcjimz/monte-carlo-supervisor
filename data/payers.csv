@@ -1,0 +1,9 @@
+payer_id,payer_name,payer_type,avg_reimbursement_rate
+PAY001,Medicare,Government,0.78
+PAY002,Medicaid,Government,0.65
+PAY003,Commercial - Blue Cross,Commercial,0.88
+PAY004,Commercial - Aetna,Commercial,0.85
+PAY005,Commercial - UnitedHealth,Commercial,0.87
+PAY006,Commercial - Cigna,Commercial,0.86
+PAY007,Self-Pay,Self-Pay,0.4
+PAY008,Other,Other,0.75

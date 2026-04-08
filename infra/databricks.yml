@@ -1,0 +1,33 @@
+bundle:
+  name: monte-carlo-supervisor
+
+variables:
+  catalog:
+    description: "Unity Catalog for hospital data and simulations"
+    default: "monte_carlo_sim"
+  schema:
+    description: "Schema for hospital data"
+    default: "hospital_data"
+
+workspace:
+  root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+
+include:
+  - resources/*.yml
+
+sync:
+  include:
+    - ../notebooks/**/*.py
+    - ../src/**/*.py
+    - ../data/**/*.csv
+
+targets:
+  dev:
+    default: true
+    mode: development
+
+  prod:
+    mode: production
+    variables:
+      catalog: monte_carlo_sim
+      schema: hospital_data

@@ -1,0 +1,50 @@
+resources:
+  jobs:
+    monte_carlo_pipeline:
+      name: "monte-carlo-simulation-pipeline"
+      description: "Spark-distributed Monte Carlo simulation pipeline with caching and Delta Lake storage"
+      tags:
+        project: monte-carlo-supervisor
+      tasks:
+        - task_key: validate_and_check_cache
+          notebook_task:
+            notebook_path: ../notebooks/jobs/mc_01_validate.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          existing_cluster_id: ${var.cluster_id}
+
+        - task_key: run_simulation
+          depends_on:
+            - task_key: validate_and_check_cache
+          notebook_task:
+            notebook_path: ../notebooks/jobs/mc_02_simulate.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "i3.xlarge"
+            num_workers: 10
+            spark_conf:
+              spark.databricks.delta.optimizeWrite.enabled: "true"
+
+        - task_key: aggregate_results
+          depends_on:
+            - task_key: run_simulation
+          notebook_task:
+            notebook_path: ../notebooks/jobs/mc_03_aggregate.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+          existing_cluster_id: ${var.cluster_id}
+
+      parameters:
+        - name: simulation_type
+          default: "patient_volume"
+        - name: parameters
+          default: "{}"
+        - name: num_simulations
+          default: "10000"
+        - name: seed
+          default: "42"

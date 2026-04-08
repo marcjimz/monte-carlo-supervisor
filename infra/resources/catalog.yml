@@ -1,0 +1,6 @@
+resources:
+  schemas:
+    hospital_data:
+      catalog_name: ${var.catalog}
+      name: ${var.schema}
+      comment: "Hospital encounter data, metric views, and Monte Carlo simulation results"

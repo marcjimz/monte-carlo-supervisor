@@ -1,0 +1,12 @@
+resources:
+  grants:
+    hospital_data_schema:
+      schema:
+        catalog_name: ${var.catalog}
+        schema_name: ${var.schema}
+      grants:
+        - principal: account users
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+            - EXECUTE
