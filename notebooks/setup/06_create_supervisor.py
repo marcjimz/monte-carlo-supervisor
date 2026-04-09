@@ -140,19 +140,6 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Add Training Examples
-
-# COMMAND ----------
-
-print(f"Adding {len(examples)} training examples...")
-
-manager.mas_add_examples_batch(tile_id, examples)
-
-print("Training examples added.")
-
-# COMMAND ----------
-
-# MAGIC %md
 # MAGIC ## Wait for Endpoint to Come Online
 
 # COMMAND ----------
@@ -199,6 +186,22 @@ else:
     print(f"\nWARNING: Endpoint did not reach ONLINE within {timeout_s}s.")
     print(f"Last status: {status}")
     print("The endpoint may still be provisioning. Check the workspace UI.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Add Training Examples
+# MAGIC
+# MAGIC Examples must be added **after** the endpoint is online. The examples API
+# MAGIC silently fails if the MAS serving endpoint is still provisioning.
+
+# COMMAND ----------
+
+print(f"Adding {len(examples)} training examples...")
+
+added = manager.mas_add_examples_batch(tile_id, examples)
+
+print(f"Training examples added: {len(added)}/{len(examples)} succeeded.")
 
 # COMMAND ----------
 

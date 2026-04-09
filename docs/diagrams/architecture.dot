@@ -1,0 +1,184 @@
+digraph HospitalMCArchitecture {
+    rankdir=TB;
+    fontname="Helvetica";
+    bgcolor="white";
+    compound=true;
+    newrank=true;
+    ranksep=0.8;
+    nodesep=0.5;
+
+    // Global edge styling - explicit dark color for Lucid Chart compatibility
+    edge [color="#555555", penwidth=1.5, fontname="Helvetica", fontsize=10, fontcolor="#333333"];
+
+    // ===================================================================
+    // APP EXPERIENCE LAYER
+    // ===================================================================
+    subgraph cluster_app {
+        label="App Experience Layer";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=14;
+        fontcolor="#333333";
+        style="filled,rounded";
+        fillcolor="#FFF5F2";
+        color="#FF3621";
+        penwidth=2;
+
+        playground [label="AI\nPlayground", shape=box, style="filled,rounded", fillcolor="#FFFFFF", color="#FF3621", fontname="Helvetica", fontsize=11, fontcolor="#333333", penwidth=1.5];
+        webapp [label="Custom\nWeb App", shape=box, style="filled,rounded", fillcolor="#FFFFFF", color="#FF3621", fontname="Helvetica", fontsize=11, fontcolor="#333333", penwidth=1.5];
+        slack [label="Slack\nIntegration", shape=box, style="filled,rounded", fillcolor="#FFFFFF", color="#FF3621", fontname="Helvetica", fontsize=11, fontcolor="#333333", penwidth=1.5];
+        restapi [label="REST API\nClients", shape=box, style="filled,rounded", fillcolor="#FFFFFF", color="#FF3621", fontname="Helvetica", fontsize=11, fontcolor="#333333", penwidth=1.5];
+    }
+
+    // ===================================================================
+    // MODEL SERVING ENDPOINT
+    // ===================================================================
+    endpoint [label="Model Serving Endpoint  (MAS REST API)", shape=box, style="filled,rounded", fillcolor="#FF3621", fontcolor="white", fontname="Helvetica", fontsize=12, color="#CC2A1A", penwidth=2, width=4, height=0.6];
+
+    // ===================================================================
+    // ORCHESTRATION LAYER
+    // ===================================================================
+    subgraph cluster_orchestration {
+        label="Orchestration Layer  —  Agent Bricks Multi-Agent Supervisor";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=14;
+        fontcolor="#333333";
+        style="filled,rounded";
+        fillcolor="#FFF0EB";
+        color="#FF3621";
+        penwidth=2;
+
+        router [label="Supervisor Router\n(Intent Classification)", shape=box, style="filled,rounded", fillcolor="#FF6B4F", fontcolor="white", fontname="Helvetica", fontsize=11, color="#CC2A1A", penwidth=1.5];
+
+        encounter_agent [label="encounter_analytics\n(Genie Sub-Agent)", shape=box, style="filled,rounded", fillcolor="#FFE0D9", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1.5];
+        checker_agent [label="simulation_checker\n(check_simulation)", shape=box, style="filled,rounded", fillcolor="#FFE0D9", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1.5];
+        trigger_agent [label="simulation_trigger\n(trigger_simulation)", shape=box, style="filled,rounded", fillcolor="#FFE0D9", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1.5];
+    }
+
+    // ===================================================================
+    // ANALYTICS LAYER (left) — simplified
+    // ===================================================================
+    subgraph cluster_analytics {
+        label="Analytics Layer";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=14;
+        fontcolor="#333333";
+        style="filled,rounded";
+        fillcolor="#EBF5FF";
+        color="#1B6ACB";
+        penwidth=2;
+
+        genie [label="Genie Space\n(Natural Language SQL)", shape=box, style="filled,rounded", fillcolor="#1B6ACB", fontcolor="white", fontname="Helvetica", fontsize=11, color="#14508F", penwidth=1.5];
+
+        metricviews [label="6 UC Metric Views\n(Semantic Layer)", shape=box, style="filled,rounded", fillcolor="#D6EAFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1.5];
+
+        genie -> metricviews [color="#1B6ACB", penwidth=1];
+    }
+
+    // ===================================================================
+    // SIMULATION LAYER (right)
+    // ===================================================================
+    subgraph cluster_simulation {
+        label="Simulation Layer";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=14;
+        fontcolor="#333333";
+        style="filled,rounded";
+        fillcolor="#FFF8EB";
+        color="#E8820C";
+        penwidth=2;
+
+        subgraph cluster_ucfuncs {
+            label="UC Functions";
+            fontname="Helvetica";
+            fontsize=10;
+            fontcolor="#555555";
+            style="filled,rounded";
+            fillcolor="#FFF0D6";
+            color="#E8820C";
+            penwidth=1;
+
+            check_fn [label="check_simulation\n(Read-Only Cache Lookup)", shape=box, style="filled,rounded", fillcolor="#E8820C", fontcolor="white", fontname="Helvetica", fontsize=10, color="#B86709", penwidth=1.5];
+            trigger_fn [label="trigger_simulation\n(http_request via UC Connection)", shape=box, style="filled,rounded", fillcolor="#E8820C", fontcolor="white", fontname="Helvetica", fontsize=10, color="#B86709", penwidth=1.5];
+        }
+
+        subgraph cluster_pipeline {
+            label="Databricks Job: monte_carlo_pipeline";
+            fontname="Helvetica";
+            fontsize=10;
+            fontcolor="#555555";
+            style="filled,rounded";
+            fillcolor="#FFF0D6";
+            color="#E8820C";
+            penwidth=1;
+
+            task1 [label="1. Validate\n+ Check Cache", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=9, fontcolor="#333333", color="#E8820C", penwidth=1];
+            task2 [label="2. Spark MC\n(applyInPandas)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=9, fontcolor="#333333", color="#E8820C", penwidth=1];
+            task3 [label="3. Aggregate\nBronze to Gold", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=9, fontcolor="#333333", color="#E8820C", penwidth=1];
+        }
+    }
+
+    // ===================================================================
+    // DATA LAYER — simplified
+    // ===================================================================
+    subgraph cluster_data {
+        label="Data Layer  —  Unity Catalog + Delta Lake";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=14;
+        fontcolor="#333333";
+        style="filled,rounded";
+        fillcolor="#F0F7EB";
+        color="#2D8C3C";
+        penwidth=2;
+
+        hospital_tables [label="12 Hospital Tables\n(patients, encounters, billing, ...)", shape=cylinder, style=filled, fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1.5];
+
+        sim_runs [label="simulation_runs\n(Metadata + Cache)", shape=cylinder, style=filled, fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
+        sim_trials [label="simulation_trials\n(Bronze)", shape=cylinder, style=filled, fillcolor="#FFF2CC", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#CD7F32", penwidth=1.5];
+        sim_results [label="simulation_results\n(Gold)", shape=cylinder, style=filled, fillcolor="#FFD700", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#B8860B", penwidth=1.5];
+    }
+
+    // ===================================================================
+    // EDGES — App to Endpoint
+    // ===================================================================
+    playground -> endpoint [color="#FF3621", penwidth=1.5];
+    webapp -> endpoint [color="#FF3621", penwidth=1.5];
+    slack -> endpoint [color="#FF3621", penwidth=1.5];
+    restapi -> endpoint [color="#FF3621", penwidth=1.5];
+
+    // Endpoint to Router
+    endpoint -> router [color="#FF3621", penwidth=2, label="  user query  "];
+
+    // Router to sub-agents
+    router -> encounter_agent [color="#1B6ACB", penwidth=1.5, label=" historical "];
+    router -> checker_agent [color="#E8820C", penwidth=1.5, label=" simulation "];
+    router -> trigger_agent [color="#E8820C", penwidth=1.5, style=dashed, label=" if not_found "];
+
+    // Analytics flow
+    encounter_agent -> genie [color="#1B6ACB", penwidth=1.5, lhead=cluster_analytics];
+    metricviews -> hospital_tables [color="#2D8C3C", penwidth=1];
+
+    // Simulation flow
+    checker_agent -> check_fn [color="#E8820C", penwidth=1.5];
+    trigger_agent -> trigger_fn [color="#E8820C", penwidth=1.5];
+
+    check_fn -> sim_runs [color="#2D8C3C", penwidth=1, label=" cache lookup "];
+    check_fn -> sim_results [color="#B8860B", penwidth=1, label=" Gold results "];
+
+    // trigger_fn calls Jobs API directly (UC Connection is internal to the function)
+    trigger_fn -> task1 [color="#E8820C", penwidth=1.5, style=dashed, label=" POST /jobs/run-now "];
+
+    // Pipeline flow
+    task1 -> task2 [color="#E8820C", penwidth=1.5];
+    task2 -> task3 [color="#E8820C", penwidth=1.5];
+    task2 -> sim_trials [color="#CD7F32", penwidth=1, label=" Bronze "];
+    task3 -> sim_results [color="#B8860B", penwidth=1, label=" Gold "];
+    task1 -> sim_runs [color="#2D8C3C", penwidth=1];
+
+    // Genie also reads Gold results
+    genie -> sim_results [color="#B8860B", penwidth=1, style=dashed, label=" prior sim results "];
+}
