@@ -23,8 +23,14 @@ print(f"Schema  : {schema}")
 
 # COMMAND ----------
 
-spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
-print(f"Catalog '{catalog}' is ready.")
+try:
+    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
+    print(f"Catalog '{catalog}' created (or already existed).")
+except Exception as e:
+    if "already exists" in str(e).lower() or "Metastore storage root" in str(e):
+        print(f"Catalog '{catalog}' already exists — using it as-is.")
+    else:
+        raise
 
 # COMMAND ----------
 

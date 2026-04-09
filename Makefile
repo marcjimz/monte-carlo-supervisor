@@ -13,13 +13,13 @@ generate-data: ## Generate synthetic data CSVs to /data
 	python -m src.databricks.synthetic_data.generators
 
 deploy: ## Deploy Databricks Asset Bundle
-	cd infra && databricks bundle deploy
+	databricks bundle deploy
 
 deploy-dev: ## Deploy to dev target
-	cd infra && databricks bundle deploy --target dev
+	databricks bundle deploy --target dev
 
 deploy-prod: ## Deploy to prod target
-	cd infra && databricks bundle deploy --target prod
+	databricks bundle deploy --target prod
 
 test: ## Run tests
 	pytest tests/ -v

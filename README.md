@@ -134,8 +134,8 @@ The supervisor automatically routes based on query intent, supports compound que
 ### Prerequisites
 
 - Databricks workspace with Unity Catalog enabled
-- Databricks Runtime 15.4+ (Metric Views require DBR 17.2+)
-- SQL Warehouse for Genie Space
+- Databricks CLI v0.280+ (`databricks version`)
+- SQL Warehouse (serverless recommended)
 - Python 3.10+
 
 ### Setup
@@ -148,30 +148,34 @@ cd monte-carlo-supervisor
 # 2. Install Python dependencies
 make install
 
-# 3. Create and configure .env
-make setup
-# Edit .env with your Databricks workspace URL, token, and catalog/schema names
+# 3. Authenticate with your Databricks workspace
+databricks auth login --host <your-workspace-url> --profile my-workspace
 
-# 4. (Optional) Regenerate synthetic data -- CSVs are already committed
-make generate-data
+# 4. Deploy Databricks Asset Bundle
+DATABRICKS_CONFIG_PROFILE=my-workspace databricks bundle deploy
 
-# 5. Deploy Databricks Asset Bundle
-make deploy
+# 5. Run the setup pipeline (creates tables, views, functions, Genie Space, MAS)
+#    If using an existing catalog, pass it as a parameter:
+databricks api post /api/2.1/jobs/run-now --profile my-workspace --json '{
+  "job_id": <setup_pipeline_job_id>,
+  "job_parameters": {
+    "catalog": "your_catalog",
+    "schema": "hospital_data"
+  }
+}'
 ```
 
-### Run Setup Notebooks
+The setup pipeline runs 7 tasks automatically:
 
-Execute the setup notebooks sequentially on your Databricks workspace:
-
-| Notebook | Purpose |
+| Task | Purpose |
 |---|---|
-| `00_setup_catalog.py` | Create Unity Catalog catalog and schema |
-| `01_generate_synthetic_data.py` | Load CSV files into UC tables |
-| `02_create_metric_views.py` | Register 6 UC Metric Views |
-| `03_register_mc_functions.py` | Register `run_simulation` UC Function |
-| `04_create_simulation_tables.py` | Create simulation_runs, simulation_trials, simulation_results tables |
-| `05_configure_genie_space.py` | Create and configure Genie Space |
-| `06_create_supervisor.py` | Create Agent Bricks MAS |
+| `setup_catalog` | Create Unity Catalog catalog and schema |
+| `load_data` | Load CSV files into UC tables |
+| `create_metric_views` | Register 6 UC Metric Views |
+| `create_sim_tables` | Create simulation_runs, simulation_trials, simulation_results tables |
+| `register_functions` | Register `check_simulation` and `trigger_simulation` UC Functions |
+| `configure_genie` | Create and configure Genie Space |
+| `create_supervisor` | Create Agent Bricks MAS |
 
 ### Verify
 
@@ -295,7 +299,7 @@ See [docs/data_model.md](docs/data_model.md) for complete column descriptions an
 | `make setup` | Create `.env` from `.env.example` |
 | `make install` | Install Python dependencies (`pip install -e ".[dev]"`) |
 | `make generate-data` | Regenerate synthetic data CSVs to `/data/` |
-| `make deploy` | Deploy Databricks Asset Bundle |
+| `make deploy` | Deploy Databricks Asset Bundle (set `DATABRICKS_CONFIG_PROFILE` first) |
 | `make deploy-dev` | Deploy to dev target |
 | `make deploy-prod` | Deploy to prod target |
 | `make test` | Run pytest test suite |

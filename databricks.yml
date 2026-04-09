@@ -11,7 +11,6 @@ variables:
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
-  profile: monte-carlo-ws
 
 include:
   - infra/resources/*.yml
@@ -26,5 +25,9 @@ targets:
   dev:
     default: true
     mode: development
-    workspace:
-      host: https://adb-7405611426422298.18.azuredatabricks.net
+
+  prod:
+    mode: production
+    variables:
+      catalog: monte_carlo_sim
+      schema: hospital_data

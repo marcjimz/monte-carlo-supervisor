@@ -1,6 +1,4 @@
-resources:
-  schemas:
-    hospital_data:
-      catalog_name: ${var.catalog}
-      name: ${var.schema}
-      comment: "Hospital encounter data, metric views, and Monte Carlo simulation results"
+# Schema creation is handled by notebooks/setup/00_setup_catalog.py
+# (runs as part of the setup_pipeline job).
+# No terraform-managed schema resources needed.
+resources: {}
