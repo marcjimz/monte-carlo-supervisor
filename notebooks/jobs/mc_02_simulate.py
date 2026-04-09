@@ -87,9 +87,7 @@ try:
         seed=seed,
     )
 
-    # Cache the count before writing (avoids recomputation)
-    trials_count = trials_df.cache().count()
-    print(f"Simulation complete. Generated {trials_count} trial rows.")
+    print("Simulation DataFrame built. Writing to Bronze table...")
 
 except Exception as exc:
     print(f"[ERROR] Simulation failed: {exc}")
@@ -115,6 +113,12 @@ try:
         trials_df=trials_df,
     )
 
+    # Count from the written table (avoids .cache() which is not supported on serverless)
+    trials_count = (
+        spark.read.table(f"{catalog}.{schema}.simulation_trials")
+        .filter(f"run_id = '{run_id}'")
+        .count()
+    )
     print(f"Successfully wrote {trials_count} trial rows for run_id={run_id}")
 
 except Exception as exc:

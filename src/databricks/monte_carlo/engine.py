@@ -369,15 +369,13 @@ def run_distributed_simulation(
     trials_per_batch = max(1, num_simulations // num_batches)
     params = {**params, "trials_per_batch": trials_per_batch}
 
-    # Broadcast params so every executor gets a read-only copy
-    bc_params = spark.sparkContext.broadcast(params)
-
     # Seed DataFrame -- one row per batch
     seed_df = create_seed_dataframe(spark, num_batches, base_seed=seed)
 
-    # Wrapper that unpacks broadcast params and delegates to the model
+    # Wrapper that captures params via closure (serverless-compatible —
+    # spark.sparkContext.broadcast is not available on Spark Connect).
     def _apply_fn(pdf: pd.DataFrame) -> pd.DataFrame:
-        return model_fn(pdf, bc_params.value)
+        return model_fn(pdf, params)
 
     # Execute across executors via applyInPandas
     trials_df = seed_df.groupBy("id").applyInPandas(_apply_fn, schema=output_schema)

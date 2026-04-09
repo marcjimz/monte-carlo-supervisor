@@ -39,6 +39,16 @@ class TestCheckSimulationFunction:
         sql = CheckSimulationFunction.get_registration_sql(CATALOG, SCHEMA)
         assert "not_found" in sql
 
+    def test_sql_returns_failed_status(self):
+        """check_simulation should report failed runs instead of not_found."""
+        sql = CheckSimulationFunction.get_registration_sql(CATALOG, SCHEMA)
+        assert '"failed"' in sql or "'FAILED'" in sql
+
+    def test_sql_includes_failed_in_status_filter(self):
+        """WHERE clause should include FAILED to prevent infinite re-trigger loops."""
+        sql = CheckSimulationFunction.get_registration_sql(CATALOG, SCHEMA)
+        assert "'FAILED'" in sql
+
     def test_sql_matches_on_parameters(self):
         """Verify the query filters on parameters, not just simulation_type."""
         sql = CheckSimulationFunction.get_registration_sql(CATALOG, SCHEMA)

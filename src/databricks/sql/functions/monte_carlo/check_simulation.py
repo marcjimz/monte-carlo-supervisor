@@ -73,6 +73,15 @@ RETURN (
                 'Call check_simulation again with the same parameters to poll for completion."}}'
             )
 
+            -- Simulation failed
+            WHEN latest.run_status = 'FAILED' AND latest.run_id IS NOT NULL
+            THEN concat(
+                '{{"status":"failed","simulation_type":"', p_simulation_type,
+                '","run_id":"', latest.run_id,
+                '","message":"The simulation failed. This may be a transient error. ',
+                'You can call trigger_simulation with the same parameters to retry."}}'
+            )
+
             -- No matching run found
             ELSE concat(
                 '{{"status":"not_found","simulation_type":"', p_simulation_type,
@@ -92,7 +101,7 @@ RETURN (
                    ORDER BY created_at DESC
                ) AS rn
         FROM {catalog}.{schema}.simulation_runs
-        WHERE status IN ('COMPLETED', 'RUNNING')
+        WHERE status IN ('COMPLETED', 'RUNNING', 'FAILED')
     ) latest ON latest.sim_type = p_simulation_type
            AND latest.sim_params = COALESCE(p_parameters, '{{}}')
            AND latest.sim_seed = COALESCE(p_seed, 42)
