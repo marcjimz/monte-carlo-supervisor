@@ -1,23 +1,23 @@
-"""DEPRECATED: Superseded by check_simulation + trigger_simulation.
+"""UC Function definition for check_simulation — read-only cache lookup.
 
-The single-function approach had two bugs:
-  1. Spark SQL doesn't short-circuit CASE for ``http_request()`` —
-     spurious Spark jobs were triggered even when cached results existed.
-  2. Matched on ``simulation_type`` only, not actual parameters.
+Checks ``simulation_runs`` for a matching completed or running simulation
+and returns Gold results if available.  This function performs **no side
+effects** — it never triggers jobs or writes data.
 
-Kept for backward compatibility reference. The ``MonteCarloRegistry``
-no longer includes this function in its active FUNCTIONS list.
+Separated from the old ``run_simulation`` to avoid Spark SQL evaluating
+``http_request()`` in non-matching CASE branches.
 """
 
 
-class RunSimulationFunction:
-    """UC SQL Function that checks cache, triggers Spark jobs, and returns results."""
+class CheckSimulationFunction:
+    """UC SQL Function that checks simulation cache by exact parameter match."""
 
-    name = "run_simulation"
+    name = "check_simulation"
     description = (
-        "Runs Monte Carlo simulations using a distributed Spark pipeline. "
-        "Returns cached results instantly if a matching completed run exists, "
-        "otherwise triggers a new Spark job (10,000 trials across multiple nodes). "
+        "Checks whether a Monte Carlo simulation has completed results for the "
+        "given parameters. Returns cached results instantly if a matching "
+        "completed run exists, running if a job is in progress, or "
+        "not_found if no matching run exists. Read-only -- never starts jobs. "
         "Supports: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay."
     )
 
@@ -29,6 +29,12 @@ class RunSimulationFunction:
         mc_job_id: str = "0",
         connection_name: str = "monte_carlo_ws",
     ) -> str:
+        # mc_job_id and connection_name accepted for registry API compat but unused.
+        #
+        # IMPORTANT: Spark SQL UDF params (p_*) CANNOT be referenced inside
+        # subqueries.  All param matching is done in the JOIN ON clause.
+        # The subquery uses PARTITION BY on table columns to rank by recency
+        # per unique parameter combination.
         return f"""
 CREATE OR REPLACE FUNCTION {catalog}.{schema}.{cls.name}(
     p_simulation_type STRING COMMENT 'One of: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay',
@@ -64,43 +70,34 @@ RETURN (
                 '{{"status":"running","simulation_type":"', p_simulation_type,
                 '","run_id":"', latest.run_id,
                 '","message":"A distributed Spark Monte Carlo simulation is currently running. ',
-                'Please call this function again with the same parameters to check for completion."}}'
+                'Call check_simulation again with the same parameters to poll for completion."}}'
             )
 
-            -- No completed or running run — trigger a new Spark job
+            -- No matching run found
             ELSE concat(
-                '{{"status":"triggered","simulation_type":"', p_simulation_type,
-                '","parameters":', COALESCE(p_parameters, '{{}}'),
-                ',"num_simulations":', CAST(COALESCE(p_num_simulations, 10000) AS STRING),
-                ',"seed":', CAST(COALESCE(p_seed, 42) AS STRING),
-                ',"job_response":',
-                (http_request(
-                    conn => '{connection_name}',
-                    method => 'POST',
-                    path => '/api/2.1/jobs/run-now',
-                    json => to_json(named_struct(
-                        'job_id', CAST({mc_job_id} AS BIGINT),
-                        'job_parameters', named_struct(
-                            'simulation_type', p_simulation_type,
-                            'parameters', COALESCE(p_parameters, '{{}}'),
-                            'num_simulations', CAST(COALESCE(p_num_simulations, 10000) AS STRING),
-                            'seed', CAST(COALESCE(p_seed, 42) AS STRING)
-                        )
-                    ))
-                )).text,
-                ',"message":"Distributed Spark Monte Carlo simulation triggered. ',
-                'The job runs ~5-10 minutes with ', CAST(COALESCE(p_num_simulations, 10000) AS STRING), ' trials across multiple Spark executors. ',
-                'Please call this function again with the same parameters to check for completion."}}'
+                '{{"status":"not_found","simulation_type":"', p_simulation_type,
+                '","message":"No matching simulation found for these parameters. ',
+                'Call trigger_simulation with the same parameters to start a new distributed Spark job."}}'
             )
         END
     FROM (SELECT 1 AS x) dummy
     LEFT JOIN (
-        SELECT run_id, simulation_type AS sim_type, status AS run_status,
+        SELECT run_id, simulation_type AS sim_type,
+               parameters AS sim_params, seed AS sim_seed,
+               num_simulations AS sim_num_sims,
+               status AS run_status,
                seed AS run_seed, num_simulations AS run_num_sims,
-               ROW_NUMBER() OVER (PARTITION BY simulation_type ORDER BY created_at DESC) AS rn
+               ROW_NUMBER() OVER (
+                   PARTITION BY simulation_type, parameters, seed, num_simulations
+                   ORDER BY created_at DESC
+               ) AS rn
         FROM {catalog}.{schema}.simulation_runs
         WHERE status IN ('COMPLETED', 'RUNNING')
-    ) latest ON latest.sim_type = p_simulation_type AND latest.rn = 1
+    ) latest ON latest.sim_type = p_simulation_type
+           AND latest.sim_params = COALESCE(p_parameters, '{{}}')
+           AND latest.sim_seed = COALESCE(p_seed, 42)
+           AND latest.sim_num_sims = COALESCE(p_num_simulations, 10000)
+           AND latest.rn = 1
     LEFT JOIN (
         SELECT r.run_id,
             to_json(collect_list(

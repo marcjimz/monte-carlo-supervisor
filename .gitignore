@@ -40,3 +40,9 @@ htmlcov/
 # Distribution
 *.whl
 *.tar.gz
+
+# Temporary / local-only files
+temp/
+SCRIPT.md
+SPEC.md
+validation_script.md

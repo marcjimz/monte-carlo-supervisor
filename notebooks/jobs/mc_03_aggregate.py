@@ -19,6 +19,15 @@ dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------
 
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+# COMMAND ----------
+
 import json
 
 from src.databricks.monte_carlo.results import (
@@ -45,8 +54,8 @@ print(f"Catalog/Schema  : {catalog}.{schema}")
 
 # ---------- Step 1: Check for cache hit from validate step ----------
 
-cache_hit = dbutils.jobs.taskValues.get("validate", "cache_hit", debugValue=False)
-run_id = dbutils.jobs.taskValues.get("validate", "run_id", debugValue="debug-run-id")
+cache_hit = dbutils.jobs.taskValues.get("validate_and_check_cache", "cache_hit", debugValue=False)
+run_id = dbutils.jobs.taskValues.get("validate_and_check_cache", "run_id", debugValue="debug-run-id")
 
 print(f"Cache hit : {cache_hit}")
 print(f"Run ID    : {run_id}")

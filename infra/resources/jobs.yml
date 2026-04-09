@@ -12,15 +12,6 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: "Standard_DS3_v2"
-            num_workers: 0
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: "local[*]"
-            custom_tags:
-              ResourceClass: SingleNode
 
         - task_key: run_simulation
           depends_on:
@@ -30,12 +21,6 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: "Standard_DS3_v2"
-            num_workers: 4
-            spark_conf:
-              spark.databricks.delta.optimizeWrite.enabled: "true"
 
         - task_key: aggregate_results
           depends_on:
@@ -45,15 +30,6 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-          new_cluster:
-            spark_version: "15.4.x-scala2.12"
-            node_type_id: "Standard_DS3_v2"
-            num_workers: 0
-            spark_conf:
-              spark.databricks.cluster.profile: singleNode
-              spark.master: "local[*]"
-            custom_tags:
-              ResourceClass: SingleNode
 
       parameters:
         - name: simulation_type
@@ -64,3 +40,73 @@ resources:
           default: "10000"
         - name: seed
           default: "42"
+
+    setup_pipeline:
+      name: "monte-carlo-setup-pipeline"
+      description: "One-click setup: loads data, creates views, registers functions, creates Genie Space and Agent Bricks MAS"
+      tags:
+        project: monte-carlo-supervisor
+      tasks:
+        - task_key: setup_catalog
+          notebook_task:
+            notebook_path: ../../notebooks/setup/00_setup_catalog.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: load_data
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: ../../notebooks/setup/01_generate_synthetic_data.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: create_metric_views
+          depends_on:
+            - task_key: load_data
+          notebook_task:
+            notebook_path: ../../notebooks/setup/02_create_metric_views.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: create_sim_tables
+          depends_on:
+            - task_key: setup_catalog
+          notebook_task:
+            notebook_path: ../../notebooks/setup/04_create_simulation_tables.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: register_functions
+          depends_on:
+            - task_key: create_sim_tables
+          notebook_task:
+            notebook_path: ../../notebooks/setup/03_register_mc_functions.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: configure_genie
+          depends_on:
+            - task_key: load_data
+            - task_key: create_metric_views
+            - task_key: create_sim_tables
+          notebook_task:
+            notebook_path: ../../notebooks/setup/05_configure_genie_space.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
+        - task_key: create_supervisor
+          depends_on:
+            - task_key: configure_genie
+            - task_key: register_functions
+          notebook_task:
+            notebook_path: ../../notebooks/setup/06_create_supervisor.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}

@@ -1,6 +1,10 @@
-# Hospital Monte Carlo Supervisor
-
-**Unify hospital analytics with Monte Carlo simulation through a single AI supervisor.**
+<div align="center">
+  <a href="https://www.databricks.com/">
+    <img src="https://www.databricks.com/wp-content/uploads/2022/06/db-nav-logo.svg" alt="Databricks" width="300">
+  </a>
+  <h1>Hospital Monte Carlo Supervisor</h1>
+  <p><strong>Unify hospital analytics with Monte Carlo simulation through a single AI supervisor.</strong></p>
+</div>
 
 ---
 
@@ -402,4 +406,8 @@ monte-carlo-supervisor/
 
 ## License
 
-Apache 2.0
+See [LICENSE.md](LICENSE.md) for details.
+
+---
+
+&copy; 2025 Databricks, Inc. All rights reserved. The source in this repository is provided subject to the [Databricks License](https://databricks.com/db-license-source). All included or referenced third party libraries are subject to the licenses set forth below.

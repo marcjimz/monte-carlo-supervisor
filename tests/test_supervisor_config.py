@@ -1,10 +1,13 @@
 """Tests for supervisor, Genie, and metric view configuration — pure Python, no Spark required."""
 
-from src.databricks.agentbricks.supervisor import get_supervisor_config
+from src.databricks.agentbricks.supervisor import get_supervisor_config, get_supervisor_agents
 from src.databricks.agentbricks.examples import get_supervisor_examples
 from src.databricks.genie.space_config import get_genie_space_config
 from src.databricks.genie.sample_questions import get_sample_questions
-from src.databricks.metric_views.definitions import get_metric_view_definitions
+from src.databricks.metric_views.definitions import (
+    get_base_view_definitions,
+    get_metric_view_definitions,
+)
 from src.databricks.monte_carlo.results import compute_cache_key, get_simulation_tables_ddl
 
 # Dummy catalog/schema values used throughout tests
@@ -25,20 +28,45 @@ class TestSupervisorConfig:
         for key in ("name", "description", "agents", "instructions"):
             assert key in cfg, f"Missing key: {key}"
 
-    def test_has_two_agents(self):
+    def test_has_three_agents(self):
         cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
-        assert len(cfg["agents"]) == 2
+        assert len(cfg["agents"]) == 3
 
     def test_agent_names(self):
         cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
         names = {a["name"] for a in cfg["agents"]}
-        assert names == {"encounter_analytics", "monte_carlo_simulator"}
+        assert names == {"encounter_analytics", "simulation_checker", "simulation_trigger"}
 
     def test_agents_have_required_fields(self):
         cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
         for agent in cfg["agents"]:
             assert "name" in agent
             assert "description" in agent
+            assert "agent_type" in agent
+
+    def test_genie_agent_format(self):
+        agents = get_supervisor_agents(GENIE_SPACE_ID, CATALOG, SCHEMA)
+        genie_agent = [a for a in agents if a["name"] == "encounter_analytics"][0]
+        assert genie_agent["agent_type"] == "genie"
+        assert genie_agent["genie_space"]["id"] == GENIE_SPACE_ID
+
+    def test_checker_agent_format(self):
+        agents = get_supervisor_agents(GENIE_SPACE_ID, CATALOG, SCHEMA)
+        checker = [a for a in agents if a["name"] == "simulation_checker"][0]
+        assert checker["agent_type"] == "unity_catalog_function"
+        uc_path = checker["unity_catalog_function"]["uc_path"]
+        assert uc_path["catalog"] == CATALOG
+        assert uc_path["schema"] == SCHEMA
+        assert uc_path["name"] == "check_simulation"
+
+    def test_trigger_agent_format(self):
+        agents = get_supervisor_agents(GENIE_SPACE_ID, CATALOG, SCHEMA)
+        trigger = [a for a in agents if a["name"] == "simulation_trigger"][0]
+        assert trigger["agent_type"] == "unity_catalog_function"
+        uc_path = trigger["unity_catalog_function"]["uc_path"]
+        assert uc_path["catalog"] == CATALOG
+        assert uc_path["schema"] == SCHEMA
+        assert uc_path["name"] == "trigger_simulation"
 
 
 # ---------------------------------------------------------------------------
@@ -70,8 +98,12 @@ class TestGenieSpaceConfig:
     def test_returns_dict_with_required_keys(self):
         cfg = get_genie_space_config(CATALOG, SCHEMA)
         assert isinstance(cfg, dict)
-        for key in ("display_name", "tables", "instructions"):
+        for key in ("display_name", "description", "tables", "instructions"):
             assert key in cfg, f"Missing key: {key}"
+
+    def test_no_warehouse_id_in_config(self):
+        cfg = get_genie_space_config(CATALOG, SCHEMA)
+        assert "warehouse_id" not in cfg, "warehouse_id should be auto-detected at runtime"
 
     def test_tables_reference_catalog_schema(self):
         cfg = get_genie_space_config(CATALOG, SCHEMA)
@@ -102,6 +134,21 @@ class TestGenieSampleQuestions:
 # ---------------------------------------------------------------------------
 
 
+class TestBaseViewDDL:
+    def test_returns_four_base_views(self):
+        views = get_base_view_definitions(CATALOG, SCHEMA)
+        assert isinstance(views, list)
+        assert len(views) == 4
+
+    def test_each_base_view_is_regular_sql_view(self):
+        views = get_base_view_definitions(CATALOG, SCHEMA)
+        for view in views:
+            sql = view["sql"]
+            assert "CREATE OR REPLACE VIEW" in sql
+            assert "WITH METRICS" not in sql
+            assert "JOIN" in sql
+
+
 class TestMetricViewDDL:
     def test_returns_six_views(self):
         views = get_metric_view_definitions(CATALOG, SCHEMA)
@@ -114,6 +161,19 @@ class TestMetricViewDDL:
             sql = view["sql"]
             assert "CREATE OR REPLACE VIEW" in sql
             assert "WITH METRICS" in sql
+
+    def test_no_joins_in_metric_view_source(self):
+        """Metric view YAML source must be a single table/view, not a JOIN."""
+        views = get_metric_view_definitions(CATALOG, SCHEMA)
+        for view in views:
+            sql = view["sql"]
+            # Extract the source line from YAML
+            for line in sql.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("source:"):
+                    assert "JOIN" not in stripped, (
+                        f"Metric view {view['name']} has JOIN in source field"
+                    )
 
     def test_views_reference_catalog_schema(self):
         views = get_metric_view_definitions(CATALOG, SCHEMA)

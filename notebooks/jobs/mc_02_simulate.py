@@ -19,6 +19,15 @@ dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------
 
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+# COMMAND ----------
+
 import json
 
 from src.databricks.monte_carlo.engine import run_distributed_simulation
@@ -43,15 +52,15 @@ print(f"Catalog/Schema  : {catalog}.{schema}")
 
 # ---------- Step 1: Check for cache hit from validate step ----------
 
-cache_hit = dbutils.jobs.taskValues.get("validate", "cache_hit", debugValue=False)
-run_id = dbutils.jobs.taskValues.get("validate", "run_id", debugValue="debug-run-id")
+cache_hit = dbutils.jobs.taskValues.get("validate_and_check_cache", "cache_hit", debugValue=False)
+run_id = dbutils.jobs.taskValues.get("validate_and_check_cache", "run_id", debugValue="debug-run-id")
 
 print(f"Cache hit : {cache_hit}")
 print(f"Run ID    : {run_id}")
 
 if cache_hit:
     print("[SKIP] Cache hit detected -- simulation already exists. Nothing to do.")
-    dbutils.jobs.taskValues.set("simulate", "trials_written", 0)
+    dbutils.jobs.taskValues.set(key="trials_written", value=0)
     dbutils.notebook.exit(json.dumps({"skipped": True, "reason": "cache_hit"}))
 
 # COMMAND ----------
@@ -121,7 +130,7 @@ except Exception as exc:
 
 # ---------- Step 5: Set task values and print summary ----------
 
-dbutils.jobs.taskValues.set("simulate", "trials_written", trials_count)
+dbutils.jobs.taskValues.set(key="trials_written", value=trials_count)
 
 print("=" * 60)
 print("Simulation Step Summary")

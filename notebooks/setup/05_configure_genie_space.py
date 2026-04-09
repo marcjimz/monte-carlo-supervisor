@@ -1,31 +1,44 @@
 # Databricks notebook source
+# MAGIC %pip install "databricks-tools-core @ git+https://github.com/databricks-solutions/ai-dev-kit.git#subdirectory=databricks-tools-core" --quiet
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
 # MAGIC %md
-# MAGIC # 05 — Configure Genie Space
+# MAGIC # 05 — Create Genie Space
 # MAGIC
-# MAGIC Displays the Genie Space configuration for the Hospital Encounter Analytics space.
+# MAGIC Programmatically creates the Genie Space for hospital encounter analytics
+# MAGIC using `AgentBricksManager` from `databricks-tools-core`.
 # MAGIC
-# MAGIC **Note:** Programmatic Genie Space creation may not be available in all workspaces.
-# MAGIC This notebook displays the full configuration and provides instructions for
-# MAGIC manual setup via the Databricks UI.
+# MAGIC Adds all 20 tables (12 data + 6 metric views + 2 simulation), configures
+# MAGIC instructions, and adds sample questions.
+# MAGIC
+# MAGIC Passes the `genie_space_id` to the next task via `dbutils.jobs.taskValues`.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "monte_carlo_sim", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
-dbutils.widgets.text("warehouse_id", "", "SQL Warehouse ID")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-warehouse_id = dbutils.widgets.get("warehouse_id")
 
-print(f"Catalog      : {catalog}")
-print(f"Schema       : {schema}")
-print(f"Warehouse ID : {warehouse_id or '(not set)'}")
+print(f"Catalog : {catalog}")
+print(f"Schema  : {schema}")
+
+# COMMAND ----------
+
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Genie Space Configuration
+# MAGIC ## Load Configuration
 
 # COMMAND ----------
 
@@ -33,99 +46,89 @@ from src.databricks.genie.space_config import get_genie_space_config
 from src.databricks.genie.sample_questions import get_sample_questions
 
 config = get_genie_space_config(catalog, schema)
-
-# Override warehouse_id if provided
-if warehouse_id:
-    config["warehouse_id"] = warehouse_id
-
-print(f"Display Name : {config['display_name']}")
-print(f"Description  : {config['description']}")
-print(f"Warehouse ID : {config['warehouse_id']}")
-print(f"Tables       : {len(config['tables'])}")
-print()
-print("Instructions:")
-print(config["instructions"])
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Table List
-# MAGIC
-# MAGIC The following tables should be added to the Genie Space.
-
-# COMMAND ----------
-
-print("Tables to include in the Genie Space:\n")
-for i, table in enumerate(config["tables"], 1):
-    print(f"  {i:>2}. {table}")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Sample Questions
-
-# COMMAND ----------
-
 sample_questions = get_sample_questions()
 
-print(f"Sample questions ({len(sample_questions)}):\n")
-for i, sq in enumerate(sample_questions, 1):
-    print(f"  {i:>2}. {sq['question']}")
-    print(f"      -> {sq['description']}")
-    print()
+print(f"Display Name : {config['display_name']}")
+print(f"Description  : {config['description'][:80]}...")
+print(f"Tables       : {len(config['tables'])}")
+print(f"Questions    : {len(sample_questions)}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Manual Setup Instructions
-# MAGIC
-# MAGIC To create the Genie Space in the Databricks UI:
-# MAGIC
-# MAGIC 1. Navigate to **SQL > Genie Spaces** in the left sidebar.
-# MAGIC 2. Click **New Genie Space**.
-# MAGIC 3. Set the **Name** to: `Hospital Encounter Analytics`
-# MAGIC 4. Set the **Description** to the text shown above.
-# MAGIC 5. Select your **SQL Warehouse** from the dropdown.
-# MAGIC 6. Add all **20 tables** listed above (12 data tables + 6 metric views + 2 simulation tables).
-# MAGIC 7. Paste the **Instructions** text into the General Instructions field.
-# MAGIC 8. Add the **Sample Questions** listed above.
-# MAGIC 9. Click **Save**.
-# MAGIC
-# MAGIC After creation, copy the **Genie Space ID** from the URL — you will need it
-# MAGIC for notebook `06_create_supervisor.py`.
+# MAGIC ## Auto-Detect SQL Warehouse
+
+# COMMAND ----------
+
+from databricks_tools_core.agent_bricks import AgentBricksManager
+
+manager = AgentBricksManager()
+
+warehouse_id = manager.get_best_warehouse_id()
+if not warehouse_id:
+    raise RuntimeError(
+        "No SQL warehouse found. Please ensure at least one SQL warehouse "
+        "is running or available in this workspace."
+    )
+
+print(f"Using warehouse: {warehouse_id}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Programmatic Creation (Optional)
-# MAGIC
-# MAGIC If your workspace supports programmatic Genie Space creation via the SDK,
-# MAGIC uncomment and run the cell below.
+# MAGIC ## Check for Existing Genie Space
 
 # COMMAND ----------
 
-# NOTE: Uncomment the following block if programmatic creation is supported.
-#
-# from databricks.sdk import WorkspaceClient
-#
-# w = WorkspaceClient()
-#
-# # Create the Genie Space (API availability varies by workspace)
-# try:
-#     space = w.genie.create_space(
-#         display_name=config["display_name"],
-#         description=config["description"],
-#         warehouse_id=config["warehouse_id"],
-#         table_identifiers=config["tables"],
-#     )
-#     print(f"Genie Space created successfully!")
-#     print(f"Space ID: {space.space_id}")
-#     print(f"URL: Open the Genie Spaces page in your workspace to access it.")
-# except Exception as e:
-#     print(f"Programmatic creation not available: {e}")
-#     print("Please follow the manual setup instructions above.")
+existing = manager.genie_find_by_name(config["display_name"])
+if existing:
+    print(f"Found existing Genie Space: {existing}")
+    print("Updating existing space...")
+    genie_space_id = existing.space_id
+    manager.genie_update(
+        space_id=genie_space_id,
+        display_name=config["display_name"],
+        description=config["description"],
+        warehouse_id=warehouse_id,
+        table_identifiers=config["tables"],
+    )
+    print(f"Genie Space updated: {genie_space_id}")
+else:
+    print("Creating new Genie Space...")
+    space = manager.genie_create(
+        display_name=config["display_name"],
+        warehouse_id=warehouse_id,
+        table_identifiers=config["tables"],
+        description=config["description"],
+    )
+    genie_space_id = space["id"]
+    print(f"Genie Space created: {genie_space_id}")
 
 # COMMAND ----------
 
-print("Genie Space configuration complete.")
-print("Record the Genie Space ID for use in notebook 06_create_supervisor.py.")
+# MAGIC %md
+# MAGIC ## Add Sample Questions
+
+# COMMAND ----------
+
+questions_text = [sq["question"] for sq in sample_questions]
+
+print(f"Adding {len(questions_text)} sample questions...")
+manager.genie_add_sample_questions_batch(genie_space_id, questions_text)
+print("Sample questions added.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Pass Genie Space ID to Next Task
+
+# COMMAND ----------
+
+dbutils.jobs.taskValues.set(key="genie_space_id", value=genie_space_id)
+dbutils.jobs.taskValues.set(key="warehouse_id", value=warehouse_id)
+
+print(f"\nGenie Space setup complete.")
+print(f"  Space ID    : {genie_space_id}")
+print(f"  Warehouse   : {warehouse_id}")
+print(f"  Tables      : {len(config['tables'])}")
+print(f"  Questions   : {len(questions_text)}")

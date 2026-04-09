@@ -17,15 +17,40 @@ print(f"Target: {catalog}.{schema}")
 
 # COMMAND ----------
 
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Create All Metric Views
 
 # COMMAND ----------
 
-from src.databricks.metric_views.definitions import get_metric_view_definitions
+from src.databricks.metric_views.definitions import (
+    get_base_view_definitions,
+    get_metric_view_definitions,
+)
 
+# --- Step 1: Create base SQL views (pre-joined tables for metric views) ---
+base_views = get_base_view_definitions(catalog, schema)
+print(f"Creating {len(base_views)} base views (pre-joined tables)...\n")
+
+for bv in base_views:
+    name = bv["name"]
+    ddl = bv["sql"]
+    print(f"  Creating {name} ... ", end="")
+    spark.sql(ddl)
+    print("done.")
+
+print(f"\nAll {len(base_views)} base views created.\n")
+
+# --- Step 2: Create metric views ---
 metric_views = get_metric_view_definitions(catalog, schema)
-
 print(f"Creating {len(metric_views)} metric views...\n")
 
 for mv in metric_views:
@@ -44,6 +69,7 @@ print(f"\nAll {len(metric_views)} metric views created successfully.")
 
 # COMMAND ----------
 
+spark.sql(f"USE CATALOG {catalog}")
 display(
     spark.sql(
         f"SHOW VIEWS IN {catalog}.{schema}"

@@ -17,6 +17,15 @@ print(f"Target: {catalog}.{schema}")
 
 # COMMAND ----------
 
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Load All Tables
 

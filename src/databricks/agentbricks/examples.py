@@ -25,52 +25,66 @@ def get_supervisor_examples() -> list[dict]:
             "guideline": "Route to encounter_analytics — historical financial analysis.",
         },
         {
-            "question": "What were the results of the last capacity simulation?",
+            "question": "What were the results of the last ed_wait_time simulation?",
             "guideline": "Route to encounter_analytics — query the simulation_results Gold table for past results.",
         },
-        # Monte Carlo-routed (monte_carlo_simulator)
+        # Monte Carlo-routed (simulation_checker + simulation_trigger)
         {
             "question": "Forecast ER patient volumes for the next 90 days",
             "guideline": (
-                "Route to monte_carlo_simulator with simulation_type='patient_volume' "
-                'and parameters=\'{"department": "Emergency", "encounter_type": "Emergency", "forecast_days": 90}\'.'
+                "Call simulation_checker with simulation_type='patient_volume' "
+                "and parameters='{\"num_months\": 3}'. "
+                "If 'completed', present results. "
+                "If 'not_found', call simulation_trigger with the same parameters, "
+                "then poll simulation_checker. "
+                "If 'running', poll simulation_checker again."
             ),
         },
         {
-            "question": "What if we add 50 beds — what's our overflow probability?",
+            "question": "What are the expected ER wait times during peak hours?",
             "guideline": (
-                "Route to monte_carlo_simulator with simulation_type='capacity' "
-                'and parameters=\'{"facility_id": null, "additional_beds": 50, "forecast_days": 90}\'.'
+                "Call simulation_checker with simulation_type='ed_wait_time' "
+                "and parameters='{\"base_wait_minutes\": 45, \"peak_multiplier\": 2.0, \"patients_per_hour\": 50}'. "
+                "If 'completed', present results. "
+                "If 'not_found', call simulation_trigger, then poll simulation_checker."
             ),
         },
         {
-            "question": "Simulate what happens to revenue if we shift 10% of Medicare patients to managed care",
+            "question": "Simulate what happens to revenue if we increase the denial rate to 12%",
             "guideline": (
-                "Route to monte_carlo_simulator with simulation_type='revenue' "
-                'and parameters=\'{"months_ahead": 12, "payer_mix_shift": {"Medicare": -0.10, "Commercial - UnitedHealth": 0.10}}\'.'
+                "Call simulation_checker with simulation_type='revenue' "
+                "and parameters='{\"denial_rate\": 0.12, \"num_months\": 12}'. "
+                "If 'completed', present results. "
+                "If 'not_found', call simulation_trigger, then poll simulation_checker."
             ),
         },
         {
-            "question": "Estimate readmission risk for heart failure patients over 65",
+            "question": "Estimate 30-day readmission rates for Cardiology and Emergency departments",
             "guideline": (
-                "Route to monte_carlo_simulator with simulation_type='readmission_risk' "
-                'and parameters=\'{"diagnosis_category": "I50", "age_min": 65}\'.'
+                "Call simulation_checker with simulation_type='readmission_rate' "
+                "and parameters='{\"departments\": [\"Cardiology\", \"Emergency\"], \"discharges_per_trial\": 300}'. "
+                "If 'completed', present results. "
+                "If 'not_found', call simulation_trigger, then poll simulation_checker."
             ),
         },
         {
-            "question": "Simulate the impact of reducing LOS by 15% in the Cardiology department",
+            "question": "Model length of stay for Cardiology with 500 patients per trial",
             "guideline": (
-                "Route to monte_carlo_simulator with simulation_type='length_of_stay' "
-                'and parameters=\'{"department": "Cardiology", "los_reduction_pct": 0.15}\'.'
+                "Call simulation_checker with simulation_type='length_of_stay' "
+                "and parameters='{\"departments\": [\"Cardiology\"], \"patients_per_trial\": 500}'. "
+                "If 'completed', present results. "
+                "If 'not_found', call simulation_trigger, then poll simulation_checker."
             ),
         },
         # Compound queries
         {
-            "question": "What was our readmission rate last year, and simulate what happens if we reduce LOS by 15%?",
+            "question": "What was our readmission rate last year, and simulate what it would look like with 500 discharges per trial?",
             "guideline": (
                 "Compound query: First route to encounter_analytics for historical readmission rate, "
-                "then route to monte_carlo_simulator with simulation_type='length_of_stay' "
-                "and los_reduction_pct=0.15. Synthesize both results."
+                "then call simulation_checker with simulation_type='readmission_rate' "
+                "and parameters='{\"discharges_per_trial\": 500}'. "
+                "If 'not_found', call simulation_trigger, then poll simulation_checker. "
+                "Synthesize both results."
             ),
         },
     ]

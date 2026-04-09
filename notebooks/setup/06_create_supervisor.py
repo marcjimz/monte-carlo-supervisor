@@ -1,97 +1,141 @@
 # Databricks notebook source
+# MAGIC %pip install "databricks-tools-core @ git+https://github.com/databricks-solutions/ai-dev-kit.git#subdirectory=databricks-tools-core" --quiet
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC # 06 — Create Multi-Agent Supervisor
 # MAGIC
-# MAGIC Creates the Agent Bricks Multi-Agent Supervisor (MAS) that routes questions
-# MAGIC between the Genie Space (historical analytics) and the Monte Carlo UC function
-# MAGIC (simulations/forecasting).
+# MAGIC Programmatically creates the Agent Bricks Multi-Agent Supervisor (MAS) using
+# MAGIC `AgentBricksManager` from `databricks-tools-core`.
 # MAGIC
-# MAGIC **Prerequisite:** The Genie Space must already be created (notebook 05) and
-# MAGIC you need its Space ID.
+# MAGIC The MAS routes questions between:
+# MAGIC - **encounter_analytics** (Genie Space) — historical data queries
+# MAGIC - **simulation_checker** (UC Function) — check cached simulation results
+# MAGIC - **simulation_trigger** (UC Function) — trigger new simulation jobs
 # MAGIC
-# MAGIC **Note:** This notebook requires the `databricks-agent-bricks` SDK package.
+# MAGIC Retrieves the `genie_space_id` from the previous task via `dbutils.jobs.taskValues`.
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "monte_carlo_sim", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
-dbutils.widgets.text("genie_space_id", "", "Genie Space ID")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-genie_space_id = dbutils.widgets.get("genie_space_id")
 
-print(f"Catalog        : {catalog}")
-print(f"Schema         : {schema}")
-print(f"Genie Space ID : {genie_space_id or '(not set)'}")
+print(f"Catalog : {catalog}")
+print(f"Schema  : {schema}")
 
-if not genie_space_id:
-    print("\nWARNING: genie_space_id is required. Set it in the widget above.")
+# COMMAND ----------
+
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Supervisor Configuration
+# MAGIC ## Get Genie Space ID from Previous Task
 
 # COMMAND ----------
 
-from src.databricks.agentbricks.supervisor import get_supervisor_config
+try:
+    genie_space_id = dbutils.jobs.taskValues.get(
+        taskKey="configure_genie", key="genie_space_id"
+    )
+    print(f"Genie Space ID: {genie_space_id}")
+except Exception as e:
+    print(f"Could not get task value: {e}")
+    print("Attempting to find Genie Space by name...")
+    from databricks_tools_core.agent_bricks import AgentBricksManager as _mgr
+    _m = _mgr()
+    existing = _m.genie_find_by_name("Hospital Encounter Analytics")
+    if existing:
+        genie_space_id = existing.space_id
+        print(f"Found Genie Space: {genie_space_id}")
+    else:
+        raise RuntimeError("Genie Space not found. Run notebook 05 first.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Load Supervisor Configuration
+
+# COMMAND ----------
+
+from src.databricks.agentbricks.supervisor import (
+    SUPERVISOR_NAME,
+    SUPERVISOR_DESCRIPTION,
+    SUPERVISOR_INSTRUCTIONS,
+    get_supervisor_agents,
+)
 from src.databricks.agentbricks.examples import get_supervisor_examples
 
-config = get_supervisor_config(genie_space_id, catalog, schema)
-
-print(f"Supervisor Name : {config['name']}")
-print(f"Description     : {config['description']}")
-print(f"Agents          : {len(config['agents'])}")
-print()
-
-for agent in config["agents"]:
-    print(f"  Agent: {agent['name']}")
-    if "genie_space_id" in agent:
-        print(f"    Type          : Genie Space")
-        print(f"    Space ID      : {agent['genie_space_id']}")
-    elif "uc_function_name" in agent:
-        print(f"    Type          : UC Function")
-        print(f"    Function      : {agent['uc_function_name']}")
-    print(f"    Description   : {agent['description'][:80]}...")
-    print()
-
-print("Routing Instructions:")
-print(config["instructions"])
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Routing Examples
-
-# COMMAND ----------
-
+agents = get_supervisor_agents(genie_space_id, catalog, schema)
 examples = get_supervisor_examples()
 
-print(f"Training examples ({len(examples)}):\n")
-for i, ex in enumerate(examples, 1):
-    print(f"  {i:>2}. Q: {ex['question']}")
-    print(f"      -> {ex['guideline'][:100]}...")
-    print()
+print(f"Supervisor : {SUPERVISOR_NAME}")
+print(f"Agents     : {len(agents)}")
+print(f"Examples   : {len(examples)}")
+print()
+for agent in agents:
+    print(f"  {agent['name']} ({agent['agent_type']})")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Create the Supervisor
-# MAGIC
-# MAGIC The cell below creates the MAS using the Agent Bricks SDK.
-# MAGIC Ensure `databricks-agent-bricks` is installed on your cluster.
+# MAGIC ## Create or Update MAS
 
 # COMMAND ----------
 
-assert genie_space_id, "Set the genie_space_id widget before running this cell."
+from databricks_tools_core.agent_bricks import AgentBricksManager
 
-from databricks_agent_bricks import manage_mas, mas_add_examples_batch
+manager = AgentBricksManager()
 
-print("Creating Multi-Agent Supervisor...")
+def _extract_tile_id(response: dict) -> str:
+    """Extract tile_id from mas_create/mas_get response (handles nested structure)."""
+    # Try flat key first
+    if "tile_id" in response:
+        return response["tile_id"]
+    # Try nested path: multi_agent_supervisor -> tile -> tile_id
+    mas_obj = response.get("multi_agent_supervisor", {})
+    tile = mas_obj.get("tile", {})
+    if "tile_id" in tile:
+        return tile["tile_id"]
+    # Last resort — search recursively
+    import json
+    raise KeyError(f"Cannot find tile_id in response: {json.dumps(response, default=str)[:500]}")
 
-mas_response = manage_mas(action="create_or_update", config=config)
-print(f"Supervisor created/updated: {mas_response}")
+
+# Check for existing MAS
+existing = manager.mas_find_by_name(SUPERVISOR_NAME)
+if existing:
+    print(f"Found existing MAS: {existing}")
+    tile_id = existing.tile_id
+    manager.mas_update(
+        tile_id=tile_id,
+        name=SUPERVISOR_NAME,
+        description=SUPERVISOR_DESCRIPTION,
+        instructions=SUPERVISOR_INSTRUCTIONS,
+        agents=agents,
+    )
+    print(f"MAS updated: {tile_id}")
+else:
+    print("Creating new MAS...")
+    mas = manager.mas_create(
+        name=SUPERVISOR_NAME,
+        agents=agents,
+        description=SUPERVISOR_DESCRIPTION,
+        instructions=SUPERVISOR_INSTRUCTIONS,
+    )
+    print(f"MAS create response keys: {list(mas.keys()) if isinstance(mas, dict) else type(mas)}")
+    tile_id = _extract_tile_id(mas)
+    print(f"MAS created: {tile_id}")
 
 # COMMAND ----------
 
@@ -102,43 +146,77 @@ print(f"Supervisor created/updated: {mas_response}")
 
 print(f"Adding {len(examples)} training examples...")
 
-examples_response = mas_add_examples_batch(
-    supervisor_name=config["name"],
-    examples=examples,
-)
-print(f"Examples added: {examples_response}")
+manager.mas_add_examples_batch(tile_id, examples)
+
+print("Training examples added.")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Verify
+# MAGIC ## Wait for Endpoint to Come Online
 
 # COMMAND ----------
 
-print("Multi-Agent Supervisor setup complete.")
+import time
+
+
+def _get_endpoint_status(mgr, tid: str) -> str:
+    """Get endpoint status, handling both API variants."""
+    # Try mas_get_endpoint_status first (if it exists)
+    if hasattr(mgr, "mas_get_endpoint_status"):
+        return mgr.mas_get_endpoint_status(tid)
+    # Fall back to mas_get and extract from nested response
+    resp = mgr.mas_get(tid)
+    if isinstance(resp, dict):
+        mas_obj = resp.get("multi_agent_supervisor", resp)
+        status_obj = mas_obj.get("status", {})
+        return status_obj.get("endpoint_status", "UNKNOWN")
+    return "UNKNOWN"
+
+
+print("Waiting for MAS endpoint to come online...")
+print("(This may take several minutes while the serving endpoint provisions.)\n")
+
+timeout_s = 600  # 10 minutes
+poll_interval_s = 10
+elapsed = 0
+status = "UNKNOWN"
+
+while elapsed < timeout_s:
+    try:
+        status = _get_endpoint_status(manager, tile_id)
+    except Exception as e:
+        status = f"ERROR: {e}"
+    print(f"  [{elapsed:>3}s] Endpoint status: {status}")
+
+    if status == "ONLINE":
+        print(f"\nEndpoint is ONLINE after {elapsed}s.")
+        break
+
+    time.sleep(poll_interval_s)
+    elapsed += poll_interval_s
+else:
+    print(f"\nWARNING: Endpoint did not reach ONLINE within {timeout_s}s.")
+    print(f"Last status: {status}")
+    print("The endpoint may still be provisioning. Check the workspace UI.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Summary
+
+# COMMAND ----------
+
+print("=" * 60)
+print("Multi-Agent Supervisor Setup Complete")
+print("=" * 60)
 print()
-print(f"  Supervisor : {config['name']}")
-print(f"  Agents     : {', '.join(a['name'] for a in config['agents'])}")
+print(f"  Supervisor : {SUPERVISOR_NAME}")
+print(f"  Tile ID    : {tile_id}")
+print(f"  Agents     : {', '.join(a['name'] for a in agents)}")
 print(f"  Examples   : {len(examples)}")
 print()
-print("You can now test the supervisor by asking questions like:")
-print('  - "Show me total ER encounters by month for 2024"')
+print("Test the supervisor with questions like:")
+print('  - "Show me total ER encounters by month"')
 print('  - "Forecast ER patient volumes for the next 90 days"')
-print('  - "What was readmission rate last year, and simulate a 15% LOS reduction?"')
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Fallback: Manual Agent Bricks Setup
-# MAGIC
-# MAGIC If the `databricks-agent-bricks` SDK is not available, you can configure the
-# MAGIC MAS manually using the Databricks UI:
-# MAGIC
-# MAGIC 1. Navigate to **Machine Learning > Agents** in the sidebar.
-# MAGIC 2. Create a new **Multi-Agent Supervisor**.
-# MAGIC 3. Set the name to `Hospital-Monte-Carlo-Supervisor`.
-# MAGIC 4. Add two child agents:
-# MAGIC    - **encounter_analytics** — point to the Genie Space created in notebook 05.
-# MAGIC    - **monte_carlo_simulator** — point to the UC function `<catalog>.<schema>.run_simulation`.
-# MAGIC 5. Paste the routing instructions from the config above.
-# MAGIC 6. Add the training examples shown above.
+print('  - "What if we add 50 beds?"')

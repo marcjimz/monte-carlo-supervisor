@@ -18,6 +18,15 @@ dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------
 
+# Add bundle root to sys.path so `src` package is importable
+import sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+# COMMAND ----------
+
 import json
 import uuid
 
@@ -92,10 +101,10 @@ if cache_result is not None:
     print(f"[CACHE HIT] Found completed run: {cached_run_id}")
     print(f"  Created at: {cache_result['created_at']}")
 
-    dbutils.jobs.taskValues.set("validate", "cache_hit", True)
-    dbutils.jobs.taskValues.set("validate", "cached_run_id", cached_run_id)
-    dbutils.jobs.taskValues.set("validate", "run_id", cached_run_id)
-    dbutils.jobs.taskValues.set("validate", "params_hash", params_hash)
+    dbutils.jobs.taskValues.set(key="cache_hit", value= True)
+    dbutils.jobs.taskValues.set(key="cached_run_id", value=cached_run_id)
+    dbutils.jobs.taskValues.set(key="run_id", value= cached_run_id)
+    dbutils.jobs.taskValues.set(key="params_hash", value= params_hash)
 
     print("Downstream tasks will reuse existing results. Exiting early.")
     dbutils.notebook.exit(json.dumps({"cache_hit": True, "run_id": cached_run_id}))
@@ -130,9 +139,9 @@ except Exception as exc:
 
 # ---------- Step 6: Set task values for downstream tasks ----------
 
-dbutils.jobs.taskValues.set("validate", "cache_hit", False)
-dbutils.jobs.taskValues.set("validate", "run_id", run_id)
-dbutils.jobs.taskValues.set("validate", "params_hash", params_hash)
+dbutils.jobs.taskValues.set(key="cache_hit", value= False)
+dbutils.jobs.taskValues.set(key="run_id", value= run_id)
+dbutils.jobs.taskValues.set(key="params_hash", value= params_hash)
 
 print("Task values set:")
 print(f"  cache_hit   = False")

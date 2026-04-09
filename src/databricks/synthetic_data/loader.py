@@ -20,7 +20,10 @@ from pyspark.sql.types import (
 )
 
 # Root of the repo — CSVs live in <repo>/data/
-_DEFAULT_DATA_DIR = pathlib.Path(__file__).resolve().parents[4] / "data"
+# loader.py is at src/databricks/synthetic_data/loader.py → parents[3] = project root
+# Note: avoid .resolve() — workspace filesystem paths (/Workspace/...) are not
+# real POSIX paths and resolve() can break on serverless compute.
+_DEFAULT_DATA_DIR = pathlib.Path(__file__).parents[3] / "data"
 
 # ---------------------------------------------------------------------------
 # Schema definitions for each CSV (ensures correct types on load)
@@ -196,19 +199,29 @@ def load_csv_to_table(
     int
         Number of rows loaded.
     """
+    import pandas as pd
+
     data_dir = pathlib.Path(data_dir) if data_dir else _DEFAULT_DATA_DIR
     csv_path = data_dir / f"{table_name}.csv"
 
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-    table_schema = _SCHEMAS.get(table_name)
-    reader = spark.read.option("header", "true").option("dateFormat", "yyyy-MM-dd")
+    # Read via pandas to avoid Spark file-URI issues on serverless compute
+    # (@ in workspace email paths breaks Spark's file: URI parser).
+    # Create DataFrame without schema first (natural Arrow mapping), then
+    # cast columns to the target types using Spark's cast() which handles
+    # string-to-date, int-to-string, etc. gracefully.
+    from pyspark.sql.functions import col
 
+    pdf = pd.read_csv(str(csv_path))
+    df = spark.createDataFrame(pdf)
+
+    table_schema = _SCHEMAS.get(table_name)
     if table_schema:
-        df = reader.schema(table_schema).csv(str(csv_path))
-    else:
-        df = reader.option("inferSchema", "true").csv(str(csv_path))
+        for field in table_schema:
+            if field.name in df.columns:
+                df = df.withColumn(field.name, col(field.name).cast(field.dataType))
 
     full_table = f"{catalog}.{schema}.{table_name}"
     df.write.format("delta").mode(mode).saveAsTable(full_table)
@@ -230,7 +243,7 @@ def load_all_tables(
     Returns a dict mapping table names to row counts.
     """
     data_dir = pathlib.Path(data_dir) if data_dir else _DEFAULT_DATA_DIR
-    print(f"Loading CSVs from {data_dir.resolve()} -> {catalog}.{schema}\n")
+    print(f"Loading CSVs from {data_dir} -> {catalog}.{schema}\n")
 
     results: dict[str, int] = {}
     for table_name in _LOAD_ORDER:

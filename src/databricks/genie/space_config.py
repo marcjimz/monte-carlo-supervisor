@@ -2,7 +2,11 @@
 
 
 def get_genie_space_config(catalog: str, schema: str) -> dict:
-    """Return Genie Space configuration for the hospital encounter analytics space."""
+    """Return Genie Space configuration for the hospital encounter analytics space.
+
+    Note: warehouse_id is not included here — it is auto-detected at runtime
+    via AgentBricksManager.get_best_warehouse_id().
+    """
     return {
         "display_name": "Hospital Encounter Analytics",
         "description": (
@@ -11,7 +15,6 @@ def get_genie_space_config(catalog: str, schema: str) -> dict:
             "length of stay, department throughput, and demographics. "
             "Also query previously-run Monte Carlo simulation results."
         ),
-        "warehouse_id": "{{WAREHOUSE_ID}}",
         "tables": [
             # Core fact/dimension tables
             f"{catalog}.{schema}.encounters",
