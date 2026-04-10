@@ -27,8 +27,26 @@ try:
     spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
     print(f"Catalog '{catalog}' created (or already existed).")
 except Exception as e:
-    if "already exists" in str(e).lower() or "Metastore storage root" in str(e):
+    err_msg = str(e).lower()
+    if "already exists" in err_msg:
         print(f"Catalog '{catalog}' already exists — using it as-is.")
+    elif "metastore storage root" in err_msg or "default storage" in err_msg:
+        # Azure: Default Storage enabled but no metastore root — use external location
+        print(f"Metastore has no storage root. Trying with MANAGED LOCATION...")
+        try:
+            rows = spark.sql("SHOW EXTERNAL LOCATIONS").collect()
+            if rows:
+                loc_url = rows[0]["url"].rstrip("/")
+                managed_loc = f"{loc_url}/{catalog}"
+                spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog} MANAGED LOCATION '{managed_loc}'")
+                print(f"Catalog '{catalog}' created with managed location: {managed_loc}")
+            else:
+                raise RuntimeError("No external locations available for catalog storage.")
+        except Exception as e2:
+            if "already exists" in str(e2).lower():
+                print(f"Catalog '{catalog}' already exists — using it as-is.")
+            else:
+                raise
     else:
         raise
 
