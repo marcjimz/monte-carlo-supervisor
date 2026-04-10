@@ -10,11 +10,19 @@ _valid_types_cache: list[str] | None = None
 
 
 def _load_valid_types() -> list[str]:
-    """Load simulation type names from config.yaml."""
+    """Load simulation type names from config.yaml (with graceful fallback)."""
     global _valid_types_cache
     if _valid_types_cache is None:
-        from src.databricks.monte_carlo import config_loader
-        _valid_types_cache = config_loader.get_valid_types()
+        try:
+            from src.databricks.monte_carlo import config_loader
+            _valid_types_cache = config_loader.get_valid_types()
+        except (ImportError, ModuleNotFoundError):
+            # PyYAML not available (e.g. serverless notebook runtime).
+            # Fall back to hardcoded defaults — keep in sync with config.yaml.
+            _valid_types_cache = [
+                "ed_wait_time", "length_of_stay", "patient_volume",
+                "readmission_rate", "revenue",
+            ]
     return _valid_types_cache
 
 

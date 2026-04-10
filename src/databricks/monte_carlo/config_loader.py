@@ -10,8 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 _CONFIG: dict | None = None
 _CONFIG_PATH = Path(__file__).parent / "config.yaml"
 
@@ -24,6 +22,8 @@ def load_config(config_path: Path | None = None) -> dict:
     config_path : Path, optional
         Override config file path (useful for testing).
     """
+    import yaml  # lazy import — not available on all Databricks runtimes
+
     global _CONFIG
     path = config_path or _CONFIG_PATH
     if _CONFIG is None or config_path is not None:
