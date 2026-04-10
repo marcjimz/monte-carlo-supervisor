@@ -1,0 +1,152 @@
+version: "1.0"
+
+simulation_types:
+  patient_volume:
+    display_name: Patient Volume
+    description: Simulate monthly patient encounter volume with growth and seasonality trends.
+    model_template: normal_timeseries
+    schema: "batch_id long, trial_id long, month string, simulated_encounters double"
+    parameters:
+      monthly_mean:
+        default: 10000
+        description: Average encounters per month.
+      monthly_std:
+        default: 1500
+        description: Standard deviation of encounters per month.
+      growth_rate:
+        default: 0.03
+        description: Year-over-year growth rate.
+      seasonality_amp:
+        default: 0.12
+        description: Amplitude of seasonal sine wave.
+      num_months:
+        default: 12
+        description: Forecast horizon in months.
+    aggregation:
+      value_column: simulated_encounters
+      group_column: month
+
+  revenue:
+    display_name: Revenue Projection
+    description: Simulate monthly revenue and charges accounting for denial rates.
+    model_template: revenue_projection
+    schema: "batch_id long, trial_id long, month string, simulated_revenue double, simulated_charges double"
+    parameters:
+      avg_monthly_revenue:
+        default: 12000000
+        description: Baseline monthly revenue.
+      revenue_std:
+        default: 2000000
+        description: Standard deviation of monthly revenue.
+      avg_charge_to_rev:
+        default: 1.35
+        description: Charge-to-revenue ratio.
+      denial_rate:
+        default: 0.08
+        description: Claim denial rate.
+      num_months:
+        default: 12
+        description: Forecast horizon in months.
+    aggregation:
+      value_column: simulated_revenue
+      group_column: month
+
+  length_of_stay:
+    display_name: Length of Stay
+    description: Simulate average length-of-stay by department using log-normal distributions.
+    model_template: grouped_lognormal_mean
+    schema: "batch_id long, trial_id long, department string, simulated_avg_los double"
+    parameters:
+      departments:
+        default:
+          - Emergency
+          - Cardiology
+          - Orthopedics
+          - General Surgery
+          - Internal Medicine
+          - Pediatrics
+          - Oncology
+          - Neurology
+          - Intensive Care
+          - Pulmonology
+        description: List of department names to simulate.
+      los_baseline:
+        default:
+          Emergency: [0.0, 0.3]
+          Cardiology: [1.4, 0.6]
+          Orthopedics: [1.5, 0.7]
+          General Surgery: [1.2, 0.7]
+          Internal Medicine: [1.1, 0.6]
+          Pediatrics: [0.8, 0.5]
+          Oncology: [1.6, 0.8]
+          Neurology: [1.3, 0.7]
+          Intensive Care: [1.8, 0.9]
+          Pulmonology: [1.3, 0.6]
+        description: "Dict of department to [mu, sigma] log-normal parameters."
+      patients_per_trial:
+        default: 500
+        description: Patients sampled per department per trial.
+    aggregation:
+      value_column: simulated_avg_los
+      group_column: department
+
+  readmission_rate:
+    display_name: Readmission Rate
+    description: Simulate 30-day readmission rates by department using binomial distributions.
+    model_template: grouped_binomial_rate
+    schema: "batch_id long, trial_id long, department string, simulated_readmission_rate double"
+    parameters:
+      departments:
+        default:
+          - Emergency
+          - Cardiology
+          - Orthopedics
+          - General Surgery
+          - Internal Medicine
+          - Pediatrics
+          - Oncology
+          - Neurology
+          - Intensive Care
+          - Pulmonology
+        description: List of department names to simulate.
+      base_readmission_rate:
+        default:
+          Emergency: 0.15
+          Cardiology: 0.18
+          Orthopedics: 0.08
+          General Surgery: 0.12
+          Internal Medicine: 0.14
+          Pediatrics: 0.06
+          Oncology: 0.20
+          Neurology: 0.16
+          Intensive Care: 0.22
+          Pulmonology: 0.17
+        description: Dict of department to base readmission rate.
+      discharges_per_trial:
+        default: 300
+        description: Discharges sampled per department per trial.
+    aggregation:
+      value_column: simulated_readmission_rate
+      group_column: department
+
+  ed_wait_time:
+    display_name: ED Wait Time
+    description: Simulate emergency department wait times by hour of day using gamma distributions.
+    model_template: hourly_gamma
+    schema: "batch_id long, trial_id long, hour_of_day int, simulated_wait_minutes double"
+    parameters:
+      base_wait_minutes:
+        default: 45
+        description: Baseline mean wait in minutes.
+      peak_multiplier:
+        default: 2.0
+        description: Multiplier applied during peak hours.
+      peak_hours:
+        default: [10, 11, 12, 13, 14, 18, 19, 20, 21]
+        description: List of peak hours (0-23).
+      patients_per_hour:
+        default: 50
+        description: Patients sampled per hour per trial.
+    aggregation:
+      value_column: simulated_wait_minutes
+      group_column: hour_of_day

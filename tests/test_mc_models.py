@@ -7,6 +7,7 @@ where pdf has columns [id, batch_seed].
 import pandas as pd
 import pytest
 
+from src.databricks.monte_carlo import config_loader
 from src.databricks.monte_carlo.engine import (
     _simulate_ed_wait_time,
     _simulate_length_of_stay,
@@ -187,6 +188,6 @@ class TestPublicAPI:
 
     def test_get_available_types(self):
         types = get_available_simulation_types()
-        expected = {"ed_wait_time", "length_of_stay", "patient_volume", "readmission_rate", "revenue"}
+        expected = set(config_loader.get_valid_types())
         assert set(types) == expected
-        assert len(types) == 5
+        assert len(types) == len(expected)

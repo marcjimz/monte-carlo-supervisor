@@ -19,6 +19,7 @@ sync:
   include:
     - notebooks/**/*.py
     - src/**/*.py
+    - src/**/*.yaml
     - data/**/*.csv
 
 targets:

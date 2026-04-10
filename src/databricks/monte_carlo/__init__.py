@@ -1,3 +1,4 @@
+from .config_loader import load_config
 from .engine import get_available_simulation_types, get_simulation_model, run_distributed_simulation
 from .results import (
     aggregate_to_gold,
@@ -10,6 +11,7 @@ from .results import (
 )
 
 __all__ = [
+    "load_config",
     "get_available_simulation_types",
     "get_simulation_model",
     "run_distributed_simulation",

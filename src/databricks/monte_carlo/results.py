@@ -15,6 +15,8 @@ from pyspark.sql.types import (
     StructType,
 )
 
+from . import config_loader
+
 # ---------------------------------------------------------------------------
 # Cache key
 # ---------------------------------------------------------------------------
@@ -197,15 +199,6 @@ def write_bronze_trials(
 # Gold: aggregated percentile results
 # ---------------------------------------------------------------------------
 
-# Mapping from simulation_type to (value_column, group_column)
-_AGG_CONFIG: dict[str, tuple[str, str]] = {
-    "patient_volume": ("simulated_encounters", "month"),
-    "revenue": ("simulated_revenue", "month"),
-    "length_of_stay": ("simulated_avg_los", "department"),
-    "readmission_rate": ("simulated_readmission_rate", "department"),
-    "ed_wait_time": ("simulated_wait_minutes", "hour_of_day"),
-}
-
 _PERCENTILES = [0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95]
 
 
@@ -227,13 +220,7 @@ def aggregate_to_gold(
     trials_table = f"{catalog}.{schema}.simulation_trials"
     results_table = f"{catalog}.{schema}.simulation_results"
 
-    if simulation_type not in _AGG_CONFIG:
-        raise ValueError(
-            f"No aggregation config for simulation type '{simulation_type}'. "
-            f"Available: {', '.join(sorted(_AGG_CONFIG.keys()))}"
-        )
-
-    value_col, group_col = _AGG_CONFIG[simulation_type]
+    value_col, group_col = config_loader.get_agg_config(simulation_type)
 
     trials_df = spark.read.table(trials_table).filter(F.col("run_id") == run_id)
 
