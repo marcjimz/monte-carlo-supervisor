@@ -1,4 +1,4 @@
-"""Agent Bricks Multi-Agent Supervisor configuration.
+"""Agent Bricks Multi-Agent Supervisor configuration — Women's Health focus.
 
 Uses AgentBricksManager from databricks-tools-core for programmatic creation.
 Instructions and agent descriptions are generated dynamically from config.yaml
@@ -7,22 +7,25 @@ so that adding/removing simulation types requires zero code changes here.
 
 import json
 
-SUPERVISOR_NAME = "Hospital-Monte-Carlo-Supervisor"
+SUPERVISOR_NAME = "Womens-Health-MC-Supervisor"
 
 SUPERVISOR_DESCRIPTION = (
-    "Hospital analytics and Monte Carlo simulation supervisor. "
-    "Routes historical data questions to Genie Space and "
-    "forward-looking simulation/forecasting questions through a "
-    "check-then-trigger workflow using distributed Spark jobs."
+    "Women's health analytics and Monte Carlo simulation supervisor. "
+    "Routes historical data questions about women's health encounters, costs, "
+    "and diagnoses to Genie Space, and forward-looking virtual care hypothesis "
+    "simulations through a check-then-trigger workflow using distributed Spark jobs."
 )
 
 # Static routing logic — this is architectural, not type-specific
 _ROUTING_INSTRUCTIONS = """Route queries as follows:
-1. Historical data questions (counts, trends, averages, breakdowns, 'show me', 'what was') → encounter_analytics (Genie)
+1. Historical data questions (costs, trends, volumes, demographics, 'show me', 'what was') → encounter_analytics (Genie)
 2. Previously-run simulation results ('show me past simulations', 'what were the results of') → encounter_analytics (Genie queries simulation_results table)
-3. NEW simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability') → simulation workflow below
+3. NEW simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability', 'ROI', 'cost comparison') → simulation workflow below
 
-For compound queries (e.g., "What was readmission rate last year AND simulate 15% LOS reduction"):
+Common women's health topics routed to Genie: OB/GYN encounters, cost by condition, menopause/endometriosis/fibroids prevalence, payer mix, diagnosis trends.
+Common simulation topics: virtual care cost comparison (H2), system cost ROI (H5), patient volume forecasting, revenue projection.
+
+For compound queries (e.g., "What was our OB/GYN cost per encounter last year, and simulate the 5-year ROI at 8% encounter reduction?"):
 - First route to encounter_analytics for historical context
 - Then follow the simulation workflow below
 - Synthesize both results in the response
@@ -82,9 +85,9 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
         {
             "name": "encounter_analytics",
             "description": (
-                "Answers questions about hospital encounter data AND previously-run "
-                "simulation results. Use for: historical volumes, trends, LOS, "
-                "readmission rates, revenue, department throughput, patient demographics, "
+                "Answers questions about women's health encounter data AND previously-run "
+                "simulation results. Use for: costs by condition, OB/GYN volumes, diagnosis "
+                "prevalence, patient demographics, payer mix, department throughput, "
                 "AND querying existing simulation results from the simulation_results "
                 "Gold table."
             ),

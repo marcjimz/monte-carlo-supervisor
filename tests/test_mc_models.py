@@ -7,8 +7,6 @@ Tests are parametrized over config.yaml so adding a new simulation type
 automatically gets test coverage.
 """
 
-import json
-
 import pandas as pd
 import pytest
 
@@ -47,17 +45,13 @@ def _get_small_params(simulation_type: str) -> dict:
     defaults = config_loader.get_default_params(simulation_type)
     # Override to small scale
     defaults["trials_per_batch"] = 3
-    # Limit departments/months for speed
+    # Limit months/years for speed
     if "num_months" in defaults:
         defaults["num_months"] = 4
-    if "departments" in defaults:
-        defaults["departments"] = defaults["departments"][:2]
-    if "patients_per_trial" in defaults:
-        defaults["patients_per_trial"] = 10
-    if "discharges_per_trial" in defaults:
-        defaults["discharges_per_trial"] = 50
-    if "patients_per_hour" in defaults:
-        defaults["patients_per_hour"] = 10
+    if "num_years" in defaults:
+        defaults["num_years"] = 3
+    if "member_count" in defaults:
+        defaults["member_count"] = 1000
     return defaults
 
 
@@ -65,6 +59,8 @@ def _get_small_params(simulation_type: str) -> dict:
 # Config-driven parametrized tests
 # ---------------------------------------------------------------------------
 
+# Reset config to ensure fresh load
+config_loader.reset_config()
 _ALL_TYPES = config_loader.get_valid_types()
 
 
@@ -109,6 +105,9 @@ class TestModelOutput:
         params = _get_small_params(sim_type)
         result = template_fn(pdf, params)
 
+        # ROI can be negative (net savings < 0), skip non-negative check for ROI
+        if "roi" in value_col.lower():
+            return
         assert (result[value_col] >= 0).all(), (
             f"{sim_type}: {value_col} has negative values"
         )
@@ -123,23 +122,6 @@ class TestModelOutput:
         result = template_fn(pdf, params)
 
         assert (result["batch_id"] == 7).all()
-
-
-# ---------------------------------------------------------------------------
-# Rate-bounded models (readmission_rate is between 0 and 1)
-# ---------------------------------------------------------------------------
-
-
-class TestRateBounds:
-    def test_readmission_rate_between_zero_and_one(self):
-        if "readmission_rate" not in _ALL_TYPES:
-            pytest.skip("readmission_rate not in config")
-        template_fn = model_templates.get_template("grouped_binomial_rate")
-        pdf = _make_batch_df()
-        params = _get_small_params("readmission_rate")
-        result = template_fn(pdf, params)
-        assert (result["simulated_readmission_rate"] >= 0).all()
-        assert (result["simulated_readmission_rate"] <= 1).all()
 
 
 # ---------------------------------------------------------------------------
@@ -158,15 +140,25 @@ class TestRowCounts:
         result = template_fn(pdf, params)
         assert len(result) == 5 * 6
 
-    def test_hourly_row_count(self):
-        """Hourly models produce trials * 24 rows."""
-        if "ed_wait_time" not in _ALL_TYPES:
-            pytest.skip("ed_wait_time not in config")
-        template_fn = model_templates.get_template("hourly_gamma")
+    def test_cost_comparison_row_count(self):
+        """Cost comparison produces trials * 2 rows (one per care_model)."""
+        if "cost_comparison" not in _ALL_TYPES:
+            pytest.skip("cost_comparison not in config")
+        template_fn = model_templates.get_template("cohort_cost_comparison")
         pdf = _make_batch_df()
-        params = {"trials_per_batch": 3, "patients_per_hour": 5}
+        params = {"trials_per_batch": 5, "member_count": 100, "num_months": 6}
         result = template_fn(pdf, params)
-        assert len(result) == 3 * 24
+        assert len(result) == 5 * 2
+
+    def test_system_cost_roi_row_count(self):
+        """System cost ROI produces trials * num_years rows."""
+        if "system_cost_roi" not in _ALL_TYPES:
+            pytest.skip("system_cost_roi not in config")
+        template_fn = model_templates.get_template("multi_year_roi_projection")
+        pdf = _make_batch_df()
+        params = {"trials_per_batch": 5, "num_years": 3}
+        result = template_fn(pdf, params)
+        assert len(result) == 5 * 3
 
 
 # ---------------------------------------------------------------------------

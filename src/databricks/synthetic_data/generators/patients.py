@@ -1,4 +1,4 @@
-"""Generate synthetic patient demographic records."""
+"""Generate synthetic patient demographic records — Women's Health (adult female)."""
 
 from datetime import date, timedelta
 
@@ -9,11 +9,8 @@ from faker import Faker
 from ..config import CHRONIC_CONDITIONS, INSURANCE_WEIGHTS
 
 
-def generate_patients(num_patients: int = 25_000, seed: int = 42) -> pd.DataFrame:
-    """Generate synthetic patient records with realistic demographics.
-
-    Produces patient records with a bimodal age distribution (pediatric 0-18
-    and elderly 55-90 peaks) and age-correlated chronic conditions.
+def generate_patients(num_patients: int = 10_000, seed: int = 42) -> pd.DataFrame:
+    """Generate synthetic patient records — all female, age 18+.
 
     Args:
         num_patients: Number of patient records to generate.
@@ -27,8 +24,8 @@ def generate_patients(num_patients: int = 25_000, seed: int = 42) -> pd.DataFram
     fake = Faker()
     Faker.seed(seed)
 
-    # --- Age distribution (bimodal) ---
-    ages = _sample_bimodal_ages(rng, num_patients)
+    # --- Age distribution (adult women 18-90) ---
+    ages = _sample_adult_female_ages(rng, num_patients)
 
     # Reference date for computing date_of_birth
     ref_date = date(2024, 6, 1)
@@ -36,12 +33,13 @@ def generate_patients(num_patients: int = 25_000, seed: int = 42) -> pd.DataFram
     # --- Build arrays for each column ---
     patient_ids = [f"PAT{i + 1:06d}" for i in range(num_patients)]
 
-    first_names = [fake.first_name() for _ in range(num_patients)]
+    first_names = [fake.first_name_female() for _ in range(num_patients)]
     last_names = [fake.last_name() for _ in range(num_patients)]
 
     dobs = [ref_date - timedelta(days=int(age * 365.25)) for age in ages]
 
-    genders = rng.choice(["M", "F", "Other"], size=num_patients, p=[0.48, 0.48, 0.04]).tolist()
+    # All female — women's health cohort
+    genders = ["F"] * num_patients
 
     zip_codes = [fake.zipcode() for _ in range(num_patients)]
 
@@ -74,25 +72,25 @@ def generate_patients(num_patients: int = 25_000, seed: int = 42) -> pd.DataFram
 # ---------------------------------------------------------------------------
 
 
-def _sample_bimodal_ages(rng: np.random.Generator, n: int) -> np.ndarray:
-    """Sample ages from a bimodal distribution with pediatric and elderly peaks.
+def _sample_adult_female_ages(rng: np.random.Generator, n: int) -> np.ndarray:
+    """Sample ages for adult women (18-90) with bimodal distribution.
 
-    ~30 % of the population falls into the pediatric peak (0-18) and ~70 %
-    into the elderly peak (55-90), reflecting a hospital-centric population.
+    ~40% reproductive age (18-45) and ~60% perimenopause/postmenopause (45-90),
+    reflecting a women's health-centric population.
     """
-    pediatric_frac = 0.30
-    n_pediatric = int(n * pediatric_frac)
-    n_elderly = n - n_pediatric
+    reproductive_frac = 0.40
+    n_reproductive = int(n * reproductive_frac)
+    n_older = n - n_reproductive
 
-    # Pediatric: truncated normal centred at 8, sd 5, clipped to [0, 18]
-    pediatric_ages = rng.normal(loc=8, scale=5, size=n_pediatric)
-    pediatric_ages = np.clip(pediatric_ages, 0, 18)
+    # Reproductive age: normal centred at 32, sd 7, clipped to [18, 45]
+    reproductive_ages = rng.normal(loc=32, scale=7, size=n_reproductive)
+    reproductive_ages = np.clip(reproductive_ages, 18, 45)
 
-    # Elderly: truncated normal centred at 72, sd 12, clipped to [55, 90]
-    elderly_ages = rng.normal(loc=72, scale=12, size=n_elderly)
-    elderly_ages = np.clip(elderly_ages, 55, 90)
+    # Perimenopause/postmenopause: normal centred at 62, sd 10, clipped to [45, 90]
+    older_ages = rng.normal(loc=62, scale=10, size=n_older)
+    older_ages = np.clip(older_ages, 45, 90)
 
-    ages = np.concatenate([pediatric_ages, elderly_ages])
+    ages = np.concatenate([reproductive_ages, older_ages])
     rng.shuffle(ages)
     return ages
 
@@ -100,8 +98,7 @@ def _sample_bimodal_ages(rng: np.random.Generator, n: int) -> np.ndarray:
 def _assign_insurance(rng: np.random.Generator, ages: np.ndarray, n: int) -> list[str]:
     """Assign insurance type weighted by config, with age-based adjustments.
 
-    Patients >= 65 are strongly skewed toward Medicare; pediatric patients
-    are more likely to be on Medicaid.
+    Patients >= 65 are strongly skewed toward Medicare.
     """
     insurance_names = list(INSURANCE_WEIGHTS.keys())
     base_probs = np.array(list(INSURANCE_WEIGHTS.values()), dtype=np.float64)
@@ -112,9 +109,6 @@ def _assign_insurance(rng: np.random.Generator, ages: np.ndarray, n: int) -> lis
         if age >= 65:
             # Boost Medicare significantly for senior patients
             probs[insurance_names.index("Medicare")] *= 3.0
-        elif age < 18:
-            # Boost Medicaid for pediatric patients
-            probs[insurance_names.index("Medicaid")] *= 3.0
         # Re-normalise
         probs /= probs.sum()
         results.append(rng.choice(insurance_names, p=probs))
@@ -124,26 +118,21 @@ def _assign_insurance(rng: np.random.Generator, ages: np.ndarray, n: int) -> lis
 def _assign_chronic_conditions(rng: np.random.Generator, ages: np.ndarray) -> list[str]:
     """Assign chronic conditions with age-dependent prevalence.
 
-    Elderly patients (>= 55) have a higher probability per condition and are
-    more likely to accumulate multiple comorbidities.  Pediatric patients
-    mostly have none or one condition (e.g., asthma).
+    Conditions are women's health focused (PCOS, endometriosis, menopause, etc.)
     """
     results: list[str] = []
     for age in ages:
-        if age < 18:
-            # Pediatric: ~15 % chance of one condition, almost always asthma
-            if rng.random() < 0.15:
-                conditions = [rng.choice(["Asthma", "Obesity", "Depression"])]
-            else:
-                conditions = []
-        elif age < 55:
-            # Working-age gap (shouldn't happen often given bimodal sampling,
-            # but handle gracefully): low burden
-            per_condition_prob = 0.08
+        if age < 35:
+            # Younger women: PCOS, endometriosis more prevalent
+            per_condition_prob = 0.10
+            conditions = [c for c in CHRONIC_CONDITIONS if rng.random() < per_condition_prob]
+        elif age < 50:
+            # Perimenopause age: rising chronic conditions
+            per_condition_prob = 0.12 + (age - 35) * 0.003
             conditions = [c for c in CHRONIC_CONDITIONS if rng.random() < per_condition_prob]
         else:
-            # Elderly: probability increases with age
-            base_prob = 0.10 + (age - 55) * 0.005  # 10 % at 55 -> 27.5 % at 90
+            # Postmenopause: higher burden
+            base_prob = 0.12 + (age - 50) * 0.004  # 12% at 50 -> 28% at 90
             conditions = [c for c in CHRONIC_CONDITIONS if rng.random() < base_prob]
 
         results.append("|".join(conditions) if conditions else "")

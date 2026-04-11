@@ -14,33 +14,29 @@ import json
 
 _GENIE_EXAMPLES = [
     {
-        "question": "Show me total ER encounters by month for 2024",
-        "guideline": "Route to encounter_analytics — this is a historical data query about encounter volumes.",
+        "question": "What is the average cost per encounter for OB/GYN patients?",
+        "guideline": "Route to encounter_analytics — this is a historical cost analysis by department.",
     },
     {
-        "question": "What's our average length of stay for cardiac patients?",
-        "guideline": "Route to encounter_analytics — historical LOS analysis by diagnosis.",
+        "question": "Show me diagnosis prevalence by month for chronic pelvic pain",
+        "guideline": "Route to encounter_analytics — historical diagnosis trending.",
     },
     {
-        "question": "Which departments have the highest readmission rates?",
-        "guideline": "Route to encounter_analytics — historical readmission rate analysis.",
-    },
-    {
-        "question": "Break down revenue by payer type for Q4 2024",
+        "question": "Break down revenue by payer type for women's health encounters",
         "guideline": "Route to encounter_analytics — historical financial analysis.",
     },
     {
-        "question": "What were the results of the last ed_wait_time simulation?",
+        "question": "What were the results of the last cost comparison simulation?",
         "guideline": "Route to encounter_analytics — query the simulation_results Gold table for past results.",
     },
 ]
 
 _COMPOUND_EXAMPLE = {
-    "question": "What was our readmission rate last year, and simulate what it would look like with 500 discharges per trial?",
+    "question": "What was our OB/GYN cost per encounter last year, and simulate the 5-year ROI at 8% encounter reduction?",
     "guideline": (
-        "Compound query: First route to encounter_analytics for historical readmission rate, "
-        "then call simulation_checker with simulation_type='readmission_rate' "
-        "and parameters='{\"discharges_per_trial\": 500}'. "
+        "Compound query: First route to encounter_analytics for historical OB/GYN cost per encounter, "
+        "then call simulation_checker with simulation_type='system_cost_roi' "
+        "and parameters='{\"encounter_reduction_pct\": 0.08, \"num_years\": 5}'. "
         "If 'not_found', call simulation_trigger, then poll simulation_checker. "
         "Synthesize both results."
     ),
@@ -68,7 +64,7 @@ def _generate_simulation_examples() -> list[dict]:
         for name, value in defaults.items():
             if len(sample_params) >= 3:
                 break
-            if isinstance(value, (int, float, str)):
+            if isinstance(value, (int, float, str, bool)):
                 sample_params[name] = value
             elif isinstance(value, list) and len(value) <= 5:
                 sample_params[name] = value
@@ -76,12 +72,14 @@ def _generate_simulation_examples() -> list[dict]:
 
         # Generate a natural question from the description
         question = f"Simulate {display_name.lower()} for the next period"
-        if "monthly" in description.lower() or "month" in description.lower():
+        if "roi" in description.lower() or "roi" in display_name.lower():
+            question = f"Project the {display_name.lower()} for our virtual care partnership"
+        elif "cost comparison" in description.lower() or "compare" in description.lower():
+            question = f"Compare virtual vs in-person care costs for women's health"
+        elif "monthly" in description.lower() or "month" in description.lower():
             question = f"Forecast {display_name.lower()} for the next 12 months"
         elif "department" in description.lower():
             question = f"Estimate {display_name.lower()} by department"
-        elif "hour" in description.lower() or "wait" in description.lower():
-            question = f"What are the expected {display_name.lower()} during peak hours?"
 
         guideline = (
             f"Call simulation_checker with simulation_type='{sim_type}' "

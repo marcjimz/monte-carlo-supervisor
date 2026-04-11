@@ -29,6 +29,21 @@ class TestConfigStructure:
     def test_has_version(self):
         assert "version" in self.config
 
+    def test_expected_types_present(self):
+        """Verify the 4 WH simulation types are configured."""
+        types = set(self.config["simulation_types"].keys())
+        assert "patient_volume" in types
+        assert "revenue" in types
+        assert "cost_comparison" in types
+        assert "system_cost_roi" in types
+
+    def test_removed_types_absent(self):
+        """Verify removed general hospital types are gone."""
+        types = set(self.config["simulation_types"].keys())
+        assert "ed_wait_time" not in types
+        assert "length_of_stay" not in types
+        assert "readmission_rate" not in types
+
     @pytest.mark.parametrize(
         "required_key",
         ["model_template", "schema", "parameters", "aggregation"],
@@ -44,6 +59,18 @@ class TestConfigStructure:
             agg = sim_config["aggregation"]
             assert "value_column" in agg, f"'{sim_type}' aggregation missing value_column"
             assert "group_column" in agg, f"'{sim_type}' aggregation missing group_column"
+
+    def test_additional_metrics_structure(self):
+        """Types with additional_metrics must have valid entries."""
+        for sim_type, sim_config in self.config["simulation_types"].items():
+            agg = sim_config["aggregation"]
+            for extra in agg.get("additional_metrics", []):
+                assert "value_column" in extra, (
+                    f"'{sim_type}' additional_metric missing value_column"
+                )
+                assert "group_column" in extra, (
+                    f"'{sim_type}' additional_metric missing group_column"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +98,11 @@ class TestModelTemplateRegistration:
         """Each template should be unique (no accidental overwrites)."""
         templates = model_templates.get_available_templates()
         assert len(templates) == len(set(templates))
+
+    def test_new_templates_registered(self):
+        """Verify hypothesis testing templates are registered."""
+        assert "cohort_cost_comparison" in model_templates.get_available_templates()
+        assert "multi_year_roi_projection" in model_templates.get_available_templates()
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +133,16 @@ class TestSchemaAggregationConsistency:
             assert group_col in schema, (
                 f"'{sim_type}' group_column '{group_col}' not found in schema: {schema}"
             )
+
+    def test_additional_metric_columns_in_schema(self):
+        """Additional metric columns must also appear in the schema."""
+        for sim_type, sim_config in self.config["simulation_types"].items():
+            schema = sim_config["schema"]
+            for extra in sim_config["aggregation"].get("additional_metrics", []):
+                value_col = extra["value_column"]
+                assert value_col in schema, (
+                    f"'{sim_type}' additional value_column '{value_col}' not in schema"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +177,22 @@ class TestConfigLoader:
     def test_get_agg_config_raises_for_unknown(self):
         with pytest.raises(ValueError, match="No config"):
             config_loader.get_agg_config("nonexistent_type")
+
+    def test_get_all_agg_metrics(self):
+        """get_all_agg_metrics returns primary + additional metrics."""
+        metrics = config_loader.get_all_agg_metrics("cost_comparison")
+        assert len(metrics) == 2  # primary + 1 additional
+        assert metrics[0] == ("simulated_cost_per_encounter", "care_model")
+        assert metrics[1] == ("simulated_total_cost", "care_model")
+
+    def test_get_all_agg_metrics_system_cost_roi(self):
+        metrics = config_loader.get_all_agg_metrics("system_cost_roi")
+        assert len(metrics) == 3  # primary + 2 additional
+
+    def test_get_all_agg_metrics_no_additional(self):
+        """Types without additional_metrics return only primary."""
+        metrics = config_loader.get_all_agg_metrics("patient_volume")
+        assert len(metrics) == 1
 
     def test_get_default_params_returns_dict(self):
         for sim_type in config_loader.get_valid_types():

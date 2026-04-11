@@ -7,10 +7,10 @@
 # MAGIC %md
 # MAGIC # 05 — Create Genie Space
 # MAGIC
-# MAGIC Programmatically creates the Genie Space for hospital encounter analytics
+# MAGIC Programmatically creates the Genie Space for Women's Health Analytics
 # MAGIC using `AgentBricksManager` from `databricks-tools-core`.
 # MAGIC
-# MAGIC Adds all 20 tables (12 data + 6 metric views + 2 simulation), configures
+# MAGIC Adds all tables (data + metric views + simulation), configures
 # MAGIC instructions, and adds sample questions.
 # MAGIC
 # MAGIC Passes the `genie_space_id` to the next task via `dbutils.jobs.taskValues`.

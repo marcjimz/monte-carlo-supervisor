@@ -2,8 +2,8 @@
 # MAGIC %md
 # MAGIC # 02 — Create UC Metric Views
 # MAGIC
-# MAGIC Creates the 6 Unity Catalog Metric Views that provide pre-defined measures and
-# MAGIC dimensions for Genie Space analytics.
+# MAGIC Creates the 4 Women's Health Unity Catalog Metric Views that provide pre-defined
+# MAGIC measures and dimensions for Genie Space analytics.
 
 # COMMAND ----------
 
@@ -73,7 +73,7 @@ spark.sql(f"USE CATALOG {catalog}")
 display(
     spark.sql(
         f"SHOW VIEWS IN {catalog}.{schema}"
-    ).filter("viewName LIKE 'mv_%'")
+    ).filter("viewName LIKE 'mv_%' OR viewName LIKE 'v_wh_%'")
 )
 
 # COMMAND ----------
@@ -83,12 +83,10 @@ display(
 # MAGIC
 # MAGIC | View | Purpose |
 # MAGIC |------|---------|
-# MAGIC | `mv_encounter_summary` | Encounter KPIs by department, type, and time |
-# MAGIC | `mv_revenue_by_payer` | Revenue and reimbursement by payer and claim status |
-# MAGIC | `mv_readmission_rates` | 30-day readmission rates by diagnosis and department |
-# MAGIC | `mv_daily_census` | Daily inpatient census and bed utilization |
-# MAGIC | `mv_department_throughput` | Department-level volume and procedure counts |
-# MAGIC | `mv_patient_demographics` | Population health by age, gender, insurance type |
+# MAGIC | `mv_wh_cost_by_condition` | Cost KPIs by ICD-10 condition, encounter type, payer |
+# MAGIC | `mv_wh_encounter_summary` | Encounter volume by type, department, and time |
+# MAGIC | `mv_wh_diagnosis_prevalence` | Diagnosis prevalence by condition and time |
+# MAGIC | `mv_wh_patient_demographics` | Population health by age, insurance, chronic conditions |
 
 # COMMAND ----------
 

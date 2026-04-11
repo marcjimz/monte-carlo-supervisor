@@ -54,7 +54,7 @@ except Exception as e:
     print("Attempting to find Genie Space by name...")
     from databricks_tools_core.agent_bricks import AgentBricksManager as _mgr
     _m = _mgr()
-    existing = _m.genie_find_by_name("Hospital Encounter Analytics")
+    existing = _m.genie_find_by_name("Women's Health Analytics")
     if existing:
         genie_space_id = existing.space_id
         print(f"Found Genie Space: {genie_space_id}")
@@ -90,13 +90,33 @@ for agent in agents:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Create or Update MAS
+# MAGIC ## Clean Up Old MAS + Create/Update New MAS
 
 # COMMAND ----------
 
 from databricks_tools_core.agent_bricks import AgentBricksManager
 
 manager = AgentBricksManager()
+
+# --- Clean up old MAS from previous version (Hospital-Monte-Carlo-Supervisor) ---
+_OLD_MAS_NAME = "Hospital-Monte-Carlo-Supervisor"
+old_mas = manager.mas_find_by_name(_OLD_MAS_NAME)
+if old_mas:
+    print(f"Found old MAS '{_OLD_MAS_NAME}' (tile_id={old_mas.tile_id}). Deleting...")
+    try:
+        manager.mas_delete(old_mas.tile_id)
+        print(f"  Deleted old MAS '{_OLD_MAS_NAME}'.")
+    except Exception as e:
+        print(f"  Warning deleting old MAS: {e}")
+else:
+    print(f"No old MAS '{_OLD_MAS_NAME}' found. Nothing to clean up.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Create or Update MAS
+
+# COMMAND ----------
 
 def _extract_tile_id(response: dict) -> str:
     """Extract tile_id from mas_create/mas_get response (handles nested structure)."""
@@ -270,6 +290,6 @@ print(f"  Agents     : {', '.join(a['name'] for a in agents)}")
 print(f"  Examples   : {len(added)} added, {len(verified_list)} verified")
 print()
 print("Test the supervisor with questions like:")
-print('  - "Show me total ER encounters by month"')
-print('  - "Forecast ER patient volumes for the next 90 days"')
-print('  - "What if we add 50 beds?"')
+print('  - "What is the average cost per encounter for OB/GYN patients?"')
+print('  - "Compare virtual vs in-person care costs for women\'s health"')
+print('  - "Project the 5-year system cost ROI at 8% encounter reduction"')

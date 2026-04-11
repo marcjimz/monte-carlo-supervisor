@@ -1,4 +1,4 @@
-"""Generate synthetic procedure records."""
+"""Generate synthetic procedure records — Women's Health focus."""
 
 import numpy as np
 import pandas as pd
@@ -7,7 +7,7 @@ import pandas as pd
 # the distribution of how many procedures an encounter generates.
 _ENCOUNTER_PROCEDURE_PROFILE: dict[str, dict] = {
     "Inpatient": {
-        "categories": ["E&M", "Laboratory", "Radiology", "Surgery", "Cardiology", "Anesthesia"],
+        "categories": ["E&M", "Laboratory", "Radiology", "Surgery"],
         # (num_procedures, probabilities) -- inpatient encounters get more procedures
         "count_choices": [0, 1, 2, 3, 4, 5],
         "count_probs": [0.02, 0.15, 0.30, 0.28, 0.15, 0.10],
@@ -32,10 +32,7 @@ _ENCOUNTER_PROCEDURE_PROFILE: dict[str, dict] = {
 # Departments that strongly favour surgical CPT codes
 _SURGICAL_DEPARTMENTS = {
     "General Surgery",
-    "Orthopedics",
-    "Obstetrics",
-    "Urology",
-    "Anesthesiology",
+    "OB/GYN",
 }
 
 
@@ -57,7 +54,7 @@ def _build_cpt_weights(
 
     # Extra boost for surgical departments
     if department in _SURGICAL_DEPARTMENTS:
-        surgical_mask = cpt_df["category"].isin({"Surgery", "Anesthesia"})
+        surgical_mask = cpt_df["category"].isin({"Surgery"})
         weights = np.where(surgical_mask, weights * 3.0, weights)
 
     return weights / weights.sum()
@@ -68,7 +65,7 @@ def generate_procedures(
     cpt_df: pd.DataFrame,
     seed: int = 42,
 ) -> pd.DataFrame:
-    """Generate procedure records for encounters (~90K total).
+    """Generate procedure records for encounters.
 
     Args:
         encounters_df: DataFrame with at least ``encounter_id``,

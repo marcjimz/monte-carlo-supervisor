@@ -1,11 +1,9 @@
-"""Tests for supervisor, Genie, and metric view configuration — pure Python, no Spark required.
+"""Tests for supervisor, Genie, and metric view configuration — Women's Health focus.
 
 Validates that generated configs match the AgentBricks API contract
 (BaseAgentDict, MultiAgentSupervisorExampleDict) and that all simulation
 types from config.yaml are propagated to instructions, examples, and agents.
 """
-
-import json
 
 from src.databricks.agentbricks.supervisor import (
     get_supervisor_config,
@@ -60,6 +58,11 @@ class TestSupervisorConfig:
             assert "name" in agent
             assert "description" in agent
             assert "agent_type" in agent
+
+    def test_description_mentions_womens_health(self):
+        cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
+        desc = cfg["description"].lower()
+        assert "women" in desc or "health" in desc
 
 
 # ---------------------------------------------------------------------------
@@ -388,6 +391,10 @@ class TestGenieSpaceConfig:
         for table in cfg["tables"]:
             assert table.startswith(f"{CATALOG}.{SCHEMA}.")
 
+    def test_display_name_is_womens_health(self):
+        cfg = get_genie_space_config(CATALOG, SCHEMA)
+        assert "Women" in cfg["display_name"]
+
 
 # ---------------------------------------------------------------------------
 # Genie sample questions
@@ -413,10 +420,10 @@ class TestGenieSampleQuestions:
 
 
 class TestBaseViewDDL:
-    def test_returns_four_base_views(self):
+    def test_returns_three_base_views(self):
         views = get_base_view_definitions(CATALOG, SCHEMA)
         assert isinstance(views, list)
-        assert len(views) == 4
+        assert len(views) == 3
 
     def test_each_base_view_is_regular_sql_view(self):
         views = get_base_view_definitions(CATALOG, SCHEMA)
@@ -428,10 +435,10 @@ class TestBaseViewDDL:
 
 
 class TestMetricViewDDL:
-    def test_returns_six_views(self):
+    def test_returns_four_views(self):
         views = get_metric_view_definitions(CATALOG, SCHEMA)
         assert isinstance(views, list)
-        assert len(views) == 6
+        assert len(views) == 4
 
     def test_each_view_contains_create_and_metrics(self):
         views = get_metric_view_definitions(CATALOG, SCHEMA)
@@ -457,6 +464,14 @@ class TestMetricViewDDL:
         views = get_metric_view_definitions(CATALOG, SCHEMA)
         for view in views:
             assert f"{CATALOG}.{SCHEMA}." in view["sql"]
+
+    def test_wh_view_names(self):
+        """All metric views should have WH prefix."""
+        views = get_metric_view_definitions(CATALOG, SCHEMA)
+        for view in views:
+            assert view["name"].startswith("mv_wh_"), (
+                f"View {view['name']} should start with mv_wh_"
+            )
 
 
 # ---------------------------------------------------------------------------

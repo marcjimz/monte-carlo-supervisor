@@ -220,63 +220,66 @@ def aggregate_to_gold(
     the ``simulation_results`` Gold table.
 
     For each simulation type the aggregation groups by the natural dimension
-    (e.g. ``month`` for patient_volume, ``department`` for LOS) and computes
-    mean, std-dev, and the 5th / 10th / 25th / 50th / 75th / 90th / 95th
-    percentiles of the simulated metric.
+    (e.g. ``month`` for patient_volume, ``care_model`` for cost_comparison)
+    and computes mean, std-dev, and the 5th / 10th / 25th / 50th / 75th /
+    90th / 95th percentiles of the simulated metric.
+
+    If additional_metrics are configured (e.g. for cost_comparison or
+    system_cost_roi), each metric is aggregated separately and written as
+    distinct rows with a unique ``metric_name``.
     """
     trials_table = f"{catalog}.{schema}.simulation_trials"
     results_table = f"{catalog}.{schema}.simulation_results"
 
-    value_col, group_col = config_loader.get_agg_config(simulation_type)
-
+    all_metrics = config_loader.get_all_agg_metrics(simulation_type)
     trials_df = spark.read.table(trials_table).filter(F.col("run_id") == run_id)
-
-    # Build aggregation expressions
-    agg_exprs = [
-        F.count("*").alias("num_trials"),
-        F.mean(value_col).alias("mean_value"),
-        F.stddev(value_col).alias("std_value"),
-        F.min(value_col).alias("min_value"),
-        F.max(value_col).alias("max_value"),
-    ]
-    for p in _PERCENTILES:
-        alias = f"p{int(p * 100):02d}"
-        agg_exprs.append(F.percentile_approx(value_col, p).alias(alias))
-
-    agg_df = trials_df.groupBy(group_col).agg(*agg_exprs)
-
     now = datetime.now(timezone.utc).isoformat()
 
-    gold_df = (
-        agg_df.withColumn("run_id", F.lit(run_id))
-        .withColumn("simulation_type", F.lit(simulation_type))
-        .withColumn("metric_name", F.lit(value_col))
-        .withColumn("group_key", F.lit(group_col))
-        .withColumnRenamed(group_col, "group_value")
-        .withColumn("created_at", F.lit(now))
-        .select(
-            "run_id",
-            "simulation_type",
-            "metric_name",
-            "group_key",
-            F.col("group_value").cast(StringType()).alias("group_value"),
-            "num_trials",
-            "mean_value",
-            "std_value",
-            "min_value",
-            "max_value",
-            "p05",
-            "p10",
-            "p25",
-            "p50",
-            "p75",
-            "p90",
-            "p95",
-            "created_at",
-        )
-    )
+    for value_col, group_col in all_metrics:
+        # Build aggregation expressions
+        agg_exprs = [
+            F.count("*").alias("num_trials"),
+            F.mean(value_col).alias("mean_value"),
+            F.stddev(value_col).alias("std_value"),
+            F.min(value_col).alias("min_value"),
+            F.max(value_col).alias("max_value"),
+        ]
+        for p in _PERCENTILES:
+            alias = f"p{int(p * 100):02d}"
+            agg_exprs.append(F.percentile_approx(value_col, p).alias(alias))
 
-    gold_df.write.format("delta").mode("append").saveAsTable(results_table)
+        agg_df = trials_df.groupBy(group_col).agg(*agg_exprs)
+
+        gold_df = (
+            agg_df.withColumn("run_id", F.lit(run_id))
+            .withColumn("simulation_type", F.lit(simulation_type))
+            .withColumn("metric_name", F.lit(value_col))
+            .withColumn("group_key", F.lit(group_col))
+            .withColumnRenamed(group_col, "group_value")
+            .withColumn("created_at", F.lit(now))
+            .select(
+                "run_id",
+                "simulation_type",
+                "metric_name",
+                "group_key",
+                F.col("group_value").cast(StringType()).alias("group_value"),
+                "num_trials",
+                "mean_value",
+                "std_value",
+                "min_value",
+                "max_value",
+                "p05",
+                "p10",
+                "p25",
+                "p50",
+                "p75",
+                "p90",
+                "p95",
+                "created_at",
+            )
+        )
+
+        gold_df.write.format("delta").mode("append").saveAsTable(results_table)
 
 
 # ---------------------------------------------------------------------------

@@ -3,21 +3,21 @@ version: "1.0"
 simulation_types:
   patient_volume:
     display_name: Patient Volume
-    description: Simulate monthly patient encounter volume with growth and seasonality trends.
+    description: Simulate monthly patient encounter volume with growth and seasonality trends for women's health services.
     model_template: normal_timeseries
     schema: "batch_id long, trial_id long, month string, simulated_encounters double"
     parameters:
       monthly_mean:
-        default: 10000
+        default: 4200
         description: Average encounters per month.
       monthly_std:
-        default: 1500
+        default: 600
         description: Standard deviation of encounters per month.
       growth_rate:
         default: 0.03
         description: Year-over-year growth rate.
       seasonality_amp:
-        default: 0.12
+        default: 0.08
         description: Amplitude of seasonal sine wave.
       num_months:
         default: 12
@@ -28,15 +28,15 @@ simulation_types:
 
   revenue:
     display_name: Revenue Projection
-    description: Simulate monthly revenue and charges accounting for denial rates.
+    description: Simulate monthly revenue and charges for women's health services accounting for denial rates.
     model_template: revenue_projection
     schema: "batch_id long, trial_id long, month string, simulated_revenue double, simulated_charges double"
     parameters:
       avg_monthly_revenue:
-        default: 12000000
+        default: 5000000
         description: Baseline monthly revenue.
       revenue_std:
-        default: 2000000
+        default: 800000
         description: Standard deviation of monthly revenue.
       avg_charge_to_rev:
         default: 1.35
@@ -51,102 +51,75 @@ simulation_types:
       value_column: simulated_revenue
       group_column: month
 
-  length_of_stay:
-    display_name: Length of Stay
-    description: Simulate average length-of-stay by department using log-normal distributions.
-    model_template: grouped_lognormal_mean
-    schema: "batch_id long, trial_id long, department string, simulated_avg_los double"
+  cost_comparison:
+    display_name: Cost Comparison
+    description: Compare projected costs between virtual and in-person care for women's health conditions.
+    model_template: cohort_cost_comparison
+    schema: "batch_id long, trial_id long, care_model string, simulated_cost_per_encounter double, simulated_total_cost double, simulated_encounter_count double"
     parameters:
-      departments:
-        default:
-          - Emergency
-          - Cardiology
-          - Orthopedics
-          - General Surgery
-          - Internal Medicine
-          - Pediatrics
-          - Oncology
-          - Neurology
-          - Intensive Care
-          - Pulmonology
-        description: List of department names to simulate.
-      los_baseline:
-        default:
-          Emergency: [0.0, 0.3]
-          Cardiology: [1.4, 0.6]
-          Orthopedics: [1.5, 0.7]
-          General Surgery: [1.2, 0.7]
-          Internal Medicine: [1.1, 0.6]
-          Pediatrics: [0.8, 0.5]
-          Oncology: [1.6, 0.8]
-          Neurology: [1.3, 0.7]
-          Intensive Care: [1.8, 0.9]
-          Pulmonology: [1.3, 0.6]
-        description: "Dict of department to [mu, sigma] log-normal parameters."
-      patients_per_trial:
-        default: 500
-        description: Patients sampled per department per trial.
+      baseline_cost_inperson:
+        default: 1200
+        description: Average cost per in-person encounter.
+      projected_cost_virtual:
+        default: 450
+        description: Projected average cost per virtual encounter.
+      cost_std_fraction:
+        default: 0.25
+        description: Cost uncertainty as fraction of mean.
+      member_count:
+        default: 50000
+        description: Covered population size.
+      virtual_penetration:
+        default: 0.30
+        description: Fraction of eligible patients using virtual care.
+      num_months:
+        default: 12
+        description: Projection horizon in months.
     aggregation:
-      value_column: simulated_avg_los
-      group_column: department
+      value_column: simulated_cost_per_encounter
+      group_column: care_model
+      additional_metrics:
+        - value_column: simulated_total_cost
+          group_column: care_model
 
-  readmission_rate:
-    display_name: Readmission Rate
-    description: Simulate 30-day readmission rates by department using binomial distributions.
-    model_template: grouped_binomial_rate
-    schema: "batch_id long, trial_id long, department string, simulated_readmission_rate double"
+  system_cost_roi:
+    display_name: System Cost ROI
+    description: Project total system cost reduction and ROI from virtual care partnership.
+    model_template: multi_year_roi_projection
+    schema: "batch_id long, trial_id long, year int, simulated_baseline_cost double, simulated_reduced_cost double, simulated_gross_savings double, simulated_net_savings double, simulated_roi double"
     parameters:
-      departments:
-        default:
-          - Emergency
-          - Cardiology
-          - Orthopedics
-          - General Surgery
-          - Internal Medicine
-          - Pediatrics
-          - Oncology
-          - Neurology
-          - Intensive Care
-          - Pulmonology
-        description: List of department names to simulate.
-      base_readmission_rate:
-        default:
-          Emergency: 0.15
-          Cardiology: 0.18
-          Orthopedics: 0.08
-          General Surgery: 0.12
-          Internal Medicine: 0.14
-          Pediatrics: 0.06
-          Oncology: 0.20
-          Neurology: 0.16
-          Intensive Care: 0.22
-          Pulmonology: 0.17
-        description: Dict of department to base readmission rate.
-      discharges_per_trial:
-        default: 300
-        description: Discharges sampled per department per trial.
+      baseline_annual_cost:
+        default: 500000000
+        description: Total annual women's health system cost.
+      encounter_reduction_pct:
+        default: 0.08
+        description: Percent reduction in encounters (e.g. 0.08 = 8%).
+      labor_inflation_rate:
+        default: 0.04
+        description: Annual labor cost inflation rate.
+      expense_inflation:
+        default: 0.03
+        description: Annual non-labor expense inflation rate.
+      include_surgery:
+        default: false
+        description: Include surgical costs in the reduction model.
+      solution_cost:
+        default: 2000000000
+        description: Total partnership investment cost over projection period.
+      num_years:
+        default: 5
+        description: Projection horizon in years.
+      labor_fraction:
+        default: 0.55
+        description: Fraction of cost attributable to labor.
+      surgical_fraction:
+        default: 0.15
+        description: Fraction of cost from surgical encounters.
     aggregation:
-      value_column: simulated_readmission_rate
-      group_column: department
-
-  ed_wait_time:
-    display_name: ED Wait Time
-    description: Simulate emergency department wait times by hour of day using gamma distributions.
-    model_template: hourly_gamma
-    schema: "batch_id long, trial_id long, hour_of_day int, simulated_wait_minutes double"
-    parameters:
-      base_wait_minutes:
-        default: 45
-        description: Baseline mean wait in minutes.
-      peak_multiplier:
-        default: 2.0
-        description: Multiplier applied during peak hours.
-      peak_hours:
-        default: [10, 11, 12, 13, 14, 18, 19, 20, 21]
-        description: List of peak hours (0-23).
-      patients_per_hour:
-        default: 50
-        description: Patients sampled per hour per trial.
-    aggregation:
-      value_column: simulated_wait_minutes
-      group_column: hour_of_day
+      value_column: simulated_roi
+      group_column: year
+      additional_metrics:
+        - value_column: simulated_net_savings
+          group_column: year
+        - value_column: simulated_gross_savings
+          group_column: year
