@@ -13,13 +13,16 @@ class CheckSimulationFunction:
     """UC SQL Function that checks simulation cache by exact parameter match."""
 
     name = "check_simulation"
-    description = (
-        "Checks whether a Monte Carlo simulation has completed results for the "
-        "given parameters. Returns cached results instantly if a matching "
-        "completed run exists, running if a job is in progress, or "
-        "not_found if no matching run exists. Read-only -- never starts jobs. "
-        "Supports: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay."
-    )
+
+    @classmethod
+    def _description(cls, types_str: str) -> str:
+        return (
+            "Checks whether a Monte Carlo simulation has completed results for the "
+            "given parameters. Returns cached results instantly if a matching "
+            "completed run exists, running if a job is in progress, or "
+            "not_found if no matching run exists. Read-only -- never starts jobs. "
+            f"Supports: {types_str}."
+        )
 
     @classmethod
     def get_registration_sql(
@@ -28,8 +31,14 @@ class CheckSimulationFunction:
         schema: str,
         mc_job_id: str = "0",
         connection_name: str = "monte_carlo_ws",
+        valid_types: list[str] | None = None,
     ) -> str:
         # mc_job_id and connection_name accepted for registry API compat but unused.
+        if valid_types is None:
+            raise ValueError("valid_types is required — load from config_loader.get_valid_types()")
+        types_str = ", ".join(sorted(valid_types))
+        not_in_str = ", ".join(f"'{t}'" for t in sorted(valid_types))
+        description = cls._description(types_str)
         #
         # IMPORTANT: Spark SQL UDF params (p_*) CANNOT be referenced inside
         # subqueries.  All param matching is done in the JOIN ON clause.
@@ -37,20 +46,20 @@ class CheckSimulationFunction:
         # per unique parameter combination.
         return f"""
 CREATE OR REPLACE FUNCTION {catalog}.{schema}.{cls.name}(
-    p_simulation_type STRING COMMENT 'One of: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay',
+    p_simulation_type STRING COMMENT 'One of: {types_str}',
     p_parameters STRING COMMENT 'JSON parameters for the simulation, e.g. {{"monthly_mean": 10000, "num_months": 6}}',
     p_num_simulations INT COMMENT 'Number of Monte Carlo trials (default: 10000)',
     p_seed INT COMMENT 'Random seed for reproducibility (default: 42)'
 )
 RETURNS STRING
 LANGUAGE SQL
-COMMENT '{cls.description}'
+COMMENT '{description}'
 RETURN (
     SELECT
         CASE
             -- Invalid simulation type
-            WHEN p_simulation_type NOT IN ('patient_volume', 'revenue', 'readmission_rate', 'ed_wait_time', 'length_of_stay')
-            THEN '{{"error":"Invalid simulation_type. Must be one of: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay"}}'
+            WHEN p_simulation_type NOT IN ({not_in_str})
+            THEN '{{"error":"Invalid simulation_type. Must be one of: {types_str}"}}'
 
             -- Completed results available — return Gold data
             WHEN latest.run_status = 'COMPLETED' AND latest.run_id IS NOT NULL

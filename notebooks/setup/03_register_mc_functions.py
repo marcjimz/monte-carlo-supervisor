@@ -8,6 +8,10 @@
 # MAGIC - `check_simulation`: Read-only — checks cache by exact parameter match
 # MAGIC - `trigger_simulation`: Write-only — calls `http_request()` to trigger Spark job
 # MAGIC
+# MAGIC **Authentication**: Uses **OAuth M2M** with a Databricks Service Principal.
+# MAGIC No PATs required. The setup creates a service principal, generates an OAuth
+# MAGIC secret via the workspace-level SDK, and creates an OAuth M2M UC HTTP Connection.
+# MAGIC
 # MAGIC Prerequisites:
 # MAGIC - MC pipeline job deployed via `databricks bundle deploy`
 # MAGIC - SQL warehouse supporting `http_request()` (serverless or DBR 16.2+)
@@ -37,10 +41,10 @@ if _root not in sys.path:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Create UC HTTP Connection
+# MAGIC ## Create UC HTTP Connection (OAuth M2M)
 # MAGIC
-# MAGIC Creates a Unity Catalog HTTP connection to the workspace REST API.
-# MAGIC Credentials are stored in Databricks Secrets — no tokens in code.
+# MAGIC Creates a Service Principal with OAuth credentials via the workspace-level
+# MAGIC SDK and a UC HTTP Connection that uses OAuth Machine-to-Machine authentication.
 
 # COMMAND ----------
 
@@ -49,75 +53,103 @@ from databricks.sdk import WorkspaceClient
 w = WorkspaceClient()
 
 # Get workspace URL from the Spark config (reliable on Azure Databricks)
-# The SDK's config.host may return the regional endpoint instead of the
-# workspace-specific URL, so we prefer the Spark config.
 try:
     workspace_url = "https://" + spark.conf.get("spark.databricks.workspaceUrl")
 except Exception:
     workspace_url = f"https://{w.config.host}" if not w.config.host.startswith("https://") else w.config.host
 print(f"Workspace URL: {workspace_url}")
 
-# Connection settings
 CONNECTION_NAME = "monte_carlo_ws"
-SECRET_SCOPE = "monte_carlo"
-SECRET_KEY = "workspace_token"
+SP_DISPLAY_NAME = "monte-carlo-sim-sp"
+SP_SCOPE = "monte_carlo"
+SP_CLIENT_ID_KEY = "sp_client_id"
+SP_CLIENT_SECRET_KEY = "sp_client_secret"
 
 # COMMAND ----------
 
-# Step 1: Create secret scope (idempotent)
+# MAGIC %md
+# MAGIC ### Step 1: Create or Reuse Service Principal + OAuth Secret
+
+# COMMAND ----------
+
+# Try loading existing SP credentials from secret scope (handles re-runs)
+stored_client_id = None
+stored_client_secret = None
+
 try:
-    w.secrets.create_scope(scope=SECRET_SCOPE)
-    print(f"Created secret scope: {SECRET_SCOPE}")
-except Exception as e:
-    if "RESOURCE_ALREADY_EXISTS" in str(e) or "already exists" in str(e).lower():
-        print(f"Secret scope '{SECRET_SCOPE}' already exists.")
+    stored_client_id = dbutils.secrets.get(scope=SP_SCOPE, key=SP_CLIENT_ID_KEY)
+    stored_client_secret = dbutils.secrets.get(scope=SP_SCOPE, key=SP_CLIENT_SECRET_KEY)
+    print(f"Existing SP credentials found in scope '{SP_SCOPE}'")
+except Exception:
+    print(f"SP credentials not found — creating...")
+
+    # Find or create SP at workspace level
+    existing = [s for s in w.service_principals.list(filter=f'displayName eq "{SP_DISPLAY_NAME}"')]
+    if existing:
+        sp_obj = existing[0]
+        print(f"Found existing SP: {sp_obj.display_name} (id={sp_obj.id}, appId={sp_obj.application_id})")
     else:
-        print(f"Warning creating scope: {e}")
+        sp_obj = w.service_principals.create(display_name=SP_DISPLAY_NAME, active=True)
+        print(f"Created SP: {sp_obj.display_name} (id={sp_obj.id}, appId={sp_obj.application_id})")
+
+    # Generate OAuth secret via WORKSPACE-LEVEL API (not account API)
+    secret_resp = w.service_principal_secrets_proxy.create(service_principal_id=sp_obj.id)
+    stored_client_id = sp_obj.application_id
+    stored_client_secret = secret_resp.secret
+
+    # Store in secret scope
+    try:
+        w.secrets.create_scope(scope=SP_SCOPE)
+        print(f"Created secret scope: {SP_SCOPE}")
+    except Exception as e:
+        if "already exists" not in str(e).lower():
+            raise
+    w.secrets.put_secret(scope=SP_SCOPE, key=SP_CLIENT_ID_KEY, string_value=stored_client_id)
+    w.secrets.put_secret(scope=SP_SCOPE, key=SP_CLIENT_SECRET_KEY, string_value=stored_client_secret)
+    print(f"Stored SP credentials in scope '{SP_SCOPE}'")
+
+# Verify SP can authenticate
+sp_client = WorkspaceClient(host=workspace_url, client_id=stored_client_id, client_secret=stored_client_secret)
+sp_me = sp_client.current_user.me()
+print(f"SP authenticated as: {sp_me.display_name}")
 
 # COMMAND ----------
 
-# Step 2: Create a long-lived token and store in secrets
-# The notebook context token is short-lived (Azure AD), so we create a
-# Databricks token with 1-year lifetime via the SDK.
-try:
-    token_info = w.tokens.create(
-        comment="Monte Carlo UC Connection (auto-created by setup pipeline)",
-        lifetime_seconds=86400 * 365,  # 1 year
-    )
-    token_value = token_info.token_value
-    print(f"Created Databricks token (ID: {token_info.token_info.token_id[:16]}...)")
-except Exception as e:
-    # Fallback: use notebook context token (short-lived, good for testing)
-    print(f"Could not create long-lived token ({e}). Using notebook context token.")
-    token_value = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
-
-w.secrets.put_secret(scope=SECRET_SCOPE, key=SECRET_KEY, string_value=token_value)
-print(f"Stored workspace token in {SECRET_SCOPE}/{SECRET_KEY}")
+# MAGIC %md
+# MAGIC ### Step 2: Create UC HTTP Connection
 
 # COMMAND ----------
 
-# Step 3: Create UC HTTP Connection
 from src.databricks.sql.connections.workspace import WorkspaceConnection
 
-conn_sql = WorkspaceConnection.get_create_sql(
-    workspace_url=workspace_url,
-    connection_name=CONNECTION_NAME,
-    secret_scope=SECRET_SCOPE,
-    secret_key=SECRET_KEY,
-)
-print(f"Creating connection: {CONNECTION_NAME}")
-print(f"  SQL: {conn_sql}")
-
+# Drop existing connection for clean state
+drop_sql = WorkspaceConnection.get_drop_sql(connection_name=CONNECTION_NAME)
+print(f"Dropping existing connection: {drop_sql}")
 try:
-    spark.sql(conn_sql)
-    print(f"Connection '{CONNECTION_NAME}' created/verified.")
+    spark.sql(drop_sql)
+    print(f"  Dropped '{CONNECTION_NAME}'.")
 except Exception as e:
-    print(f"Warning creating connection: {e}")
-    print("If the connection already exists with different options, drop and recreate it.")
+    print(f"  No existing connection to drop: {e}")
+
+# Create OAuth M2M connection
+conn_sql = WorkspaceConnection.get_create_oauth_m2m_sql(
+    workspace_url=workspace_url,
+    client_id=stored_client_id,
+    client_secret=stored_client_secret,
+    connection_name=CONNECTION_NAME,
+)
+
+# Mask sensitive values in output
+display_sql = conn_sql.replace(stored_client_secret, "****")
+print(f"\nCreating connection (OAuth M2M):")
+print(f"  {display_sql}")
+
+spark.sql(conn_sql)
+print(f"\nConnection '{CONNECTION_NAME}' created with OAuth M2M.")
 
 # COMMAND ----------
 
-# Step 4: Grant USE CONNECTION
+# Grant USE CONNECTION
 grant_conn_sql = WorkspaceConnection.get_grant_sql(
     connection_name=CONNECTION_NAME,
     principal=principal,
@@ -136,7 +168,6 @@ except Exception as e:
 
 # COMMAND ----------
 
-# Find the monte-carlo-simulation-pipeline job deployed by the bundle
 mc_job_id = None
 for job in w.jobs.list(name="monte-carlo-simulation-pipeline"):
     mc_job_id = str(job.job_id)
@@ -145,7 +176,6 @@ for job in w.jobs.list(name="monte-carlo-simulation-pipeline"):
 if mc_job_id:
     print(f"Found MC pipeline job: {mc_job_id}")
 else:
-    # Fallback: check for dev-mode prefixed name
     for job in w.jobs.list():
         if "monte-carlo-simulation-pipeline" in (job.settings.name or ""):
             mc_job_id = str(job.job_id)
@@ -156,6 +186,31 @@ if not mc_job_id:
     mc_job_id = "0"
     print("WARNING: MC pipeline job not found. Using placeholder '0'.")
     print("Re-run this notebook after `databricks bundle deploy`.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Grant SP permissions on MC pipeline job
+
+# COMMAND ----------
+
+if mc_job_id and mc_job_id != "0" and stored_client_id:
+    try:
+        from databricks.sdk.service.iam import AccessControlRequest, PermissionLevel
+        w.permissions.update(
+            "jobs", mc_job_id,
+            access_control_list=[
+                AccessControlRequest(
+                    service_principal_name=stored_client_id,
+                    permission_level=PermissionLevel.CAN_MANAGE_RUN,
+                )
+            ],
+        )
+        print(f"Granted CAN_MANAGE_RUN on job {mc_job_id} to SP {stored_client_id}")
+    except Exception as e:
+        print(f"Warning granting SP job permissions: {e}")
+else:
+    print("Skipping SP job permissions — no MC pipeline job found or no SP.")
 
 # COMMAND ----------
 
@@ -239,4 +294,5 @@ print(f"UC function registration complete.")
 print(f"  Functions    : {', '.join(f.name for f in registry.FUNCTIONS)}")
 print(f"  MC Job ID    : {mc_job_id}")
 print(f"  Connection   : {CONNECTION_NAME}")
-print(f"  Secret scope : {SECRET_SCOPE}/{SECRET_KEY}")
+print(f"  Auth method  : OAuth M2M (Service Principal)")
+print(f"  SP client_id : {stored_client_id}")

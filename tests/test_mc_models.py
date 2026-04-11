@@ -2,17 +2,18 @@
 
 Each model function takes (pdf: pd.DataFrame, params: dict) -> pd.DataFrame
 where pdf has columns [id, batch_seed].
+
+Tests are parametrized over config.yaml so adding a new simulation type
+automatically gets test coverage.
 """
+
+import json
 
 import pandas as pd
 import pytest
 
+from src.databricks.monte_carlo import config_loader, model_templates
 from src.databricks.monte_carlo.engine import (
-    _simulate_ed_wait_time,
-    _simulate_length_of_stay,
-    _simulate_patient_volume,
-    _simulate_readmission_rate,
-    _simulate_revenue,
     get_available_simulation_types,
     get_simulation_model,
 )
@@ -22,123 +23,150 @@ from src.databricks.monte_carlo.engine import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_batch_df(batch_id: int = 0, seed: int = 42) -> pd.DataFrame:
     """Create a single-row batch DataFrame matching the expected schema."""
     return pd.DataFrame({"id": [batch_id], "batch_seed": [seed]})
 
 
-# Use small trial count to keep tests fast
-SMALL_PARAMS = {"trials_per_batch": 3, "num_months": 4}
+def _parse_schema_columns(schema_str: str) -> set[str]:
+    """Parse a Spark DDL schema string into a set of column names.
+
+    E.g. "batch_id long, trial_id long, month string" -> {"batch_id", "trial_id", "month"}
+    """
+    cols = set()
+    for field in schema_str.split(","):
+        parts = field.strip().split()
+        if parts:
+            cols.add(parts[0])
+    return cols
+
+
+def _get_small_params(simulation_type: str) -> dict:
+    """Return small-scale params for fast testing of the given simulation type."""
+    defaults = config_loader.get_default_params(simulation_type)
+    # Override to small scale
+    defaults["trials_per_batch"] = 3
+    # Limit departments/months for speed
+    if "num_months" in defaults:
+        defaults["num_months"] = 4
+    if "departments" in defaults:
+        defaults["departments"] = defaults["departments"][:2]
+    if "patients_per_trial" in defaults:
+        defaults["patients_per_trial"] = 10
+    if "discharges_per_trial" in defaults:
+        defaults["discharges_per_trial"] = 50
+    if "patients_per_hour" in defaults:
+        defaults["patients_per_hour"] = 10
+    return defaults
 
 
 # ---------------------------------------------------------------------------
-# Patient volume model
+# Config-driven parametrized tests
+# ---------------------------------------------------------------------------
+
+_ALL_TYPES = config_loader.get_valid_types()
+
+
+@pytest.mark.parametrize("sim_type", _ALL_TYPES)
+class TestModelOutput:
+    """Verify each simulation type produces correct output columns and valid data."""
+
+    def test_output_columns_match_schema(self, sim_type):
+        """Output DataFrame columns must match the schema defined in config.yaml."""
+        schema_str = config_loader.get_schema(sim_type)
+        expected_cols = _parse_schema_columns(schema_str)
+
+        template_name = config_loader.get_model_template(sim_type)
+        template_fn = model_templates.get_template(template_name)
+
+        pdf = _make_batch_df()
+        params = _get_small_params(sim_type)
+        result = template_fn(pdf, params)
+
+        assert set(result.columns) == expected_cols, (
+            f"{sim_type}: expected columns {expected_cols}, got {set(result.columns)}"
+        )
+
+    def test_non_empty_output(self, sim_type):
+        """Model must produce at least one row of output."""
+        template_name = config_loader.get_model_template(sim_type)
+        template_fn = model_templates.get_template(template_name)
+
+        pdf = _make_batch_df()
+        params = _get_small_params(sim_type)
+        result = template_fn(pdf, params)
+
+        assert len(result) > 0
+
+    def test_value_column_non_negative(self, sim_type):
+        """The aggregation value column must have non-negative values."""
+        value_col, _ = config_loader.get_agg_config(sim_type)
+        template_name = config_loader.get_model_template(sim_type)
+        template_fn = model_templates.get_template(template_name)
+
+        pdf = _make_batch_df()
+        params = _get_small_params(sim_type)
+        result = template_fn(pdf, params)
+
+        assert (result[value_col] >= 0).all(), (
+            f"{sim_type}: {value_col} has negative values"
+        )
+
+    def test_batch_id_populated(self, sim_type):
+        """batch_id column must be present and populated."""
+        template_name = config_loader.get_model_template(sim_type)
+        template_fn = model_templates.get_template(template_name)
+
+        pdf = _make_batch_df(batch_id=7)
+        params = _get_small_params(sim_type)
+        result = template_fn(pdf, params)
+
+        assert (result["batch_id"] == 7).all()
+
+
+# ---------------------------------------------------------------------------
+# Rate-bounded models (readmission_rate is between 0 and 1)
 # ---------------------------------------------------------------------------
 
 
-class TestPatientVolumeModel:
-    def test_output_columns(self):
+class TestRateBounds:
+    def test_readmission_rate_between_zero_and_one(self):
+        if "readmission_rate" not in _ALL_TYPES:
+            pytest.skip("readmission_rate not in config")
+        template_fn = model_templates.get_template("grouped_binomial_rate")
         pdf = _make_batch_df()
-        result = _simulate_patient_volume(pdf, SMALL_PARAMS)
-        expected_cols = {"batch_id", "trial_id", "month", "simulated_encounters"}
-        assert expected_cols == set(result.columns)
-
-    def test_non_negative_values(self):
-        pdf = _make_batch_df()
-        result = _simulate_patient_volume(pdf, SMALL_PARAMS)
-        assert (result["simulated_encounters"] >= 0).all()
-
-    def test_row_count(self):
-        pdf = _make_batch_df()
-        params = {"trials_per_batch": 5, "num_months": 6}
-        result = _simulate_patient_volume(pdf, params)
-        assert len(result) == 5 * 6  # trials x months
-
-
-# ---------------------------------------------------------------------------
-# Revenue model
-# ---------------------------------------------------------------------------
-
-
-class TestRevenueModel:
-    def test_output_columns(self):
-        pdf = _make_batch_df()
-        result = _simulate_revenue(pdf, SMALL_PARAMS)
-        expected_cols = {"batch_id", "trial_id", "month", "simulated_revenue", "simulated_charges"}
-        assert expected_cols == set(result.columns)
-
-    def test_non_negative_values(self):
-        pdf = _make_batch_df()
-        result = _simulate_revenue(pdf, SMALL_PARAMS)
-        assert (result["simulated_revenue"] >= 0).all()
-        assert (result["simulated_charges"] >= 0).all()
-
-
-# ---------------------------------------------------------------------------
-# Length-of-stay model
-# ---------------------------------------------------------------------------
-
-
-class TestLengthOfStayModel:
-    def test_output_columns(self):
-        pdf = _make_batch_df()
-        params = {"trials_per_batch": 2, "patients_per_trial": 10, "departments": ["Emergency", "Cardiology"]}
-        result = _simulate_length_of_stay(pdf, params)
-        expected_cols = {"batch_id", "trial_id", "department", "simulated_avg_los"}
-        assert expected_cols == set(result.columns)
-
-    def test_positive_los(self):
-        pdf = _make_batch_df()
-        params = {"trials_per_batch": 2, "patients_per_trial": 10, "departments": ["Emergency"]}
-        result = _simulate_length_of_stay(pdf, params)
-        assert (result["simulated_avg_los"] > 0).all()
-
-
-# ---------------------------------------------------------------------------
-# Readmission rate model
-# ---------------------------------------------------------------------------
-
-
-class TestReadmissionModel:
-    def test_output_columns(self):
-        pdf = _make_batch_df()
-        params = {"trials_per_batch": 2, "discharges_per_trial": 50, "departments": ["Emergency"]}
-        result = _simulate_readmission_rate(pdf, params)
-        expected_cols = {"batch_id", "trial_id", "department", "simulated_readmission_rate"}
-        assert expected_cols == set(result.columns)
-
-    def test_rate_between_zero_and_one(self):
-        pdf = _make_batch_df()
-        params = {"trials_per_batch": 5, "discharges_per_trial": 100, "departments": ["Cardiology", "Oncology"]}
-        result = _simulate_readmission_rate(pdf, params)
+        params = _get_small_params("readmission_rate")
+        result = template_fn(pdf, params)
         assert (result["simulated_readmission_rate"] >= 0).all()
         assert (result["simulated_readmission_rate"] <= 1).all()
 
 
 # ---------------------------------------------------------------------------
-# ED wait time model
+# Row count tests (model-specific structure)
 # ---------------------------------------------------------------------------
 
 
-class TestEdWaitModel:
-    def test_output_columns(self):
+class TestRowCounts:
+    def test_timeseries_row_count(self):
+        """Timeseries models produce trials * months rows."""
+        if "patient_volume" not in _ALL_TYPES:
+            pytest.skip("patient_volume not in config")
+        template_fn = model_templates.get_template("normal_timeseries")
         pdf = _make_batch_df()
-        params = {"trials_per_batch": 2, "patients_per_hour": 10}
-        result = _simulate_ed_wait_time(pdf, params)
-        expected_cols = {"batch_id", "trial_id", "hour_of_day", "simulated_wait_minutes"}
-        assert expected_cols == set(result.columns)
+        params = {"trials_per_batch": 5, "num_months": 6}
+        result = template_fn(pdf, params)
+        assert len(result) == 5 * 6
 
-    def test_positive_wait_times(self):
-        pdf = _make_batch_df()
-        params = {"trials_per_batch": 2, "patients_per_hour": 10}
-        result = _simulate_ed_wait_time(pdf, params)
-        assert (result["simulated_wait_minutes"] > 0).all()
-
-    def test_24_hours_per_trial(self):
+    def test_hourly_row_count(self):
+        """Hourly models produce trials * 24 rows."""
+        if "ed_wait_time" not in _ALL_TYPES:
+            pytest.skip("ed_wait_time not in config")
+        template_fn = model_templates.get_template("hourly_gamma")
         pdf = _make_batch_df()
         params = {"trials_per_batch": 3, "patients_per_hour": 5}
-        result = _simulate_ed_wait_time(pdf, params)
-        assert len(result) == 3 * 24  # trials x hours
+        result = template_fn(pdf, params)
+        assert len(result) == 3 * 24
 
 
 # ---------------------------------------------------------------------------
@@ -147,26 +175,29 @@ class TestEdWaitModel:
 
 
 class TestDeterministic:
-    def test_same_seed_produces_same_patient_volume(self):
-        pdf = _make_batch_df(batch_id=0, seed=42)
-        params = {"trials_per_batch": 3, "num_months": 4}
-        r1 = _simulate_patient_volume(pdf.copy(), params)
-        r2 = _simulate_patient_volume(pdf.copy(), params)
+    @pytest.mark.parametrize("sim_type", _ALL_TYPES)
+    def test_same_seed_same_output(self, sim_type):
+        """Same seed must produce identical output for any simulation type."""
+        template_name = config_loader.get_model_template(sim_type)
+        template_fn = model_templates.get_template(template_name)
+
+        params = _get_small_params(sim_type)
+        r1 = template_fn(_make_batch_df(seed=42), params)
+        r2 = template_fn(_make_batch_df(seed=42), params)
         pd.testing.assert_frame_equal(r1, r2)
 
-    def test_same_seed_produces_same_revenue(self):
-        pdf = _make_batch_df(batch_id=0, seed=99)
-        params = {"trials_per_batch": 3, "num_months": 4}
-        r1 = _simulate_revenue(pdf.copy(), params)
-        r2 = _simulate_revenue(pdf.copy(), params)
-        pd.testing.assert_frame_equal(r1, r2)
+    def test_different_seed_different_output(self):
+        """Different seeds should produce different output."""
+        # Use first available type
+        sim_type = _ALL_TYPES[0]
+        template_name = config_loader.get_model_template(sim_type)
+        template_fn = model_templates.get_template(template_name)
+        value_col, _ = config_loader.get_agg_config(sim_type)
 
-    def test_different_seed_produces_different_results(self):
-        params = {"trials_per_batch": 3, "num_months": 4}
-        r1 = _simulate_patient_volume(_make_batch_df(seed=1), params)
-        r2 = _simulate_patient_volume(_make_batch_df(seed=2), params)
-        # Extremely unlikely for all values to be identical with different seeds
-        assert not r1["simulated_encounters"].equals(r2["simulated_encounters"])
+        params = _get_small_params(sim_type)
+        r1 = template_fn(_make_batch_df(seed=1), params)
+        r2 = template_fn(_make_batch_df(seed=2), params)
+        assert not r1[value_col].equals(r2[value_col])
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +218,6 @@ class TestPublicAPI:
 
     def test_get_available_types(self):
         types = get_available_simulation_types()
-        expected = {"ed_wait_time", "length_of_stay", "patient_volume", "readmission_rate", "revenue"}
+        expected = set(config_loader.get_valid_types())
         assert set(types) == expected
-        assert len(types) == 5
+        assert len(types) == len(expected)

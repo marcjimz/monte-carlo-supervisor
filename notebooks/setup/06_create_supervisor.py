@@ -71,12 +71,13 @@ except Exception as e:
 from src.databricks.agentbricks.supervisor import (
     SUPERVISOR_NAME,
     SUPERVISOR_DESCRIPTION,
-    SUPERVISOR_INSTRUCTIONS,
+    get_supervisor_instructions,
     get_supervisor_agents,
 )
 from src.databricks.agentbricks.examples import get_supervisor_examples
 
 agents = get_supervisor_agents(genie_space_id, catalog, schema)
+supervisor_instructions = get_supervisor_instructions()
 examples = get_supervisor_examples()
 
 print(f"Supervisor : {SUPERVISOR_NAME}")
@@ -121,7 +122,7 @@ if existing:
         tile_id=tile_id,
         name=SUPERVISOR_NAME,
         description=SUPERVISOR_DESCRIPTION,
-        instructions=SUPERVISOR_INSTRUCTIONS,
+        instructions=supervisor_instructions,
         agents=agents,
     )
     print(f"MAS updated: {tile_id}")
@@ -131,7 +132,7 @@ else:
         name=SUPERVISOR_NAME,
         agents=agents,
         description=SUPERVISOR_DESCRIPTION,
-        instructions=SUPERVISOR_INSTRUCTIONS,
+        instructions=supervisor_instructions,
     )
     print(f"MAS create response keys: {list(mas.keys()) if isinstance(mas, dict) else type(mas)}")
     tile_id = _extract_tile_id(mas)
@@ -141,6 +142,9 @@ else:
 
 # MAGIC %md
 # MAGIC ## Wait for Endpoint to Come Online
+# MAGIC
+# MAGIC After create/update, the endpoint may reprovision. We wait for ONLINE with
+# MAGIC an initial settle delay to avoid acting on stale status.
 
 # COMMAND ----------
 
@@ -164,10 +168,14 @@ def _get_endpoint_status(mgr, tid: str) -> str:
 print("Waiting for MAS endpoint to come online...")
 print("(This may take several minutes while the serving endpoint provisions.)\n")
 
+# Allow the API to process the create/update before polling
+time.sleep(5)
+
 timeout_s = 600  # 10 minutes
 poll_interval_s = 10
 elapsed = 0
 status = "UNKNOWN"
+saw_non_online = False
 
 while elapsed < timeout_s:
     try:
@@ -176,7 +184,12 @@ while elapsed < timeout_s:
         status = f"ERROR: {e}"
     print(f"  [{elapsed:>3}s] Endpoint status: {status}")
 
-    if status == "ONLINE":
+    if status != "ONLINE":
+        saw_non_online = True
+
+    if status == "ONLINE" and (saw_non_online or elapsed >= 10):
+        # Only trust ONLINE if we either saw it go through a non-ONLINE state
+        # (confirming a reprovision cycle) or enough time has passed.
         print(f"\nEndpoint is ONLINE after {elapsed}s.")
         break
 
@@ -192,16 +205,53 @@ else:
 # MAGIC %md
 # MAGIC ## Add Training Examples
 # MAGIC
-# MAGIC Examples must be added **after** the endpoint is online. The examples API
-# MAGIC silently fails if the MAS serving endpoint is still provisioning.
+# MAGIC Clear existing examples first to avoid duplicates on re-runs, then add
+# MAGIC the current set. Examples must be added **after** the endpoint is ONLINE.
 
 # COMMAND ----------
 
-print(f"Adding {len(examples)} training examples...")
+# Clear existing examples to handle re-runs cleanly
+try:
+    existing_examples = manager.mas_list_examples(tile_id)
+    existing_list = existing_examples.get("examples", [])
+    if existing_list:
+        print(f"Clearing {len(existing_list)} existing examples...")
+        for ex in existing_list:
+            ex_id = ex.get("example_id")
+            if ex_id:
+                try:
+                    manager.mas_delete_example(tile_id, ex_id)
+                except Exception as e:
+                    print(f"  Warning deleting example {ex_id}: {e}")
+        print("  Existing examples cleared.")
+    else:
+        print("No existing examples to clear.")
+except Exception as e:
+    print(f"Warning listing existing examples: {e}")
 
+# Add fresh examples
+print(f"\nAdding {len(examples)} training examples...")
 added = manager.mas_add_examples_batch(tile_id, examples)
-
 print(f"Training examples added: {len(added)}/{len(examples)} succeeded.")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Verify Examples Persisted
+
+# COMMAND ----------
+
+try:
+    verification = manager.mas_list_examples(tile_id)
+    verified_list = verification.get("examples", [])
+    print(f"Verification: {len(verified_list)} examples found in MAS.")
+    if len(verified_list) != len(examples):
+        print(f"  WARNING: Expected {len(examples)} but found {len(verified_list)}.")
+    for ex in verified_list:
+        q = ex.get("question", "?")[:60]
+        print(f"  - {q}")
+except Exception as e:
+    print(f"Warning verifying examples: {e}")
 
 # COMMAND ----------
 
@@ -217,7 +267,7 @@ print()
 print(f"  Supervisor : {SUPERVISOR_NAME}")
 print(f"  Tile ID    : {tile_id}")
 print(f"  Agents     : {', '.join(a['name'] for a in agents)}")
-print(f"  Examples   : {len(examples)}")
+print(f"  Examples   : {len(added)} added, {len(verified_list)} verified")
 print()
 print("Test the supervisor with questions like:")
 print('  - "Show me total ER encounters by month"')

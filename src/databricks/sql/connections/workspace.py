@@ -1,8 +1,10 @@
 """UC HTTP Connection for workspace REST API access.
 
 Creates a Unity Catalog connection that allows SQL functions to call the
-Databricks REST API (e.g., Jobs API) using ``http_request()``.  Credentials
-are stored in Databricks Secrets — no PAT tokens in code.
+Databricks REST API (e.g., Jobs API) using ``http_request()``.
+
+Uses **OAuth M2M** with a Service Principal. Tokens auto-rotate; no manual
+management required.
 """
 
 
@@ -10,26 +12,35 @@ class WorkspaceConnection:
     """Generates DDL for a UC HTTP Connection to the Databricks workspace."""
 
     DEFAULT_NAME = "monte_carlo_ws"
-    DEFAULT_SCOPE = "monte_carlo"
-    DEFAULT_SECRET_KEY = "workspace_token"
 
     @classmethod
-    def get_create_sql(
+    def get_create_oauth_m2m_sql(
         cls,
         workspace_url: str,
+        client_id: str,
+        client_secret: str,
         connection_name: str = DEFAULT_NAME,
-        secret_scope: str = DEFAULT_SCOPE,
-        secret_key: str = DEFAULT_SECRET_KEY,
     ) -> str:
-        """Return ``CREATE CONNECTION`` SQL for the workspace HTTP endpoint."""
-        # Strip trailing slash from workspace URL
+        """Return ``CREATE CONNECTION`` SQL using OAuth M2M (Service Principal).
+
+        The token_endpoint is derived from the workspace URL automatically.
+        """
         host = workspace_url.rstrip("/")
+        token_endpoint = f"{host}/oidc/v1/token"
         return f"""
-CREATE CONNECTION IF NOT EXISTS {connection_name} TYPE HTTP
+CREATE CONNECTION {connection_name} TYPE HTTP
 OPTIONS (
     host '{host}',
-    bearer_token secret('{secret_scope}', '{secret_key}')
+    client_id '{client_id}',
+    client_secret '{client_secret}',
+    oauth_scope 'all-apis',
+    token_endpoint '{token_endpoint}'
 )""".strip()
+
+    @classmethod
+    def get_drop_sql(cls, connection_name: str = DEFAULT_NAME) -> str:
+        """Return ``DROP CONNECTION`` SQL."""
+        return f"DROP CONNECTION IF EXISTS {connection_name}"
 
     @classmethod
     def get_grant_sql(

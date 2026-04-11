@@ -1,7 +1,11 @@
 """Agent Bricks Multi-Agent Supervisor configuration.
 
 Uses AgentBricksManager from databricks-tools-core for programmatic creation.
+Instructions and agent descriptions are generated dynamically from config.yaml
+so that adding/removing simulation types requires zero code changes here.
 """
+
+import json
 
 SUPERVISOR_NAME = "Hospital-Monte-Carlo-Supervisor"
 
@@ -12,7 +16,8 @@ SUPERVISOR_DESCRIPTION = (
     "check-then-trigger workflow using distributed Spark jobs."
 )
 
-SUPERVISOR_INSTRUCTIONS = """Route queries as follows:
+# Static routing logic — this is architectural, not type-specific
+_ROUTING_INSTRUCTIONS = """Route queries as follows:
 1. Historical data questions (counts, trends, averages, breakdowns, 'show me', 'what was') → encounter_analytics (Genie)
 2. Previously-run simulation results ('show me past simulations', 'what were the results of') → encounter_analytics (Genie queries simulation_results table)
 3. NEW simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability') → simulation workflow below
@@ -28,20 +33,51 @@ Step 2: If status is "completed" → present the results to the user. DONE.
 Step 3: If status is "running" → inform the user, then call simulation_checker again with the EXACT SAME parameters. Repeat until "completed".
 Step 4: If status is "not_found" → call simulation_trigger with the EXACT SAME parameters to start a new Spark job.
 Step 5: After simulation_trigger returns "triggered" → call simulation_checker again with the SAME parameters to poll. Repeat until "completed".
-IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
+IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow."""
 
-When calling simulations, construct the parameters JSON using these parameter names:
-- patient_volume: {"monthly_mean": 10000, "monthly_std": 1500, "growth_rate": 0.03, "num_months": 12}
-- revenue: {"avg_monthly_revenue": 12000000, "revenue_std": 2000000, "denial_rate": 0.08, "num_months": 12}
-- readmission_rate: {"departments": ["Cardiology", "Emergency"], "base_readmission_rate": {"Cardiology": 0.18}, "discharges_per_trial": 300}
-- ed_wait_time: {"base_wait_minutes": 45, "peak_multiplier": 2.0, "peak_hours": [10,11,12,13,14,18,19,20,21], "patients_per_hour": 50}
-- length_of_stay: {"departments": ["Cardiology", "Emergency"], "los_baseline": {"Cardiology": [1.4, 0.6]}, "patients_per_trial": 500}
 
-Only override parameters the user explicitly mentions. Use defaults for everything else by passing '{}'."""
+def _get_parameter_reference() -> str:
+    """Generate the parameter reference block from config.yaml."""
+    from src.databricks.monte_carlo import config_loader
+
+    lines = [
+        "\n\nWhen calling simulations, construct the parameters JSON using these parameter names:"
+    ]
+    for sim_type in config_loader.get_valid_types():
+        defaults = config_loader.get_default_params(sim_type)
+        # Build a clean JSON sample with a few key params
+        sample = {}
+        for name, value in defaults.items():
+            # Skip large nested dicts/lists to keep the reference concise
+            if isinstance(value, dict) and len(value) > 3:
+                sample[name] = {k: v for i, (k, v) in enumerate(value.items()) if i < 2}
+            elif isinstance(value, list) and len(value) > 5:
+                sample[name] = value[:3]
+            else:
+                sample[name] = value
+        lines.append(f"- {sim_type}: {json.dumps(sample)}")
+
+    lines.append(
+        "\nOnly override parameters the user explicitly mentions. "
+        "Use defaults for everything else by passing '{}'."
+    )
+    return "\n".join(lines)
+
+
+def get_supervisor_instructions() -> str:
+    """Generate supervisor instructions dynamically from config.yaml."""
+    return _ROUTING_INSTRUCTIONS + _get_parameter_reference()
+
+
+def _get_supported_types_str() -> str:
+    """Return comma-separated sorted list of simulation types from config."""
+    from src.databricks.monte_carlo import config_loader
+    return ", ".join(config_loader.get_valid_types())
 
 
 def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> list[dict]:
     """Return the agent list in AgentBricksManager.mas_create() format."""
+    types_str = _get_supported_types_str()
     return [
         {
             "name": "encounter_analytics",
@@ -64,7 +100,7 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
                 "'running' if a job is in progress, or 'not_found' if no matching run "
                 "exists. This is a read-only check — it never starts new jobs. "
                 "ALWAYS call this FIRST before triggering a new simulation. "
-                "Supports: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay."
+                f"Supports: {types_str}."
             ),
             "agent_type": "unity_catalog_function",
             "unity_catalog_function": {
@@ -83,7 +119,7 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
                 "ONLY call this when simulation_checker returns 'not_found'. "
                 "After triggering, call simulation_checker again with the same parameters "
                 "to poll for completion. "
-                "Supports: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay."
+                f"Supports: {types_str}."
             ),
             "agent_type": "unity_catalog_function",
             "unity_catalog_function": {
@@ -103,5 +139,5 @@ def get_supervisor_config(genie_space_id: str, catalog: str, schema: str) -> dic
         "name": SUPERVISOR_NAME,
         "description": SUPERVISOR_DESCRIPTION,
         "agents": get_supervisor_agents(genie_space_id, catalog, schema),
-        "instructions": SUPERVISOR_INSTRUCTIONS,
+        "instructions": get_supervisor_instructions(),
     }

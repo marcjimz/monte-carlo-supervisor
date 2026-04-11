@@ -13,13 +13,16 @@ class TriggerSimulationFunction:
     """UC SQL Function that triggers a distributed Spark Monte Carlo simulation job."""
 
     name = "trigger_simulation"
-    description = (
-        "Triggers a new distributed Spark Monte Carlo simulation job with "
-        "10,000+ trials across multiple nodes. The job runs 5-10 minutes. "
-        "Only call this when check_simulation returns not_found. "
-        "After triggering, call check_simulation to poll for completion. "
-        "Supports: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay."
-    )
+
+    @classmethod
+    def _description(cls, types_str: str) -> str:
+        return (
+            "Triggers a new distributed Spark Monte Carlo simulation job with "
+            "10,000+ trials across multiple nodes. The job runs 5-10 minutes. "
+            "Only call this when check_simulation returns not_found. "
+            "After triggering, call check_simulation to poll for completion. "
+            f"Supports: {types_str}."
+        )
 
     @classmethod
     def get_registration_sql(
@@ -28,22 +31,28 @@ class TriggerSimulationFunction:
         schema: str,
         mc_job_id: str = "0",
         connection_name: str = "monte_carlo_ws",
+        valid_types: list[str] | None = None,
     ) -> str:
+        if valid_types is None:
+            raise ValueError("valid_types is required — load from config_loader.get_valid_types()")
+        types_str = ", ".join(sorted(valid_types))
+        not_in_str = ", ".join(f"'{t}'" for t in sorted(valid_types))
+        description = cls._description(types_str)
         return f"""
 CREATE OR REPLACE FUNCTION {catalog}.{schema}.{cls.name}(
-    p_simulation_type STRING COMMENT 'One of: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay',
+    p_simulation_type STRING COMMENT 'One of: {types_str}',
     p_parameters STRING COMMENT 'JSON parameters for the simulation, e.g. {{"monthly_mean": 10000, "num_months": 6}}',
     p_num_simulations INT COMMENT 'Number of Monte Carlo trials (default: 10000)',
     p_seed INT COMMENT 'Random seed for reproducibility (default: 42)'
 )
 RETURNS STRING
 LANGUAGE SQL
-COMMENT '{cls.description}'
+COMMENT '{description}'
 RETURN (
     SELECT
         CASE
-            WHEN p_simulation_type NOT IN ('patient_volume', 'revenue', 'readmission_rate', 'ed_wait_time', 'length_of_stay')
-            THEN '{{"error":"Invalid simulation_type. Must be one of: patient_volume, revenue, readmission_rate, ed_wait_time, length_of_stay"}}'
+            WHEN p_simulation_type NOT IN ({not_in_str})
+            THEN '{{"error":"Invalid simulation_type. Must be one of: {types_str}"}}'
             ELSE concat(
                 '{{"status":"triggered","simulation_type":"', p_simulation_type,
                 '","parameters":', COALESCE(p_parameters, '{{}}'),

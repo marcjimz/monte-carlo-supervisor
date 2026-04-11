@@ -111,6 +111,7 @@ try:
         schema=schema,
         run_id=run_id,
         trials_df=trials_df,
+        simulation_type=simulation_type,
     )
 
     # Count from the written table (avoids .cache() which is not supported on serverless)
