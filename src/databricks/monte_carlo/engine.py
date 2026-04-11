@@ -133,27 +133,3 @@ def run_distributed_simulation(
     trials_df = seed_df.groupBy("id").applyInPandas(_apply_fn, schema=output_schema)
 
     return trials_df
-
-
-# ---------------------------------------------------------------------------
-# Backward-compatible aliases for direct imports used in tests
-# ---------------------------------------------------------------------------
-
-def _simulate_patient_volume(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    return model_templates.get_template("normal_timeseries")(pdf, params)
-
-
-def _simulate_revenue(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    return model_templates.get_template("revenue_projection")(pdf, params)
-
-
-def _simulate_length_of_stay(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    return model_templates.get_template("grouped_lognormal_mean")(pdf, params)
-
-
-def _simulate_readmission_rate(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    return model_templates.get_template("grouped_binomial_rate")(pdf, params)
-
-
-def _simulate_ed_wait_time(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    return model_templates.get_template("hourly_gamma")(pdf, params)

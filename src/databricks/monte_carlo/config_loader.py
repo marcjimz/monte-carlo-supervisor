@@ -89,3 +89,20 @@ def get_model_template(simulation_type: str, config: dict | None = None) -> str:
     if sim_config is None:
         raise ValueError(f"No config for simulation type '{simulation_type}'")
     return sim_config["model_template"]
+
+
+def get_sim_type_config(simulation_type: str, config: dict | None = None) -> dict:
+    """Return the full config dict for a single simulation type.
+
+    Includes display_name, description, model_template, schema, parameters,
+    and aggregation. Used by supervisor.py and examples.py to generate
+    dynamic instructions and examples from config.
+    """
+    cfg = config or load_config()
+    sim_config = cfg["simulation_types"].get(simulation_type)
+    if sim_config is None:
+        available = ", ".join(get_valid_types(cfg))
+        raise ValueError(
+            f"No config for simulation type '{simulation_type}'. Available: {available}"
+        )
+    return sim_config

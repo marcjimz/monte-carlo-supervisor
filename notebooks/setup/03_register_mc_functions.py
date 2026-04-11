@@ -10,32 +10,24 @@
 # MAGIC
 # MAGIC **Authentication**: Uses **OAuth M2M** with a Databricks Service Principal.
 # MAGIC No PATs required. The setup creates a service principal, generates an OAuth
-# MAGIC secret, and creates an OAuth M2M UC HTTP Connection.
-# MAGIC
-# MAGIC If account admin access is unavailable (e.g., the account_id cannot be
-# MAGIC discovered or SP secret generation fails), the notebook falls back to a
-# MAGIC Bearer Token (PAT) approach.
+# MAGIC secret via the workspace-level SDK, and creates an OAuth M2M UC HTTP Connection.
 # MAGIC
 # MAGIC Prerequisites:
 # MAGIC - MC pipeline job deployed via `databricks bundle deploy`
 # MAGIC - SQL warehouse supporting `http_request()` (serverless or DBR 16.2+)
-# MAGIC - Account admin privileges (for OAuth M2M; PAT fallback works without)
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "monte_carlo_sim", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
 dbutils.widgets.text("principal", "account users", "Grant Execute To")
-dbutils.widgets.text("account_id", "", "Databricks Account ID (auto-detected if blank)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 principal = dbutils.widgets.get("principal")
-account_id_param = dbutils.widgets.get("account_id").strip()
 
 print(f"Target    : {catalog}.{schema}")
 print(f"Principal : {principal}")
-print(f"Account ID: {account_id_param or '(auto-detect)'}")
 
 # COMMAND ----------
 
@@ -51,14 +43,12 @@ if _root not in sys.path:
 # MAGIC %md
 # MAGIC ## Create UC HTTP Connection (OAuth M2M)
 # MAGIC
-# MAGIC Creates a Service Principal with OAuth credentials and a UC HTTP Connection
-# MAGIC that uses OAuth Machine-to-Machine authentication. Falls back to Bearer
-# MAGIC Token if account-level access is unavailable.
+# MAGIC Creates a Service Principal with OAuth credentials via the workspace-level
+# MAGIC SDK and a UC HTTP Connection that uses OAuth Machine-to-Machine authentication.
 
 # COMMAND ----------
 
 from databricks.sdk import WorkspaceClient
-import requests
 
 w = WorkspaceClient()
 
@@ -71,162 +61,62 @@ print(f"Workspace URL: {workspace_url}")
 
 CONNECTION_NAME = "monte_carlo_ws"
 SP_DISPLAY_NAME = "monte-carlo-sim-sp"
+SP_SCOPE = "monte_carlo"
+SP_CLIENT_ID_KEY = "sp_client_id"
+SP_CLIENT_SECRET_KEY = "sp_client_secret"
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Step 1: Discover Account ID
+# MAGIC ### Step 1: Create or Reuse Service Principal + OAuth Secret
 
 # COMMAND ----------
 
-is_azure = "azuredatabricks.net" in workspace_url
-account_host = "https://accounts.azuredatabricks.net" if is_azure else "https://accounts.cloud.databricks.com"
-user_token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
-headers = {"Authorization": f"Bearer {user_token}"}
+# Try loading existing SP credentials from secret scope (handles re-runs)
+stored_client_id = None
+stored_client_secret = None
 
-account_id = account_id_param  # use widget value if provided
+try:
+    stored_client_id = dbutils.secrets.get(scope=SP_SCOPE, key=SP_CLIENT_ID_KEY)
+    stored_client_secret = dbutils.secrets.get(scope=SP_SCOPE, key=SP_CLIENT_SECRET_KEY)
+    print(f"Existing SP credentials found in scope '{SP_SCOPE}'")
+except Exception:
+    print(f"SP credentials not found — creating...")
 
-if not account_id:
-    # Try to auto-detect: list accounts the user has access to
+    # Find or create SP at workspace level
+    existing = [s for s in w.service_principals.list(filter=f'displayName eq "{SP_DISPLAY_NAME}"')]
+    if existing:
+        sp_obj = existing[0]
+        print(f"Found existing SP: {sp_obj.display_name} (id={sp_obj.id}, appId={sp_obj.application_id})")
+    else:
+        sp_obj = w.service_principals.create(display_name=SP_DISPLAY_NAME, active=True)
+        print(f"Created SP: {sp_obj.display_name} (id={sp_obj.id}, appId={sp_obj.application_id})")
+
+    # Generate OAuth secret via WORKSPACE-LEVEL API (not account API)
+    secret_resp = w.service_principal_secrets_proxy.create(service_principal_id=sp_obj.id)
+    stored_client_id = sp_obj.application_id
+    stored_client_secret = secret_resp.secret
+
+    # Store in secret scope
     try:
-        resp = requests.get(f"{account_host}/api/2.0/accounts", headers=headers, timeout=10)
-        if resp.status_code == 200:
-            body = resp.json()
-            accounts = body if isinstance(body, list) else body.get("accounts", [body] if "account_id" in body else [])
-            if accounts:
-                account_id = accounts[0].get("account_id", "")
-    except Exception:
-        pass
-
-if not account_id:
-    # Try Azure-specific: the account ID may be in the metastore info
-    try:
-        resp = requests.get(
-            f"{workspace_url}/api/2.0/unity-catalog/metastores",
-            headers=headers, timeout=10,
-        )
-        if resp.status_code == 200:
-            metastores = resp.json().get("metastores", [])
-            for m in metastores:
-                mid = m.get("metastore_id", "")
-                # Metastore IDs contain the account ID on some platforms
-                if mid:
-                    pass  # not reliable for extracting account_id
-    except Exception:
-        pass
-
-if account_id:
-    print(f"Account ID: {account_id}")
-else:
-    print("Could not discover account_id. OAuth M2M will be attempted; if SP secret generation fails, Bearer Token fallback will be used.")
-    print("To provide the account_id explicitly, set the 'account_id' widget parameter.")
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ### Step 2: Create or Reuse Service Principal
-
-# COMMAND ----------
-
-# Check for existing SP at workspace level
-sp = None
-for existing_sp in w.service_principals.list(filter=f'displayName eq "{SP_DISPLAY_NAME}"'):
-    sp = existing_sp
-    print(f"Found existing workspace SP: {sp.display_name} (id={sp.id}, appId={sp.application_id})")
-    break
-
-if sp is None:
-    sp = w.service_principals.create(display_name=SP_DISPLAY_NAME, active=True)
-    print(f"Created workspace SP: {sp.display_name} (id={sp.id}, appId={sp.application_id})")
-
-sp_client_id = sp.application_id
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ### Step 3: Generate OAuth Secret via Account API
-
-# COMMAND ----------
-
-oauth_secret = None
-
-if account_id:
-    try:
-        # Find or create SP at account level (account-level IDs differ from workspace-level)
-        resp = requests.get(
-            f"{account_host}/api/2.0/accounts/{account_id}/scim/v2/ServicePrincipals",
-            headers=headers,
-            params={"filter": f'displayName eq "{SP_DISPLAY_NAME}"'},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        account_sps = resp.json().get("Resources", [])
-
-        if account_sps:
-            account_sp_id = account_sps[0]["id"]
-            sp_client_id = account_sps[0].get("applicationId", sp.application_id)
-            print(f"Found account-level SP: id={account_sp_id}, appId={sp_client_id}")
-        else:
-            # Create SP at account level
-            resp = requests.post(
-                f"{account_host}/api/2.0/accounts/{account_id}/scim/v2/ServicePrincipals",
-                headers={**headers, "Content-Type": "application/json"},
-                json={
-                    "displayName": SP_DISPLAY_NAME,
-                    "active": True,
-                    "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServicePrincipal"],
-                },
-                timeout=10,
-            )
-            resp.raise_for_status()
-            account_sp = resp.json()
-            account_sp_id = account_sp["id"]
-            sp_client_id = account_sp.get("applicationId", sp.application_id)
-            print(f"Created account-level SP: id={account_sp_id}, appId={sp_client_id}")
-
-        # Generate OAuth secret
-        resp = requests.post(
-            f"{account_host}/api/2.0/accounts/{account_id}/service-principals/{account_sp_id}/credentials/secrets",
-            headers=headers,
-            timeout=10,
-        )
-        resp.raise_for_status()
-        secret_data = resp.json()
-        oauth_secret = secret_data["secret"]
-        print(f"Generated OAuth secret (id: {secret_data.get('id', 'n/a')[:16]}...)")
-
-        # Ensure the account-level SP is assigned to this workspace
-        workspace_id = spark.conf.get("spark.databricks.clusterUsageTags.orgId")
-        try:
-            resp = requests.put(
-                f"{account_host}/api/2.0/accounts/{account_id}/workspaces/{workspace_id}/permissionassignments/principals/{account_sp_id}",
-                headers={**headers, "Content-Type": "application/json"},
-                json={"permissions": ["USER"]},
-                timeout=10,
-            )
-            if resp.status_code in (200, 201):
-                print(f"Assigned SP to workspace {workspace_id}")
-            elif resp.status_code == 409:
-                print(f"SP already assigned to workspace {workspace_id}")
-            else:
-                print(f"SP workspace assignment: {resp.status_code} — {resp.text[:200]}")
-        except Exception as e:
-            print(f"Warning assigning SP to workspace: {e}")
-
-        print(f"\nOAuth M2M credentials ready: client_id={sp_client_id}")
-
+        w.secrets.create_scope(scope=SP_SCOPE)
+        print(f"Created secret scope: {SP_SCOPE}")
     except Exception as e:
-        print(f"Account-level OAuth setup failed: {e}")
-        print("Falling back to Bearer Token authentication (PAT).")
-        oauth_secret = None
-else:
-    print("No account_id available — skipping OAuth M2M setup.")
-    print("Falling back to Bearer Token authentication (PAT).")
+        if "already exists" not in str(e).lower():
+            raise
+    w.secrets.put_secret(scope=SP_SCOPE, key=SP_CLIENT_ID_KEY, string_value=stored_client_id)
+    w.secrets.put_secret(scope=SP_SCOPE, key=SP_CLIENT_SECRET_KEY, string_value=stored_client_secret)
+    print(f"Stored SP credentials in scope '{SP_SCOPE}'")
+
+# Verify SP can authenticate
+sp_client = WorkspaceClient(host=workspace_url, client_id=stored_client_id, client_secret=stored_client_secret)
+sp_me = sp_client.current_user.me()
+print(f"SP authenticated as: {sp_me.display_name}")
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ### Step 4: Create UC HTTP Connection
+# MAGIC ### Step 2: Create UC HTTP Connection
 
 # COMMAND ----------
 
@@ -241,56 +131,21 @@ try:
 except Exception as e:
     print(f"  No existing connection to drop: {e}")
 
-if oauth_secret:
-    # OAuth M2M — preferred
-    conn_sql = WorkspaceConnection.get_create_oauth_m2m_sql(
-        workspace_url=workspace_url,
-        client_id=sp_client_id,
-        client_secret=oauth_secret,
-        connection_name=CONNECTION_NAME,
-    )
-    auth_method = "OAuth M2M (Service Principal)"
-else:
-    # Fallback: Bearer Token with PAT
-    SECRET_SCOPE = "monte_carlo"
-    SECRET_KEY = "workspace_token"
-
-    try:
-        w.secrets.create_scope(scope=SECRET_SCOPE)
-        print(f"Created secret scope: {SECRET_SCOPE}")
-    except Exception as e:
-        if "RESOURCE_ALREADY_EXISTS" in str(e) or "already exists" in str(e).lower():
-            pass
-
-    try:
-        token_info = w.tokens.create(
-            comment="Monte Carlo UC Connection (auto-created by setup pipeline)",
-            lifetime_seconds=86400 * 365,
-        )
-        token_value = token_info.token_value
-        print(f"Created Databricks PAT (ID: {token_info.token_info.token_id[:16]}...)")
-    except Exception as e:
-        print(f"Could not create long-lived token ({e}). Using notebook context token.")
-        token_value = user_token
-
-    w.secrets.put_secret(scope=SECRET_SCOPE, key=SECRET_KEY, string_value=token_value)
-    conn_sql = WorkspaceConnection.get_create_bearer_sql(
-        workspace_url=workspace_url,
-        connection_name=CONNECTION_NAME,
-        secret_scope=SECRET_SCOPE,
-        secret_key=SECRET_KEY,
-    )
-    auth_method = "Bearer Token (PAT)"
+# Create OAuth M2M connection
+conn_sql = WorkspaceConnection.get_create_oauth_m2m_sql(
+    workspace_url=workspace_url,
+    client_id=stored_client_id,
+    client_secret=stored_client_secret,
+    connection_name=CONNECTION_NAME,
+)
 
 # Mask sensitive values in output
-display_sql = conn_sql
-if oauth_secret:
-    display_sql = conn_sql.replace(oauth_secret, "****")
-print(f"\nCreating connection ({auth_method}):")
+display_sql = conn_sql.replace(stored_client_secret, "****")
+print(f"\nCreating connection (OAuth M2M):")
 print(f"  {display_sql}")
 
 spark.sql(conn_sql)
-print(f"\nConnection '{CONNECTION_NAME}' created with {auth_method}.")
+print(f"\nConnection '{CONNECTION_NAME}' created with OAuth M2M.")
 
 # COMMAND ----------
 
@@ -339,19 +194,19 @@ if not mc_job_id:
 
 # COMMAND ----------
 
-if mc_job_id and mc_job_id != "0" and sp_client_id:
+if mc_job_id and mc_job_id != "0" and stored_client_id:
     try:
         from databricks.sdk.service.iam import AccessControlRequest, PermissionLevel
         w.permissions.update(
             "jobs", mc_job_id,
             access_control_list=[
                 AccessControlRequest(
-                    service_principal_name=sp_client_id,
+                    service_principal_name=stored_client_id,
                     permission_level=PermissionLevel.CAN_MANAGE_RUN,
                 )
             ],
         )
-        print(f"Granted CAN_MANAGE_RUN on job {mc_job_id} to SP {sp_client_id}")
+        print(f"Granted CAN_MANAGE_RUN on job {mc_job_id} to SP {stored_client_id}")
     except Exception as e:
         print(f"Warning granting SP job permissions: {e}")
 else:
@@ -439,5 +294,5 @@ print(f"UC function registration complete.")
 print(f"  Functions    : {', '.join(f.name for f in registry.FUNCTIONS)}")
 print(f"  MC Job ID    : {mc_job_id}")
 print(f"  Connection   : {CONNECTION_NAME}")
-print(f"  Auth method  : {'OAuth M2M' if oauth_secret else 'Bearer Token (PAT)'}")
-print(f"  SP client_id : {sp_client_id}")
+print(f"  Auth method  : OAuth M2M (Service Principal)")
+print(f"  SP client_id : {stored_client_id}")

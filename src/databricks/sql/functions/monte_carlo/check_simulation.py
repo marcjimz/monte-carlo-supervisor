@@ -35,7 +35,7 @@ class CheckSimulationFunction:
     ) -> str:
         # mc_job_id and connection_name accepted for registry API compat but unused.
         if valid_types is None:
-            valid_types = ["ed_wait_time", "length_of_stay", "patient_volume", "readmission_rate", "revenue"]
+            raise ValueError("valid_types is required — load from config_loader.get_valid_types()")
         types_str = ", ".join(sorted(valid_types))
         not_in_str = ", ".join(f"'{t}'" for t in sorted(valid_types))
         description = cls._description(types_str)

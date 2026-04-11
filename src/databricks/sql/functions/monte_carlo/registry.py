@@ -4,25 +4,15 @@ from .check_simulation import CheckSimulationFunction
 from .run_simulation import RunSimulationFunction
 from .trigger_simulation import TriggerSimulationFunction
 
-# Lazy import to avoid hard dependency when config.yaml is not present
-# (e.g. in notebooks that only use the registry with explicit valid_types).
 _valid_types_cache: list[str] | None = None
 
 
 def _load_valid_types() -> list[str]:
-    """Load simulation type names from config.yaml (with graceful fallback)."""
+    """Load simulation type names from config.yaml (single source of truth)."""
     global _valid_types_cache
     if _valid_types_cache is None:
-        try:
-            from src.databricks.monte_carlo import config_loader
-            _valid_types_cache = config_loader.get_valid_types()
-        except (ImportError, ModuleNotFoundError):
-            # PyYAML not available (e.g. serverless notebook runtime).
-            # Fall back to hardcoded defaults — keep in sync with config.yaml.
-            _valid_types_cache = [
-                "ed_wait_time", "length_of_stay", "patient_volume",
-                "readmission_rate", "revenue",
-            ]
+        from src.databricks.monte_carlo import config_loader
+        _valid_types_cache = config_loader.get_valid_types()
     return _valid_types_cache
 
 

@@ -180,19 +180,26 @@ def write_bronze_trials(
     schema: str,
     run_id: str,
     trials_df: DataFrame,
+    simulation_type: str = "",
 ) -> None:
     """Append raw trial results to the ``simulation_trials`` Bronze table.
 
-    Adds ``run_id`` and ``created_at`` columns before writing.
+    Adds ``run_id``, ``simulation_type``, and ``created_at`` columns before
+    writing.  Uses ``mergeSchema`` so that type-specific columns (e.g.
+    ``simulated_encounters``, ``department``) are added automatically via
+    Delta schema evolution — no DDL changes needed for new simulation types.
     """
     table = f"{catalog}.{schema}.simulation_trials"
     now = datetime.now(timezone.utc).isoformat()
 
-    enriched = trials_df.withColumn("run_id", F.lit(run_id)).withColumn(
-        "created_at", F.lit(now)
+    enriched = (
+        trials_df
+        .withColumn("run_id", F.lit(run_id))
+        .withColumn("simulation_type", F.lit(simulation_type))
+        .withColumn("created_at", F.lit(now))
     )
 
-    enriched.write.format("delta").mode("append").saveAsTable(table)
+    enriched.write.format("delta").option("mergeSchema", "true").mode("append").saveAsTable(table)
 
 
 # ---------------------------------------------------------------------------
@@ -341,25 +348,19 @@ TBLPROPERTIES (
 )
 """.strip(),
         # ----- simulation_trials (Bronze) -----
+        # Minimal base schema — type-specific columns are added automatically
+        # via Delta mergeSchema when write_bronze_trials() appends data.
         f"""
 CREATE TABLE IF NOT EXISTS {catalog}.{schema}.simulation_trials (
-    run_id                      STRING      NOT NULL COMMENT 'FK to simulation_runs.run_id',
-    batch_id                    BIGINT      NOT NULL COMMENT 'Batch index (Spark partition)',
-    trial_id                    BIGINT      NOT NULL COMMENT 'Global trial index',
-    month                       STRING               COMMENT 'Simulated month label (patient_volume, revenue)',
-    department                  STRING               COMMENT 'Department name (length_of_stay, readmission_rate)',
-    hour_of_day                 INT                  COMMENT 'Hour 0-23 (ed_wait_time)',
-    simulated_encounters        DOUBLE               COMMENT 'Simulated encounter count (patient_volume)',
-    simulated_revenue           DOUBLE               COMMENT 'Simulated revenue (revenue)',
-    simulated_charges           DOUBLE               COMMENT 'Simulated charges (revenue)',
-    simulated_avg_los           DOUBLE               COMMENT 'Simulated avg length of stay (length_of_stay)',
-    simulated_readmission_rate  DOUBLE               COMMENT 'Simulated readmission rate (readmission_rate)',
-    simulated_wait_minutes      DOUBLE               COMMENT 'Simulated ED wait time in minutes (ed_wait_time)',
-    created_at                  STRING      NOT NULL COMMENT 'ISO-8601 UTC timestamp'
+    run_id              STRING      NOT NULL COMMENT 'FK to simulation_runs.run_id',
+    simulation_type     STRING      NOT NULL COMMENT 'Type of simulation that produced this trial',
+    batch_id            BIGINT      NOT NULL COMMENT 'Batch index (Spark partition)',
+    trial_id            BIGINT      NOT NULL COMMENT 'Global trial index',
+    created_at          STRING      NOT NULL COMMENT 'ISO-8601 UTC timestamp'
 )
 USING DELTA
 PARTITIONED BY (run_id)
-COMMENT 'Bronze: raw Monte Carlo trial-level results'
+COMMENT 'Bronze: raw Monte Carlo trial-level results (schema evolves via mergeSchema)'
 TBLPROPERTIES (
     'delta.autoOptimize.optimizeWrite' = 'true',
     'delta.autoOptimize.autoCompact' = 'true'

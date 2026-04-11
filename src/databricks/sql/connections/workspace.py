@@ -3,10 +3,8 @@
 Creates a Unity Catalog connection that allows SQL functions to call the
 Databricks REST API (e.g., Jobs API) using ``http_request()``.
 
-Supports two credential types:
-- **OAuth M2M** (preferred): Service Principal with OAuth client credentials.
-  Tokens auto-rotate; no manual management.
-- **Bearer Token** (fallback): PAT stored in Databricks Secrets.
+Uses **OAuth M2M** with a Service Principal. Tokens auto-rotate; no manual
+management required.
 """
 
 
@@ -14,7 +12,6 @@ class WorkspaceConnection:
     """Generates DDL for a UC HTTP Connection to the Databricks workspace."""
 
     DEFAULT_NAME = "monte_carlo_ws"
-    DEFAULT_SCOPE = "monte_carlo"
 
     @classmethod
     def get_create_oauth_m2m_sql(
@@ -38,23 +35,6 @@ OPTIONS (
     client_secret '{client_secret}',
     oauth_scope 'all-apis',
     token_endpoint '{token_endpoint}'
-)""".strip()
-
-    @classmethod
-    def get_create_bearer_sql(
-        cls,
-        workspace_url: str,
-        connection_name: str = DEFAULT_NAME,
-        secret_scope: str = DEFAULT_SCOPE,
-        secret_key: str = "workspace_token",
-    ) -> str:
-        """Return ``CREATE CONNECTION`` SQL using a Bearer Token from secrets."""
-        host = workspace_url.rstrip("/")
-        return f"""
-CREATE CONNECTION {connection_name} TYPE HTTP
-OPTIONS (
-    host '{host}',
-    bearer_token secret('{secret_scope}', '{secret_key}')
 )""".strip()
 
     @classmethod
