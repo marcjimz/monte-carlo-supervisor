@@ -261,6 +261,7 @@ print(f"Training examples added: {len(added)}/{len(examples)} succeeded.")
 
 # COMMAND ----------
 
+verified_list = []
 try:
     verification = manager.mas_list_examples(tile_id)
     verified_list = verification.get("examples", [])
