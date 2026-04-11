@@ -163,8 +163,7 @@ def _simulate_cost_comparison(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
     ip_mu, ip_sigma = _lognormal_params(inperson_mean, cost_std_frac)
     vt_mu, vt_sigma = _lognormal_params(virtual_mean, cost_std_frac)
 
-    # Encounter rate: ~2.5 encounters per member per year (WH baseline)
-    annual_encounter_rate = 2.5
+    annual_encounter_rate = params.get("annual_encounter_rate", 2.5)
 
     rows: list[dict] = []
     for trial in range(trials_per_batch):

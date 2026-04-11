@@ -72,6 +72,9 @@ simulation_types:
       virtual_penetration:
         default: 0.30
         description: Fraction of eligible patients using virtual care.
+      annual_encounter_rate:
+        default: 2.5
+        description: Average encounters per member per year.
       num_months:
         default: 12
         description: Projection horizon in months.
