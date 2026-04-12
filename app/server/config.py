@@ -25,15 +25,22 @@ class Settings(BaseSettings):
     # Lakebase (auto-populated by resource binding in Databricks Apps)
     pghost: str = ""
     pgport: int = 5432
-    pgdatabase: str = "postgres"
+    pgdatabase: str = "mcapp"
     pguser: str = ""
+
+    # Lakebase Autoscaling project (for credential generation)
+    lakebase_project: str = "monte-carlo-app"
+    lakebase_branch: str = "production"
+    lakebase_endpoint: str = "primary"
 
     # Auth
     databricks_profile: str = "hls-lakebase-workshop"
 
-    # Config path (parent repo's config.yaml)
+    # Config path — bundled copy in server/ dir, fallback to parent repo
     config_yaml_path: str = str(
-        Path(__file__).resolve().parent.parent.parent
+        Path(__file__).resolve().parent / "config.yaml"
+        if (Path(__file__).resolve().parent / "config.yaml").exists()
+        else Path(__file__).resolve().parent.parent.parent
         / "src" / "databricks" / "monte_carlo" / "config.yaml"
     )
 

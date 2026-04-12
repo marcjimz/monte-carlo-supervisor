@@ -21,7 +21,15 @@ _pool: asyncpg.Pool | None = None
 
 
 def _get_oauth_token(settings: Settings) -> str:
-    """Get OAuth token for Lakebase authentication."""
+    """Get Lakebase Postgres credential via the Databricks Postgres API.
+
+    Uses POST /api/2.0/postgres/credentials to get a Postgres-specific JWT
+    that the Lakebase endpoint authenticates against.
+
+    Returns (token, username) tuple — the username is the JWT 'sub' claim
+    which should match the PostgreSQL role.
+    """
+    import httpx
     from databricks.sdk import WorkspaceClient
 
     if settings.is_databricks_app:
@@ -29,14 +37,35 @@ def _get_oauth_token(settings: Settings) -> str:
     else:
         w = WorkspaceClient(profile=settings.databricks_profile)
 
-    token = w.config.authenticate()
-    # The authenticate() method returns a callable that returns headers
-    # We need the actual token
-    headers = token({})
+    # Get the workspace auth token first
+    result = w.config.authenticate()
+    if callable(result):
+        headers = result({})
+    else:
+        headers = result
     auth_header = headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        return auth_header[7:]
-    return auth_header
+
+    host = w.config.host.rstrip("/")
+
+    # Call the Postgres credentials API for the Lakebase endpoint
+    endpoint_path = f"projects/{settings.lakebase_project}/branches/{settings.lakebase_branch}/endpoints/{settings.lakebase_endpoint}"
+    resp = httpx.post(
+        f"{host}/api/2.0/postgres/credentials",
+        headers={"Authorization": auth_header, "Content-Type": "application/json"},
+        json={"endpoint": endpoint_path},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    token = resp.json()["token"]
+
+    # Extract username from JWT sub claim
+    import base64, json as _json
+
+    payload = token.split(".")[1]
+    payload += "=" * (4 - len(payload) % 4)
+    sub = _json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
+
+    return token, sub
 
 
 async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
@@ -46,13 +75,16 @@ async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
         return _pool
 
     s = settings or get_settings()
-    password = _get_oauth_token(s)
+    password, username = _get_oauth_token(s)
+
+    # Use PGUSER if set, otherwise use the JWT sub claim
+    user = s.pguser or username
 
     _pool = await asyncpg.create_pool(
         host=s.pghost,
         port=s.pgport,
         database=s.pgdatabase,
-        user=s.pguser,
+        user=user,
         password=password,
         min_size=2,
         max_size=10,
@@ -77,16 +109,18 @@ async def get_pool() -> asyncpg.Pool:
 
 
 async def refresh_token_loop(settings: Settings | None = None):
-    """Background task to refresh the OAuth token every 45 minutes."""
+    """Background task to refresh the OAuth token every 45 minutes.
+
+    Recreates the pool with a fresh token since asyncpg pools
+    don't support updating the password on existing connections.
+    """
     s = settings or get_settings()
     while True:
         await asyncio.sleep(45 * 60)
         try:
-            password = _get_oauth_token(s)
-            pool = await get_pool()
-            # Update password on existing pool by resetting connections
-            await pool.expire_connections()
-            logger.info("Refreshed Lakebase OAuth token")
+            await close_pool()
+            await init_pool(s)
+            logger.info("Refreshed Lakebase OAuth token (pool recreated)")
         except Exception:
             logger.exception("Failed to refresh Lakebase OAuth token")
 

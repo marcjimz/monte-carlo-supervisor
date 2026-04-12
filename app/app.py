@@ -29,24 +29,25 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
 
     # Initialize Lakebase pool + run migrations
+    refresh_task = None
+    sync_task = None
     if settings.pghost:
         from server.db import close_pool, init_pool, refresh_token_loop, run_migrations
 
-        pool = await init_pool(settings)
-        await run_migrations(pool)
-        logger.info("Lakebase pool initialized and migrations applied")
+        try:
+            pool = await init_pool(settings)
+            await run_migrations(pool)
+            logger.info("Lakebase pool initialized and migrations applied")
 
-        # Start token refresh background task
-        refresh_task = asyncio.create_task(refresh_token_loop(settings))
+            refresh_task = asyncio.create_task(refresh_token_loop(settings))
 
-        # Start periodic Delta sync
-        from server.services.sync_service import periodic_sync
+            from server.services.sync_service import periodic_sync
 
-        sync_task = asyncio.create_task(periodic_sync())
+            sync_task = asyncio.create_task(periodic_sync())
+        except Exception:
+            logger.exception("Failed to initialize Lakebase — DB routes will 500")
     else:
         logger.warning("No PGHOST configured — running without Lakebase")
-        refresh_task = None
-        sync_task = None
 
     yield
 
