@@ -64,12 +64,13 @@ async def sync_simulation_runs():
         )
         count += 1
 
-    # Update sync metadata
-    await db.execute(
-        """INSERT INTO sync_metadata (table_name, last_synced_at)
-           VALUES ('simulation_runs', NOW())
-           ON CONFLICT (table_name) DO UPDATE SET last_synced_at = NOW()"""
-    )
+    # Only update sync metadata if query succeeded (even if 0 rows from incremental)
+    if rows is not None:
+        await db.execute(
+            """INSERT INTO sync_metadata (table_name, last_synced_at)
+               VALUES ('simulation_runs', NOW())
+               ON CONFLICT (table_name) DO UPDATE SET last_synced_at = NOW()"""
+        )
 
     logger.info(f"Synced {count} simulation_runs")
     return count

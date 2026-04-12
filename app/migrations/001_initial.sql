@@ -111,8 +111,8 @@ CREATE TABLE IF NOT EXISTS sync_simulation_runs (
     num_simulations INT NOT NULL,
     status          VARCHAR(20) NOT NULL,
     job_run_id      VARCHAR(64),
-    created_at      VARCHAR(30) NOT NULL,
-    updated_at      VARCHAR(30) NOT NULL,
+    created_at      VARCHAR(50) NOT NULL,
+    updated_at      VARCHAR(50) NOT NULL,
     synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS sync_simulation_results (
     p75             DOUBLE PRECISION,
     p90             DOUBLE PRECISION,
     p95             DOUBLE PRECISION,
-    created_at      VARCHAR(30) NOT NULL,
+    created_at      VARCHAR(50) NOT NULL,
     synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS sync_distribution_specs (
     version         INT NOT NULL,
     spec            TEXT NOT NULL,
     fit_metadata    TEXT,
-    created_at      VARCHAR(30) NOT NULL,
+    created_at      VARCHAR(50) NOT NULL,
     synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

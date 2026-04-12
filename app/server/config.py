@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     pgdatabase: str = "mcapp"
     pguser: str = ""
 
-    # Lakebase Autoscaling project (for credential generation)
+    # Lakebase Autoscaling (for credential generation)
     lakebase_project: str = "monte-carlo-app"
     lakebase_branch: str = "production"
     lakebase_endpoint: str = "primary"

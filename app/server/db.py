@@ -21,15 +21,12 @@ _pool: asyncpg.Pool | None = None
 
 
 def _get_oauth_token(settings: Settings) -> str:
-    """Get Lakebase Postgres credential via the Databricks Postgres API.
+    """Get Lakebase Postgres credential via the Databricks SDK.
 
-    Uses POST /api/2.0/postgres/credentials to get a Postgres-specific JWT
-    that the Lakebase endpoint authenticates against.
-
-    Returns (token, username) tuple — the username is the JWT 'sub' claim
-    which should match the PostgreSQL role.
+    Uses w.postgres.generate_database_credential() which returns a
+    Postgres-specific JWT. Requires databricks-sdk>=0.81.0 and the
+    databricks_auth extension + databricks_create_role() in Lakebase.
     """
-    import httpx
     from databricks.sdk import WorkspaceClient
 
     if settings.is_databricks_app:
@@ -37,35 +34,14 @@ def _get_oauth_token(settings: Settings) -> str:
     else:
         w = WorkspaceClient(profile=settings.databricks_profile)
 
-    # Get the workspace auth token first
-    result = w.config.authenticate()
-    if callable(result):
-        headers = result({})
-    else:
-        headers = result
-    auth_header = headers.get("Authorization", "")
-
-    host = w.config.host.rstrip("/")
-
-    # Call the Postgres credentials API for the Lakebase endpoint
-    endpoint_path = f"projects/{settings.lakebase_project}/branches/{settings.lakebase_branch}/endpoints/{settings.lakebase_endpoint}"
-    resp = httpx.post(
-        f"{host}/api/2.0/postgres/credentials",
-        headers={"Authorization": auth_header, "Content-Type": "application/json"},
-        json={"endpoint": endpoint_path},
-        timeout=30,
+    endpoint_path = (
+        f"projects/{settings.lakebase_project}"
+        f"/branches/{settings.lakebase_branch}"
+        f"/endpoints/{settings.lakebase_endpoint}"
     )
-    resp.raise_for_status()
-    token = resp.json()["token"]
-
-    # Extract username from JWT sub claim
-    import base64, json as _json
-
-    payload = token.split(".")[1]
-    payload += "=" * (4 - len(payload) % 4)
-    sub = _json.loads(base64.urlsafe_b64decode(payload)).get("sub", "")
-
-    return token, sub
+    credential = w.postgres.generate_database_credential(endpoint=endpoint_path)
+    logger.info("Generated Lakebase credential (expires=%s)", credential.expire_time)
+    return credential.token
 
 
 async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
@@ -75,16 +51,18 @@ async def init_pool(settings: Settings | None = None) -> asyncpg.Pool:
         return _pool
 
     s = settings or get_settings()
-    password, username = _get_oauth_token(s)
+    password = _get_oauth_token(s)
 
-    # Use PGUSER if set, otherwise use the JWT sub claim
-    user = s.pguser or username
+    logger.info(
+        "Connecting to Lakebase: host=%s port=%s db=%s user=%s",
+        s.pghost, s.pgport, s.pgdatabase, s.pguser[:8] + "..." if s.pguser else "unset",
+    )
 
     _pool = await asyncpg.create_pool(
         host=s.pghost,
         port=s.pgport,
         database=s.pgdatabase,
-        user=user,
+        user=s.pguser,
         password=password,
         min_size=2,
         max_size=10,

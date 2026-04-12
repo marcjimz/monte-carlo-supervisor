@@ -18,6 +18,7 @@ async def health():
     return {"status": "ok"}
 
 
+
 @router.get("/user")
 async def current_user(user: User = Depends(get_current_user)):
     return {"email": user.email, "username": user.username}

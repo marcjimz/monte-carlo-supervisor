@@ -67,7 +67,7 @@ def execute_uc_function(
     response = client.statement_execution.execute_statement(
         warehouse_id=s.sql_warehouse_id,
         statement=sql,
-        wait_timeout="60s",
+        wait_timeout="50s",
     )
 
     # Poll if needed
@@ -100,7 +100,7 @@ def execute_query(
     response = client.statement_execution.execute_statement(
         warehouse_id=s.sql_warehouse_id,
         statement=sql,
-        wait_timeout="60s",
+        wait_timeout="50s",
     )
 
     # Poll if needed

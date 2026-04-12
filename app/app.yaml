@@ -14,15 +14,3 @@ env:
     value: mas-97e7e569-endpoint
   - name: SQL_WAREHOUSE_ID
     value: 0cd7ea0fa4c57f0f
-  - name: PGHOST
-    value: ep-cool-tooth-eew86ukp.database.westus2.azuredatabricks.net
-  - name: PGPORT
-    value: "5432"
-  - name: PGDATABASE
-    value: mcapp
-  - name: LAKEBASE_PROJECT
-    value: monte-carlo-app
-  - name: LAKEBASE_BRANCH
-    value: production
-  - name: LAKEBASE_ENDPOINT
-    value: primary
