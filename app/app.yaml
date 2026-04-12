@@ -1,0 +1,16 @@
+command:
+  - uvicorn
+  - app:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+env:
+  - name: UC_CATALOG
+    value: monte_carlo_sim
+  - name: UC_SCHEMA
+    value: hospital_data
+  - name: MAS_ENDPOINT_NAME
+    value: Womens-Health-MC-Supervisor
+  - name: SQL_WAREHOUSE_ID
+    value: 0cd7ea0fa4c57f0f
