@@ -92,7 +92,7 @@ class TestGeneratePatients:
 
     def test_all_adults(self, patients_df: pd.DataFrame):
         """All patients should be 18+ (adult women's health)."""
-        ref_date = pd.Timestamp("2024-06-01")
+        ref_date = pd.Timestamp("2026-03-01")
         ages = (ref_date - patients_df["date_of_birth"]).dt.days / 365.25
         assert ages.min() >= 17.5  # allow small rounding tolerance
 

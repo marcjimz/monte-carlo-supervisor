@@ -3,6 +3,8 @@
 Tests for the two new simulation types:
 - cost_comparison (H2): Virtual vs in-person cost comparison
 - system_cost_roi (H5): Multi-year system cost ROI projection
+
+All tests pass distribution specs via params["distributions"].
 """
 
 import pandas as pd
@@ -13,6 +15,18 @@ from src.databricks.monte_carlo import config_loader, model_templates
 
 def _make_batch_df(batch_id: int = 0, seed: int = 42) -> pd.DataFrame:
     return pd.DataFrame({"id": [batch_id], "batch_seed": [seed]})
+
+
+# Default distribution specs for tests
+_COST_COMPARISON_DISTS = {
+    "inperson_cost": {"type": "lognormal", "params": {"mean": 7.09, "sigma": 0.22}},
+    "virtual_cost": {"type": "lognormal", "params": {"mean": 6.11, "sigma": 0.22}},
+}
+
+_SYSTEM_COST_ROI_DISTS = {
+    "baseline_cost": {"type": "lognormal", "params": {"mean": 20.03, "sigma": 0.05}},
+    "reduction_noise": {"type": "normal", "params": {"loc": 0, "scale": 0.1}},
+}
 
 
 # ---------------------------------------------------------------------------
@@ -28,12 +42,10 @@ class TestCostComparison:
         template_fn = model_templates.get_template("cohort_cost_comparison")
         params = {
             "trials_per_batch": 10,
-            "baseline_cost_inperson": 1200,
-            "projected_cost_virtual": 450,
-            "cost_std_fraction": 0.25,
             "member_count": 5000,
             "virtual_penetration": 0.30,
             "num_months": 12,
+            "distributions": _COST_COMPARISON_DISTS,
         }
         return template_fn(_make_batch_df(), params)
 
@@ -61,12 +73,10 @@ class TestCostComparison:
         template_fn = model_templates.get_template("cohort_cost_comparison")
         params = {
             "trials_per_batch": 200,
-            "baseline_cost_inperson": 1200,
-            "projected_cost_virtual": 450,
-            "cost_std_fraction": 0.15,
             "member_count": 10000,
             "virtual_penetration": 0.30,
             "num_months": 12,
+            "distributions": _COST_COMPARISON_DISTS,
         }
         result = template_fn(_make_batch_df(), params)
 
@@ -76,7 +86,12 @@ class TestCostComparison:
 
     def test_deterministic(self):
         template_fn = model_templates.get_template("cohort_cost_comparison")
-        params = {"trials_per_batch": 5, "member_count": 100, "num_months": 6}
+        params = {
+            "trials_per_batch": 5,
+            "member_count": 100,
+            "num_months": 6,
+            "distributions": _COST_COMPARISON_DISTS,
+        }
         r1 = template_fn(_make_batch_df(seed=42), params)
         r2 = template_fn(_make_batch_df(seed=42), params)
         pd.testing.assert_frame_equal(r1, r2)
@@ -95,7 +110,6 @@ class TestSystemCostRoi:
         template_fn = model_templates.get_template("multi_year_roi_projection")
         params = {
             "trials_per_batch": 10,
-            "baseline_annual_cost": 500_000_000,
             "encounter_reduction_pct": 0.08,
             "labor_inflation_rate": 0.04,
             "expense_inflation": 0.03,
@@ -104,6 +118,7 @@ class TestSystemCostRoi:
             "num_years": 5,
             "labor_fraction": 0.55,
             "surgical_fraction": 0.15,
+            "distributions": _SYSTEM_COST_ROI_DISTS,
         }
         return template_fn(_make_batch_df(), params)
 
@@ -147,7 +162,6 @@ class TestSystemCostRoi:
         template_fn = model_templates.get_template("multi_year_roi_projection")
         params = {
             "trials_per_batch": 1,
-            "baseline_annual_cost": 500_000_000,
             "encounter_reduction_pct": 0.0,  # no reduction to isolate inflation
             "labor_inflation_rate": 0.04,
             "expense_inflation": 0.03,
@@ -156,6 +170,7 @@ class TestSystemCostRoi:
             "num_years": 5,
             "labor_fraction": 0.55,
             "surgical_fraction": 0.15,
+            "distributions": _SYSTEM_COST_ROI_DISTS,
         }
         result = template_fn(_make_batch_df(seed=99), params)
         baselines = result.sort_values("year")["simulated_baseline_cost"].values
@@ -170,7 +185,6 @@ class TestSystemCostRoi:
         template_fn = model_templates.get_template("multi_year_roi_projection")
         base_params = {
             "trials_per_batch": 50,
-            "baseline_annual_cost": 500_000_000,
             "encounter_reduction_pct": 0.08,
             "labor_inflation_rate": 0.04,
             "expense_inflation": 0.03,
@@ -178,6 +192,7 @@ class TestSystemCostRoi:
             "num_years": 3,
             "labor_fraction": 0.55,
             "surgical_fraction": 0.15,
+            "distributions": _SYSTEM_COST_ROI_DISTS,
         }
 
         params_no_surg = {**base_params, "include_surgery": False}
@@ -190,7 +205,11 @@ class TestSystemCostRoi:
 
     def test_deterministic(self):
         template_fn = model_templates.get_template("multi_year_roi_projection")
-        params = {"trials_per_batch": 5, "num_years": 3}
+        params = {
+            "trials_per_batch": 5,
+            "num_years": 3,
+            "distributions": _SYSTEM_COST_ROI_DISTS,
+        }
         r1 = template_fn(_make_batch_df(seed=42), params)
         r2 = template_fn(_make_batch_df(seed=42), params)
         pd.testing.assert_frame_equal(r1, r2)

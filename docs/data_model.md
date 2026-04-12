@@ -1,6 +1,6 @@
 # Data Model
 
-All tables reside in Unity Catalog under `{catalog}.{schema}` (default: `monte_carlo_sim.hospital_data`). The synthetic dataset represents a three-year hospital system with 15 facilities, 25,000 patients, and 120,000 encounters spanning January 2022 through December 2024.
+All tables reside in Unity Catalog under `{catalog}.{schema}` (default: `monte_carlo_sim.hospital_data`). The synthetic dataset represents a three-year women's health system with 8 facilities, 10,000 patients, and 50,000 encounters spanning April 2023 through March 2026.
 
 ---
 

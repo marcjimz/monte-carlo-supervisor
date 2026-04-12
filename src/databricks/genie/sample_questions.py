@@ -21,7 +21,7 @@ def get_sample_questions() -> list[dict]:
             "description": "Query simulation results Gold table",
         },
         {
-            "question": "How many unique patients did we see each month in 2024?",
+            "question": "How many unique patients did we see each month in 2025?",
             "description": "Monthly unique patient volume",
         },
         {

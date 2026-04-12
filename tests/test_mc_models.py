@@ -4,7 +4,8 @@ Each model function takes (pdf: pd.DataFrame, params: dict) -> pd.DataFrame
 where pdf has columns [id, batch_seed].
 
 Tests are parametrized over config.yaml so adding a new simulation type
-automatically gets test coverage.
+automatically gets test coverage. Distribution specs are loaded from config
+defaults.
 """
 
 import pandas as pd
@@ -52,6 +53,8 @@ def _get_small_params(simulation_type: str) -> dict:
         defaults["num_years"] = 3
     if "member_count" in defaults:
         defaults["member_count"] = 1000
+    # Include distribution specs from config defaults
+    defaults["distributions"] = config_loader.get_default_distribution_specs(simulation_type)
     return defaults
 
 
@@ -136,7 +139,11 @@ class TestRowCounts:
             pytest.skip("patient_volume not in config")
         template_fn = model_templates.get_template("normal_timeseries")
         pdf = _make_batch_df()
-        params = {"trials_per_batch": 5, "num_months": 6}
+        params = {
+            "trials_per_batch": 5,
+            "num_months": 6,
+            "distributions": config_loader.get_default_distribution_specs("patient_volume"),
+        }
         result = template_fn(pdf, params)
         assert len(result) == 5 * 6
 
@@ -146,7 +153,12 @@ class TestRowCounts:
             pytest.skip("cost_comparison not in config")
         template_fn = model_templates.get_template("cohort_cost_comparison")
         pdf = _make_batch_df()
-        params = {"trials_per_batch": 5, "member_count": 100, "num_months": 6}
+        params = {
+            "trials_per_batch": 5,
+            "member_count": 100,
+            "num_months": 6,
+            "distributions": config_loader.get_default_distribution_specs("cost_comparison"),
+        }
         result = template_fn(pdf, params)
         assert len(result) == 5 * 2
 
@@ -156,7 +168,11 @@ class TestRowCounts:
             pytest.skip("system_cost_roi not in config")
         template_fn = model_templates.get_template("multi_year_roi_projection")
         pdf = _make_batch_df()
-        params = {"trials_per_batch": 5, "num_years": 3}
+        params = {
+            "trials_per_batch": 5,
+            "num_years": 3,
+            "distributions": config_loader.get_default_distribution_specs("system_cost_roi"),
+        }
         result = template_fn(pdf, params)
         assert len(result) == 5 * 3
 

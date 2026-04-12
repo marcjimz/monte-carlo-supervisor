@@ -127,24 +127,24 @@ class TestTriggerSimulationFunction:
 
 
 class TestRegistryWithNewFunctions:
-    def test_registry_has_two_functions(self):
+    def test_registry_has_three_functions(self):
         registry = MonteCarloRegistry(CATALOG, SCHEMA, JOB_ID, CONN_NAME)
-        assert len(registry.FUNCTIONS) == 2
+        assert len(registry.FUNCTIONS) == 3
 
     def test_registry_function_names(self):
         registry = MonteCarloRegistry(CATALOG, SCHEMA, JOB_ID, CONN_NAME)
         names = {f.name for f in registry.FUNCTIONS}
-        assert names == {"check_simulation", "trigger_simulation"}
+        assert names == {"check_simulation", "trigger_simulation", "list_distributions"}
 
-    def test_registration_sql_returns_two_statements(self):
+    def test_registration_sql_returns_three_statements(self):
         registry = MonteCarloRegistry(CATALOG, SCHEMA, JOB_ID, CONN_NAME)
         stmts = registry.get_all_registration_sql()
-        assert len(stmts) == 2
+        assert len(stmts) == 3
 
-    def test_grant_sql_returns_two_statements(self):
+    def test_grant_sql_returns_three_statements(self):
         registry = MonteCarloRegistry(CATALOG, SCHEMA, JOB_ID, CONN_NAME)
         stmts = registry.get_all_grant_sql()
-        assert len(stmts) == 2
+        assert len(stmts) == 3
 
     def test_deprecated_functions_includes_run_simulation(self):
         registry = MonteCarloRegistry(CATALOG, SCHEMA, JOB_ID, CONN_NAME)

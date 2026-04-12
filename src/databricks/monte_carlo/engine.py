@@ -117,6 +117,14 @@ def run_distributed_simulation(
     default_params = config_loader.get_default_params(simulation_type)
     merged_params = {**default_params, **params}
 
+    # Validate that distribution specs are present if required
+    required_dists = config_loader.get_required_distributions(simulation_type)
+    if required_dists and "distributions" not in merged_params:
+        raise ValueError(
+            f"Simulation type '{simulation_type}' requires distribution specs "
+            f"({', '.join(required_dists.keys())}). Pass them via params['distributions']."
+        )
+
     # Compute how many trials each batch should run
     trials_per_batch = max(1, num_simulations // num_batches)
     merged_params["trials_per_batch"] = trials_per_batch

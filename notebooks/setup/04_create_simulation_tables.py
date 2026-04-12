@@ -2,14 +2,15 @@
 # MAGIC %md
 # MAGIC # 04 — Create Simulation Delta Tables
 # MAGIC
-# MAGIC Creates the 3 Delta tables used to store Monte Carlo simulation metadata,
-# MAGIC raw trial results, and aggregated Gold results.
+# MAGIC Creates the 4 Delta tables used to store Monte Carlo simulation metadata,
+# MAGIC raw trial results, aggregated Gold results, and fitted distribution specs.
 # MAGIC
 # MAGIC | Table | Layer | Purpose |
 # MAGIC |-------|-------|---------|
 # MAGIC | `simulation_runs` | Metadata | Run tracking, status, cache index |
 # MAGIC | `simulation_trials` | Bronze | Raw trial-level simulation output |
 # MAGIC | `simulation_results` | Gold | Aggregated percentile distributions |
+# MAGIC | `distribution_specs` | Feature Store | Versioned fitted distribution parameters |
 
 # COMMAND ----------
 
@@ -41,7 +42,7 @@ from src.databricks.monte_carlo.results import get_simulation_tables_ddl
 
 ddl_statements = get_simulation_tables_ddl(catalog, schema)
 
-TABLE_NAMES = ["simulation_runs", "simulation_trials", "simulation_results"]
+TABLE_NAMES = ["simulation_runs", "simulation_trials", "simulation_results", "distribution_specs"]
 
 print(f"Creating {len(ddl_statements)} simulation tables...\n")
 

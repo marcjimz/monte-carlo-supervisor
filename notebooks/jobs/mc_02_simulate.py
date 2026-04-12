@@ -65,10 +65,15 @@ if cache_hit:
 
 # COMMAND ----------
 
-# ---------- Step 2: Parse parameters ----------
+# ---------- Step 2: Parse parameters (use enriched params from validate step) ----------
 
-params_dict = json.loads(parameters_json)
+enriched_json = dbutils.jobs.taskValues.get(
+    "validate_and_check_cache", "enriched_parameters", debugValue=parameters_json
+)
+params_dict = json.loads(enriched_json)
 print(f"Parsed {len(params_dict)} parameter(s): {list(params_dict.keys())}")
+if "distributions" in params_dict:
+    print(f"Distribution specs: {list(params_dict['distributions'].keys())}")
 
 # COMMAND ----------
 

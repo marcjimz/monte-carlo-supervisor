@@ -21,6 +21,7 @@ _ROUTING_INSTRUCTIONS = """Route queries as follows:
 1. Historical data questions (costs, trends, volumes, demographics, 'show me', 'what was') → encounter_analytics (Genie)
 2. Previously-run simulation results ('show me past simulations', 'what were the results of') → encounter_analytics (Genie queries simulation_results table)
 3. NEW simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability', 'ROI', 'cost comparison') → simulation workflow below
+4. Questions about fitted distributions ('what distributions', 'fitted parameters', 'distribution quality', 'what specs') → distribution_catalog
 
 Common women's health topics routed to Genie: OB/GYN encounters, cost by condition, menopause/endometriosis/fibroids prevalence, payer mix, diagnosis trends.
 Common simulation topics: virtual care cost comparison (H2), system cost ROI (H5), patient volume forecasting, revenue projection.
@@ -130,6 +131,23 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
                     "catalog": catalog,
                     "schema": schema,
                     "name": "trigger_simulation",
+                }
+            },
+        },
+        {
+            "name": "distribution_catalog",
+            "description": (
+                "Lists available fitted distribution specs for simulation types. "
+                "Call this to discover what distributions have been fitted from historical data, "
+                "their parameters, and goodness-of-fit metrics. "
+                "Optionally filter by simulation_type."
+            ),
+            "agent_type": "unity_catalog_function",
+            "unity_catalog_function": {
+                "uc_path": {
+                    "catalog": catalog,
+                    "schema": schema,
+                    "name": "list_distributions",
                 }
             },
         },

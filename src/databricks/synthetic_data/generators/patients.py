@@ -28,7 +28,7 @@ def generate_patients(num_patients: int = 10_000, seed: int = 42) -> pd.DataFram
     ages = _sample_adult_female_ages(rng, num_patients)
 
     # Reference date for computing date_of_birth
-    ref_date = date(2024, 6, 1)
+    ref_date = date(2026, 3, 1)
 
     # --- Build arrays for each column ---
     patient_ids = [f"PAT{i + 1:06d}" for i in range(num_patients)]

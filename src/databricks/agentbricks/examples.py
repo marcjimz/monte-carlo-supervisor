@@ -31,6 +31,11 @@ _GENIE_EXAMPLES = [
     },
 ]
 
+_DISTRIBUTION_EXAMPLE = {
+    "question": "What distributions have been fitted for cost comparison simulations?",
+    "guideline": "Route to distribution_catalog with simulation_type='cost_comparison'.",
+}
+
 _COMPOUND_EXAMPLE = {
     "question": "What was our OB/GYN cost per encounter last year, and simulate the 5-year ROI at 8% encounter reduction?",
     "guideline": (
@@ -100,4 +105,4 @@ def get_supervisor_examples() -> list[dict]:
     Genie/compound examples are static; simulation examples are generated
     from config.yaml.
     """
-    return _GENIE_EXAMPLES + _generate_simulation_examples() + [_COMPOUND_EXAMPLE]
+    return _GENIE_EXAMPLES + _generate_simulation_examples() + [_DISTRIBUTION_EXAMPLE, _COMPOUND_EXAMPLE]

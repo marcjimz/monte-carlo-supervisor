@@ -1,4 +1,4 @@
-version: "1.0"
+version: "2.0"
 
 simulation_types:
   patient_volume:
@@ -7,12 +7,6 @@ simulation_types:
     model_template: normal_timeseries
     schema: "batch_id long, trial_id long, month string, simulated_encounters double"
     parameters:
-      monthly_mean:
-        default: 4200
-        description: Average encounters per month.
-      monthly_std:
-        default: 600
-        description: Standard deviation of encounters per month.
       growth_rate:
         default: 0.03
         description: Year-over-year growth rate.
@@ -22,6 +16,12 @@ simulation_types:
       num_months:
         default: 12
         description: Forecast horizon in months.
+    distributions:
+      encounter_volume:
+        description: Monthly patient encounter volume distribution
+        default_spec:
+          type: normal
+          params: { loc: 4200, scale: 600 }
     aggregation:
       value_column: simulated_encounters
       group_column: month
@@ -32,21 +32,23 @@ simulation_types:
     model_template: revenue_projection
     schema: "batch_id long, trial_id long, month string, simulated_revenue double, simulated_charges double"
     parameters:
-      avg_monthly_revenue:
-        default: 5000000
-        description: Baseline monthly revenue.
-      revenue_std:
-        default: 800000
-        description: Standard deviation of monthly revenue.
       avg_charge_to_rev:
         default: 1.35
         description: Charge-to-revenue ratio.
-      denial_rate:
-        default: 0.08
-        description: Claim denial rate.
       num_months:
         default: 12
         description: Forecast horizon in months.
+    distributions:
+      gross_charges:
+        description: Monthly gross charges distribution
+        default_spec:
+          type: normal
+          params: { loc: 6750000, scale: 1080000 }
+      denial_rate:
+        description: Claim denial rate distribution (values in 0-1)
+        default_spec:
+          type: beta
+          params: { a: 2, b: 23 }
     aggregation:
       value_column: simulated_revenue
       group_column: month
@@ -57,15 +59,6 @@ simulation_types:
     model_template: cohort_cost_comparison
     schema: "batch_id long, trial_id long, care_model string, simulated_cost_per_encounter double, simulated_total_cost double, simulated_encounter_count double"
     parameters:
-      baseline_cost_inperson:
-        default: 1200
-        description: Average cost per in-person encounter.
-      projected_cost_virtual:
-        default: 450
-        description: Projected average cost per virtual encounter.
-      cost_std_fraction:
-        default: 0.25
-        description: Cost uncertainty as fraction of mean.
       member_count:
         default: 50000
         description: Covered population size.
@@ -78,6 +71,17 @@ simulation_types:
       num_months:
         default: 12
         description: Projection horizon in months.
+    distributions:
+      inperson_cost:
+        description: Cost per in-person encounter (lognormal)
+        default_spec:
+          type: lognormal
+          params: { mean: 7.09, sigma: 0.22 }
+      virtual_cost:
+        description: Cost per virtual encounter (lognormal)
+        default_spec:
+          type: lognormal
+          params: { mean: 6.11, sigma: 0.22 }
     aggregation:
       value_column: simulated_cost_per_encounter
       group_column: care_model
@@ -91,9 +95,6 @@ simulation_types:
     model_template: multi_year_roi_projection
     schema: "batch_id long, trial_id long, year int, simulated_baseline_cost double, simulated_reduced_cost double, simulated_gross_savings double, simulated_net_savings double, simulated_roi double"
     parameters:
-      baseline_annual_cost:
-        default: 500000000
-        description: Total annual women's health system cost.
       encounter_reduction_pct:
         default: 0.08
         description: Percent reduction in encounters (e.g. 0.08 = 8%).
@@ -118,6 +119,17 @@ simulation_types:
       surgical_fraction:
         default: 0.15
         description: Fraction of cost from surgical encounters.
+    distributions:
+      baseline_cost:
+        description: Baseline annual system cost (lognormal)
+        default_spec:
+          type: lognormal
+          params: { mean: 20.03, sigma: 0.05 }
+      reduction_noise:
+        description: Noise applied to encounter reduction percentage
+        default_spec:
+          type: normal
+          params: { loc: 0, scale: 0.1 }
     aggregation:
       value_column: simulated_roi
       group_column: year

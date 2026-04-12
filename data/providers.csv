@@ -1,201 +1,201 @@
 provider_id,first_name,last_name,specialty,facility_id,npi
-PROV0001,Danielle,Johnson,Emergency Medicine,FAC007,8494103764
-PROV0002,Joshua,Walker,Endocrinology,FAC008,7965604437
-PROV0003,Jill,Rhodes,Psychiatry,FAC005,2153022694
-PROV0004,Patricia,Miller,Psychiatry,FAC002,4930456503
-PROV0005,Robert,Johnson,Emergency Medicine,FAC001,1850200012
-PROV0006,Jeffery,Wagner,Internal Medicine,FAC002,6013289371
-PROV0007,Anthony,Gonzalez,Internal Medicine,FAC002,8680627659
-PROV0008,Debra,Gardner,Obstetrics & Gynecology,FAC006,9038090091
-PROV0009,Jeffrey,Lawrence,Emergency Medicine,FAC001,1066260427
-PROV0010,Lisa,Smith,Endocrinology,FAC005,5053473441
-PROV0011,Linda,Wolfe,Emergency Medicine,FAC006,4337182218
-PROV0012,Matthew,Moore,Radiology,FAC005,9722587396
-PROV0013,Susan,Rogers,Endocrinology,FAC002,8082319397
-PROV0014,Christopher,Davis,Emergency Medicine,FAC007,8727381279
-PROV0015,Melanie,Munoz,Obstetrics & Gynecology,FAC006,8436627317
-PROV0016,Lindsay,Blair,Obstetrics & Gynecology,FAC006,8468107688
-PROV0017,Amanda,Dudley,Radiology,FAC002,2705242231
-PROV0018,Nicholas,Arnold,Psychiatry,FAC001,7948111888
-PROV0019,Maria,Montgomery,Psychiatry,FAC008,5044253519
-PROV0020,Michelle,Ray,Obstetrics & Gynecology,FAC004,4657481752
-PROV0021,Janet,Williams,Emergency Medicine,FAC003,2931262055
-PROV0022,Jeremy,Roberts,Obstetrics & Gynecology,FAC004,3843361466
-PROV0023,Christopher,Hall,Psychiatry,FAC006,6229550257
-PROV0024,Craig,Ramirez,Endocrinology,FAC008,2104821391
-PROV0025,Cynthia,Diaz,Psychiatry,FAC003,5281344336
-PROV0026,Mitchell,Clark,Emergency Medicine,FAC008,3532455028
-PROV0027,Joseph,Zuniga,Psychiatry,FAC001,6032864446
-PROV0028,Deborah,Lynch,General Surgery,FAC005,3042184141
-PROV0029,George,Daniel,Internal Medicine,FAC006,7475166603
-PROV0030,Frank,Gray,Radiology,FAC001,3362144643
-PROV0031,Veronica,Bowman,Radiology,FAC002,1574355304
-PROV0032,Angela,Cohen,Radiology,FAC004,9326081065
-PROV0033,Megan,Parsons,Obstetrics & Gynecology,FAC008,3792913056
-PROV0034,Jeremy,Johnson,Internal Medicine,FAC005,5200489033
-PROV0035,Leslie,Adams,Internal Medicine,FAC008,8709528556
-PROV0036,Jason,Hahn,Radiology,FAC007,3932428223
-PROV0037,Nancy,Edwards,Psychiatry,FAC004,4487305411
-PROV0038,Diana,Foster,General Surgery,FAC007,3735550882
-PROV0039,Robin,Ellis,Radiology,FAC001,5416362949
-PROV0040,Joseph,Wright,General Surgery,FAC001,2767911991
-PROV0041,Anna,Baker,Endocrinology,FAC007,9657078980
-PROV0042,Brenda,Hurst,Internal Medicine,FAC007,8274263248
-PROV0043,Reginald,Robinson,Psychiatry,FAC002,1205234839
-PROV0044,Whitney,Hicks,Endocrinology,FAC005,4950203142
-PROV0045,Christopher,Williams,Radiology,FAC005,1930626709
-PROV0046,Daniel,Burton,Emergency Medicine,FAC007,6318239423
-PROV0047,Laura,Henderson,Radiology,FAC005,8044617045
-PROV0048,Bryan,James,Endocrinology,FAC004,2388605428
-PROV0049,Wendy,Rice,Obstetrics & Gynecology,FAC003,4334137354
-PROV0050,Tasha,Valencia,Emergency Medicine,FAC004,1759998890
-PROV0051,Alexander,Le,Obstetrics & Gynecology,FAC006,5015406480
-PROV0052,Erin,Herrera,Emergency Medicine,FAC007,6712464880
-PROV0053,Joseph,Davidson,Internal Medicine,FAC004,4915873540
-PROV0054,Daniel,Graham,Psychiatry,FAC002,5635514163
-PROV0055,Shawn,Mckay,Internal Medicine,FAC002,2262241800
-PROV0056,Nancy,Baker,Emergency Medicine,FAC006,8480014049
-PROV0057,Vincent,White,Radiology,FAC007,3105455372
-PROV0058,Rita,Harrell,Emergency Medicine,FAC001,4429191034
-PROV0059,Kenneth,Fowler,Emergency Medicine,FAC001,6983657709
-PROV0060,Chelsea,Hernandez,Psychiatry,FAC005,1788849273
-PROV0061,Kathryn,Ryan,Endocrinology,FAC002,7826675768
-PROV0062,Kimberly,Moreno,Internal Medicine,FAC007,2535336716
-PROV0063,Aaron,Nguyen,Endocrinology,FAC003,1194508718
-PROV0064,Andrew,Hickman,Emergency Medicine,FAC002,6394445123
-PROV0065,Natasha,Decker,Emergency Medicine,FAC008,1524724675
-PROV0066,Kyle,Brown,General Surgery,FAC002,3168735175
-PROV0067,Natalie,Arroyo,Internal Medicine,FAC003,9041019757
-PROV0068,Christopher,Tucker,General Surgery,FAC002,2751748370
-PROV0069,Chad,Hodges,Psychiatry,FAC001,6957248632
-PROV0070,Katie,Anderson,Psychiatry,FAC001,3753609617
-PROV0071,Thomas,Pierce,General Surgery,FAC001,7028325952
-PROV0072,Joseph,Brennan,Internal Medicine,FAC002,7721106502
-PROV0073,Rodney,Lewis,Radiology,FAC001,6212976120
-PROV0074,Amber,Blair,Psychiatry,FAC005,2590955046
-PROV0075,James,Collins,Psychiatry,FAC006,4338300554
-PROV0076,Wanda,Santos,Radiology,FAC004,3618260543
-PROV0077,Samuel,Holmes,Radiology,FAC003,3303685815
-PROV0078,David,Walker,Emergency Medicine,FAC005,8871058367
-PROV0079,Matthew,Chapman,Radiology,FAC008,7142459535
-PROV0080,Jerry,Robinson,Radiology,FAC007,7266883375
-PROV0081,Chad,Welch,Psychiatry,FAC001,5991263083
-PROV0082,Jeremy,Whitehead,Psychiatry,FAC002,7452011702
-PROV0083,Michele,Jones,Emergency Medicine,FAC002,8242879217
-PROV0084,John,Caldwell,Internal Medicine,FAC002,4742266619
-PROV0085,Jason,Anderson,General Surgery,FAC005,3071925918
-PROV0086,Selena,Duncan,Emergency Medicine,FAC004,9025095396
-PROV0087,Thomas,Mueller,Internal Medicine,FAC001,4362919559
-PROV0088,Lindsey,Lee,Obstetrics & Gynecology,FAC003,9431318354
-PROV0089,Collin,Jordan,Emergency Medicine,FAC005,7147440579
-PROV0090,Rodney,Owens,Emergency Medicine,FAC001,5101986608
-PROV0091,Jessica,Nunez,Obstetrics & Gynecology,FAC007,9931380076
-PROV0092,Tracey,Garcia,Obstetrics & Gynecology,FAC001,4256313494
-PROV0093,Richard,Morgan,Endocrinology,FAC008,5982214605
-PROV0094,Michelle,Wright,General Surgery,FAC001,1394233892
-PROV0095,James,West,Radiology,FAC007,6794786080
-PROV0096,Robert,Ramirez,Radiology,FAC008,2062053119
-PROV0097,John,Leblanc,Internal Medicine,FAC008,1204408658
-PROV0098,Scott,Callahan,Endocrinology,FAC007,3968750910
-PROV0099,Andrea,Williams,General Surgery,FAC007,5993672224
-PROV0100,Yvette,Huff,General Surgery,FAC006,7542951528
-PROV0101,Tanya,House,General Surgery,FAC007,7884989716
-PROV0102,Melinda,Martin,Radiology,FAC002,6256881720
-PROV0103,Todd,Lewis,Radiology,FAC005,9707587591
-PROV0104,Richard,Brown,Endocrinology,FAC005,3450174056
-PROV0105,Nicholas,Galloway,Emergency Medicine,FAC007,9123421568
-PROV0106,Joseph,Bowers,Radiology,FAC004,3642343819
-PROV0107,Spencer,Henderson,Radiology,FAC004,6645779566
-PROV0108,Susan,Cowan,General Surgery,FAC006,8005451473
-PROV0109,Angela,Higgins,Internal Medicine,FAC003,3045148496
-PROV0110,Eric,Phillips,Obstetrics & Gynecology,FAC002,7050160837
-PROV0111,Tanya,Riley,Psychiatry,FAC004,7501234155
-PROV0112,Amy,Adkins,Internal Medicine,FAC004,2169293548
-PROV0113,Brian,Silva,General Surgery,FAC002,3854250035
-PROV0114,Wesley,Farrell,Endocrinology,FAC003,2370808924
-PROV0115,Eric,Yu,Psychiatry,FAC003,7015626656
-PROV0116,Christopher,Lopez,Radiology,FAC003,3811299772
-PROV0117,Brooke,Leonard,Psychiatry,FAC004,7917827427
-PROV0118,Joe,Wilson,Internal Medicine,FAC006,5686051622
-PROV0119,Pamela,Sanchez,Internal Medicine,FAC003,4990727789
-PROV0120,Brooke,Harvey,Radiology,FAC008,7850257317
-PROV0121,Robert,Silva,General Surgery,FAC008,6848619413
-PROV0122,Alexandra,Donovan,Radiology,FAC004,5509402975
-PROV0123,James,Moran,Radiology,FAC003,2821270283
-PROV0124,John,Foster,Psychiatry,FAC005,8074578747
-PROV0125,Emily,Evans,Emergency Medicine,FAC007,2799173822
-PROV0126,Leslie,Walton,Psychiatry,FAC006,9177226216
-PROV0127,Charles,Ellis,Internal Medicine,FAC007,3531104054
-PROV0128,Yolanda,Ferrell,Psychiatry,FAC005,9017132417
-PROV0129,Charles,Lewis,Radiology,FAC006,4676757793
-PROV0130,Joseph,Mahoney,Obstetrics & Gynecology,FAC003,3392829653
-PROV0131,Nicole,Suarez,Internal Medicine,FAC006,2451446011
-PROV0132,Mike,Moore,Obstetrics & Gynecology,FAC002,2300717699
-PROV0133,Martha,Warner,General Surgery,FAC006,1977181670
-PROV0134,Cheryl,Archer,Psychiatry,FAC007,9576094555
-PROV0135,Destiny,Smith,Emergency Medicine,FAC002,7737472175
-PROV0136,Lisa,Evans,Emergency Medicine,FAC005,6288801149
-PROV0137,Elizabeth,Mcmillan,General Surgery,FAC001,8055083881
-PROV0138,Dennis,Wilson,General Surgery,FAC006,5226002301
-PROV0139,Daniel,Tran,General Surgery,FAC001,4888837357
-PROV0140,Joseph,Jacobs,Psychiatry,FAC008,4949905957
-PROV0141,Jennifer,Harris,Radiology,FAC002,3713608802
-PROV0142,Cynthia,Baker,Emergency Medicine,FAC008,9340884899
-PROV0143,Tracy,Whitehead,Internal Medicine,FAC007,8008758135
-PROV0144,Meghan,Davis,Endocrinology,FAC005,9244106606
-PROV0145,Rodney,Hill,Psychiatry,FAC007,9424392130
-PROV0146,Adam,Wise,Emergency Medicine,FAC007,7302385918
-PROV0147,Dana,Green,Emergency Medicine,FAC008,1336713005
-PROV0148,Joyce,Arnold,Obstetrics & Gynecology,FAC003,5445917373
-PROV0149,Ronald,Smith,Radiology,FAC005,9627032919
+PROV0001,Danielle,Johnson,Emergency Medicine,FAC007,5156895072
+PROV0002,Joshua,Walker,Endocrinology,FAC008,4487305411
+PROV0003,Jill,Rhodes,Psychiatry,FAC005,5416362949
+PROV0004,Patricia,Miller,Psychiatry,FAC002,8727381279
+PROV0005,Robert,Johnson,Emergency Medicine,FAC001,1277360511
+PROV0006,Jeffery,Wagner,Internal Medicine,FAC002,3531104054
+PROV0007,Anthony,Gonzalez,Internal Medicine,FAC002,6957248632
+PROV0008,Debra,Gardner,Obstetrics & Gynecology,FAC006,3045148496
+PROV0009,Jeffrey,Lawrence,Emergency Medicine,FAC001,7346488407
+PROV0010,Lisa,Smith,Endocrinology,FAC005,8242879217
+PROV0011,Linda,Wolfe,Emergency Medicine,FAC006,9722587396
+PROV0012,Matthew,Moore,Radiology,FAC005,5261404609
+PROV0013,Susan,Rogers,Endocrinology,FAC002,1574355304
+PROV0014,Christopher,Davis,Emergency Medicine,FAC007,6087124958
+PROV0015,Melanie,Munoz,Obstetrics & Gynecology,FAC006,2388605428
+PROV0016,Lindsay,Blair,Obstetrics & Gynecology,FAC006,7884989716
+PROV0017,Amanda,Dudley,Radiology,FAC002,6848619413
+PROV0018,Nicholas,Arnold,Psychiatry,FAC001,5635514163
+PROV0019,Maria,Montgomery,Psychiatry,FAC008,6934803712
+PROV0020,Michelle,Ray,Obstetrics & Gynecology,FAC004,1524724675
+PROV0021,Janet,Williams,Emergency Medicine,FAC003,6712464880
+PROV0022,Jeremy,Roberts,Obstetrics & Gynecology,FAC004,3105455372
+PROV0023,Christopher,Hall,Psychiatry,FAC006,3713608802
+PROV0024,Craig,Ramirez,Endocrinology,FAC008,7501234155
+PROV0025,Cynthia,Diaz,Psychiatry,FAC003,3594952935
+PROV0026,Mitchell,Clark,Emergency Medicine,FAC008,6288801149
+PROV0027,Joseph,Zuniga,Psychiatry,FAC001,8436627317
+PROV0028,Deborah,Lynch,General Surgery,FAC005,6672543338
+PROV0029,George,Daniel,Internal Medicine,FAC006,3792913056
+PROV0030,Frank,Gray,Radiology,FAC001,3303685815
+PROV0031,Veronica,Bowman,Radiology,FAC002,5509402975
+PROV0032,Angela,Cohen,Radiology,FAC004,2030770661
+PROV0033,Megan,Parsons,Obstetrics & Gynecology,FAC008,4930456503
+PROV0034,Jeremy,Johnson,Internal Medicine,FAC005,2300717699
+PROV0035,Leslie,Adams,Internal Medicine,FAC008,1336713005
+PROV0036,Jason,Hahn,Radiology,FAC007,7948111888
+PROV0037,Nancy,Edwards,Psychiatry,FAC004,4742266619
+PROV0038,Diana,Foster,General Surgery,FAC007,1850200012
+PROV0039,Robin,Ellis,Radiology,FAC001,7015626656
+PROV0040,Joseph,Wright,General Surgery,FAC001,8680627659
+PROV0041,Anna,Baker,Endocrinology,FAC007,5130241979
+PROV0042,Brenda,Hurst,Internal Medicine,FAC007,9424392130
+PROV0043,Reginald,Robinson,Psychiatry,FAC002,9340884899
+PROV0044,Whitney,Hicks,Endocrinology,FAC005,4334137354
+PROV0045,Christopher,Williams,Radiology,FAC005,7475166603
+PROV0046,Daniel,Burton,Emergency Medicine,FAC007,4676757793
+PROV0047,Laura,Henderson,Radiology,FAC005,5200489033
+PROV0048,Bryan,James,Endocrinology,FAC004,1204408658
+PROV0049,Wendy,Rice,Obstetrics & Gynecology,FAC003,2502756279
+PROV0050,Tasha,Valencia,Emergency Medicine,FAC004,3753609617
+PROV0051,Alexander,Le,Obstetrics & Gynecology,FAC006,7702859403
+PROV0052,Erin,Herrera,Emergency Medicine,FAC007,8490338212
+PROV0053,Joseph,Davidson,Internal Medicine,FAC004,4362919559
+PROV0054,Daniel,Graham,Psychiatry,FAC002,5993672224
+PROV0055,Shawn,Mckay,Internal Medicine,FAC002,3618260543
+PROV0056,Nancy,Baker,Emergency Medicine,FAC006,2153022694
+PROV0057,Vincent,White,Radiology,FAC007,1788849273
+PROV0058,Rita,Harrell,Emergency Medicine,FAC001,2535336716
+PROV0059,Kenneth,Fowler,Emergency Medicine,FAC001,3968750910
+PROV0060,Chelsea,Hernandez,Psychiatry,FAC005,7266883375
+PROV0061,Kathryn,Ryan,Endocrinology,FAC002,7737472175
+PROV0062,Kimberly,Moreno,Internal Medicine,FAC007,3071925918
+PROV0063,Aaron,Nguyen,Endocrinology,FAC003,2257772352
+PROV0064,Andrew,Hickman,Emergency Medicine,FAC002,5044253519
+PROV0065,Natasha,Decker,Emergency Medicine,FAC008,2767911991
+PROV0066,Kyle,Brown,General Surgery,FAC002,4190733713
+PROV0067,Natalie,Arroyo,Internal Medicine,FAC003,8494103764
+PROV0068,Christopher,Tucker,General Surgery,FAC002,4657481752
+PROV0069,Chad,Hodges,Psychiatry,FAC001,2262241800
+PROV0070,Katie,Anderson,Psychiatry,FAC001,7028325952
+PROV0071,Thomas,Pierce,General Surgery,FAC001,1977181670
+PROV0072,Joseph,Brennan,Internal Medicine,FAC002,1969668513
+PROV0073,Rodney,Lewis,Radiology,FAC001,9931380076
+PROV0074,Amber,Blair,Psychiatry,FAC005,3402780967
+PROV0075,James,Collins,Psychiatry,FAC006,8274263248
+PROV0076,Wanda,Santos,Radiology,FAC004,1194508718
+PROV0077,Samuel,Holmes,Radiology,FAC003,2258172983
+PROV0078,David,Walker,Emergency Medicine,FAC005,1205234839
+PROV0079,Matthew,Chapman,Radiology,FAC008,8480014049
+PROV0080,Jerry,Robinson,Radiology,FAC007,5340730932
+PROV0081,Chad,Welch,Psychiatry,FAC001,5281344336
+PROV0082,Jeremy,Whitehead,Psychiatry,FAC002,5686051622
+PROV0083,Michele,Jones,Emergency Medicine,FAC002,9780601164
+PROV0084,John,Caldwell,Internal Medicine,FAC002,3450174056
+PROV0085,Jason,Anderson,General Surgery,FAC005,7050160837
+PROV0086,Selena,Duncan,Emergency Medicine,FAC004,6229550257
+PROV0087,Thomas,Mueller,Internal Medicine,FAC001,2169293548
+PROV0088,Lindsey,Lee,Obstetrics & Gynecology,FAC003,8871058367
+PROV0089,Collin,Jordan,Emergency Medicine,FAC005,7721106502
+PROV0090,Rodney,Owens,Emergency Medicine,FAC001,1374527564
+PROV0091,Jessica,Nunez,Obstetrics & Gynecology,FAC007,9177226216
+PROV0092,Tracey,Garcia,Obstetrics & Gynecology,FAC001,4915873540
+PROV0093,Richard,Morgan,Endocrinology,FAC008,6954951368
+PROV0094,Michelle,Wright,General Surgery,FAC001,8448680547
+PROV0095,James,West,Radiology,FAC007,3532455028
+PROV0096,Robert,Ramirez,Radiology,FAC008,4949905957
+PROV0097,John,Leblanc,Internal Medicine,FAC008,2821270283
+PROV0098,Scott,Callahan,Endocrinology,FAC007,9736282219
+PROV0099,Andrea,Williams,General Surgery,FAC007,5226002301
+PROV0100,Yvette,Huff,General Surgery,FAC006,8074578747
+PROV0101,Tanya,House,General Surgery,FAC007,5101986608
+PROV0102,Melinda,Martin,Radiology,FAC002,2104821391
+PROV0103,Todd,Lewis,Radiology,FAC005,2931262055
+PROV0104,Richard,Brown,Endocrinology,FAC005,7297364204
+PROV0105,Nicholas,Galloway,Emergency Medicine,FAC007,8044617045
+PROV0106,Joseph,Bowers,Radiology,FAC004,9244106606
+PROV0107,Spencer,Henderson,Radiology,FAC004,9123421568
+PROV0108,Susan,Cowan,General Surgery,FAC006,8008758135
+PROV0109,Angela,Higgins,Internal Medicine,FAC003,1394233892
+PROV0110,Eric,Phillips,Obstetrics & Gynecology,FAC002,5982214605
+PROV0111,Tanya,Riley,Psychiatry,FAC004,3735550882
+PROV0112,Amy,Adkins,Internal Medicine,FAC004,7452011702
+PROV0113,Brian,Silva,General Surgery,FAC002,3168735175
+PROV0114,Wesley,Farrell,Endocrinology,FAC003,4256313494
+PROV0115,Eric,Yu,Psychiatry,FAC003,7917827427
+PROV0116,Christopher,Lopez,Radiology,FAC003,8055083881
+PROV0117,Brooke,Leonard,Psychiatry,FAC004,3932428223
+PROV0118,Joe,Wilson,Internal Medicine,FAC006,7302385918
+PROV0119,Pamela,Sanchez,Internal Medicine,FAC003,3642343819
+PROV0120,Brooke,Harvey,Radiology,FAC008,3392829653
+PROV0121,Robert,Silva,General Surgery,FAC008,4888837357
+PROV0122,Alexandra,Donovan,Radiology,FAC004,6145552471
+PROV0123,James,Moran,Radiology,FAC003,6256881720
+PROV0124,John,Foster,Psychiatry,FAC005,4338300554
+PROV0125,Emily,Evans,Emergency Medicine,FAC007,2370808924
+PROV0126,Leslie,Walton,Psychiatry,FAC006,9440438094
+PROV0127,Charles,Ellis,Internal Medicine,FAC007,4950203142
+PROV0128,Yolanda,Ferrell,Psychiatry,FAC005,6013289371
+PROV0129,Charles,Lewis,Radiology,FAC006,5991263083
+PROV0130,Joseph,Mahoney,Obstetrics & Gynecology,FAC003,4934367269
+PROV0131,Nicole,Suarez,Internal Medicine,FAC006,6032864446
+PROV0132,Mike,Moore,Obstetrics & Gynecology,FAC002,9017132417
+PROV0133,Martha,Warner,General Surgery,FAC006,8468107688
+PROV0134,Cheryl,Archer,Psychiatry,FAC007,9657078980
+PROV0135,Destiny,Smith,Emergency Medicine,FAC002,7147440579
+PROV0136,Lisa,Evans,Emergency Medicine,FAC005,9707587591
+PROV0137,Elizabeth,Mcmillan,General Surgery,FAC001,9041019757
+PROV0138,Dennis,Wilson,General Surgery,FAC006,6212976120
+PROV0139,Daniel,Tran,General Surgery,FAC001,2613414773
+PROV0140,Joseph,Jacobs,Psychiatry,FAC008,7965604437
+PROV0141,Jennifer,Harris,Radiology,FAC002,2705242231
+PROV0142,Cynthia,Baker,Emergency Medicine,FAC008,9576094555
+PROV0143,Tracy,Whitehead,Internal Medicine,FAC007,7822789660
+PROV0144,Meghan,Davis,Endocrinology,FAC005,5669725243
+PROV0145,Rodney,Hill,Psychiatry,FAC007,1867518659
+PROV0146,Adam,Wise,Emergency Medicine,FAC007,6394445123
+PROV0147,Dana,Green,Emergency Medicine,FAC008,9627032919
+PROV0148,Joyce,Arnold,Obstetrics & Gynecology,FAC003,4990727789
+PROV0149,Ronald,Smith,Radiology,FAC005,2590955046
 PROV0150,Charles,Ware,Obstetrics & Gynecology,FAC001,6978821862
-PROV0151,Rebecca,Gardner,Psychiatry,FAC005,3594952935
-PROV0152,Mary,Aguilar,Internal Medicine,FAC002,2379558849
-PROV0153,Earl,Anderson,Obstetrics & Gynecology,FAC005,7822789660
-PROV0154,Kyle,Nolan,Obstetrics & Gynecology,FAC005,2258172983
-PROV0155,Laura,Valencia,Psychiatry,FAC004,4934367269
-PROV0156,Rachel,Clark,General Surgery,FAC005,5261404609
-PROV0157,John,Garcia,Radiology,FAC007,9440438094
-PROV0158,Kimberly,Henson,Emergency Medicine,FAC007,1810430746
-PROV0159,Richard,Oliver,Psychiatry,FAC004,6954951368
-PROV0160,Eric,Spears,Internal Medicine,FAC005,1374527564
-PROV0161,Michelle,Cherry,Obstetrics & Gynecology,FAC008,3402780967
-PROV0162,Lisa,Keith,Radiology,FAC001,1404195574
-PROV0163,Angel,Doyle,Radiology,FAC001,4190733713
-PROV0164,Martin,Galvan,Radiology,FAC001,8026561279
-PROV0165,Leah,Shields,Psychiatry,FAC006,5239865855
-PROV0166,Lisa,Adams,Radiology,FAC004,5156895072
-PROV0167,Kristin,Rodriguez,Emergency Medicine,FAC007,9780601164
-PROV0168,Monica,Garrison,Internal Medicine,FAC006,8326183461
-PROV0169,Jeffrey,Velasquez,Radiology,FAC003,6672543338
-PROV0170,Steven,Torres,Radiology,FAC008,2613414773
-PROV0171,Laura,Perez,Radiology,FAC007,5340730932
-PROV0172,Andrew,Lee,General Surgery,FAC003,1969668513
-PROV0173,Mark,Lin,Radiology,FAC003,1744569999
-PROV0174,Tammy,Ramirez,Psychiatry,FAC003,2502756279
-PROV0175,Darlene,Ross,Endocrinology,FAC002,7346488407
-PROV0176,Tina,Herrera,Emergency Medicine,FAC002,2481470358
-PROV0177,Sheila,Wilson,Obstetrics & Gynecology,FAC008,8404854519
-PROV0178,Tara,White,Psychiatry,FAC004,8448680547
-PROV0179,Sydney,Baker,Radiology,FAC004,1867518659
-PROV0180,Daniel,Hamilton,Obstetrics & Gynecology,FAC006,8490338212
-PROV0181,Jessica,Edwards,Internal Medicine,FAC005,6087124958
-PROV0182,Catherine,Dixon,Emergency Medicine,FAC008,6145552471
-PROV0183,Paul,Ray,Endocrinology,FAC007,3984120976
-PROV0184,Jonathan,Fletcher,General Surgery,FAC004,5669725243
-PROV0185,Aaron,Frost,Obstetrics & Gynecology,FAC004,2030770661
-PROV0186,Amanda,Ball,General Surgery,FAC008,4121828240
-PROV0187,Judy,Lambert,Obstetrics & Gynecology,FAC006,9736282219
-PROV0188,Michael,Jones,Radiology,FAC008,7702859403
-PROV0189,Elizabeth,Rivera,Endocrinology,FAC001,6684979592
-PROV0190,Lee,Charles,Internal Medicine,FAC007,6118670763
-PROV0191,Jennifer,Evans,Emergency Medicine,FAC006,1277360511
-PROV0192,Kyle,Ortiz,Obstetrics & Gynecology,FAC001,1847596130
-PROV0193,Richard,Phillips,Psychiatry,FAC005,9065446946
-PROV0194,David,Fisher,Obstetrics & Gynecology,FAC006,7297364204
-PROV0195,Shelby,Byrd,Psychiatry,FAC001,5986325291
-PROV0196,Raven,Gilbert,Obstetrics & Gynecology,FAC004,6934803712
-PROV0197,Kevin,Kelley,Radiology,FAC007,2257772352
-PROV0198,Aaron,Mitchell,Psychiatry,FAC003,7276312261
-PROV0199,Russell,Carpenter,Emergency Medicine,FAC004,5130241979
-PROV0200,Diana,Marshall,Endocrinology,FAC004,5379924977
+PROV0151,Rebecca,Gardner,Psychiatry,FAC005,3042184141
+PROV0152,Mary,Aguilar,Internal Medicine,FAC002,9065446946
+PROV0153,Earl,Anderson,Obstetrics & Gynecology,FAC005,1404195574
+PROV0154,Kyle,Nolan,Obstetrics & Gynecology,FAC005,7542951528
+PROV0155,Laura,Valencia,Psychiatry,FAC004,3362144643
+PROV0156,Rachel,Clark,General Surgery,FAC005,2062053119
+PROV0157,John,Garcia,Radiology,FAC007,9431318354
+PROV0158,Kimberly,Henson,Emergency Medicine,FAC007,7850257317
+PROV0159,Richard,Oliver,Psychiatry,FAC004,6645779566
+PROV0160,Eric,Spears,Internal Medicine,FAC005,5015406480
+PROV0161,Michelle,Cherry,Obstetrics & Gynecology,FAC008,3811299772
+PROV0162,Lisa,Keith,Radiology,FAC001,6318239423
+PROV0163,Angel,Doyle,Radiology,FAC001,9025095396
+PROV0164,Martin,Galvan,Radiology,FAC001,2799173822
+PROV0165,Leah,Shields,Psychiatry,FAC006,7826675768
+PROV0166,Lisa,Adams,Radiology,FAC004,5379924977
+PROV0167,Kristin,Rodriguez,Emergency Medicine,FAC007,4337182218
+PROV0168,Monica,Garrison,Internal Medicine,FAC006,6684979592
+PROV0169,Jeffrey,Velasquez,Radiology,FAC003,2751748370
+PROV0170,Steven,Torres,Radiology,FAC008,8082319397
+PROV0171,Laura,Perez,Radiology,FAC007,2451446011
+PROV0172,Andrew,Lee,General Surgery,FAC003,2481470358
+PROV0173,Mark,Lin,Radiology,FAC003,8709528556
+PROV0174,Tammy,Ramirez,Psychiatry,FAC003,5239865855
+PROV0175,Darlene,Ross,Endocrinology,FAC002,1744569999
+PROV0176,Tina,Herrera,Emergency Medicine,FAC002,3854250035
+PROV0177,Sheila,Wilson,Obstetrics & Gynecology,FAC008,3843361466
+PROV0178,Tara,White,Psychiatry,FAC004,8005451473
+PROV0179,Sydney,Baker,Radiology,FAC004,3984120976
+PROV0180,Daniel,Hamilton,Obstetrics & Gynecology,FAC006,1066260427
+PROV0181,Jessica,Edwards,Internal Medicine,FAC005,8404854519
+PROV0182,Catherine,Dixon,Emergency Medicine,FAC008,6118670763
+PROV0183,Paul,Ray,Endocrinology,FAC007,1810430746
+PROV0184,Jonathan,Fletcher,General Surgery,FAC004,1930626709
+PROV0185,Aaron,Frost,Obstetrics & Gynecology,FAC004,9038090091
+PROV0186,Amanda,Ball,General Surgery,FAC008,2379558849
+PROV0187,Judy,Lambert,Obstetrics & Gynecology,FAC006,6983657709
+PROV0188,Michael,Jones,Radiology,FAC008,7276312261
+PROV0189,Elizabeth,Rivera,Endocrinology,FAC001,4121828240
+PROV0190,Lee,Charles,Internal Medicine,FAC007,5445917373
+PROV0191,Jennifer,Evans,Emergency Medicine,FAC006,7142459535
+PROV0192,Kyle,Ortiz,Obstetrics & Gynecology,FAC001,4429191034
+PROV0193,Richard,Phillips,Psychiatry,FAC005,5053473441
+PROV0194,David,Fisher,Obstetrics & Gynecology,FAC006,8326183461
+PROV0195,Shelby,Byrd,Psychiatry,FAC001,8026561279
+PROV0196,Raven,Gilbert,Obstetrics & Gynecology,FAC004,9326081065
+PROV0197,Kevin,Kelley,Radiology,FAC007,6794786080
+PROV0198,Aaron,Mitchell,Psychiatry,FAC003,1847596130
+PROV0199,Russell,Carpenter,Emergency Medicine,FAC004,1759998890
+PROV0200,Diana,Marshall,Endocrinology,FAC004,5986325291

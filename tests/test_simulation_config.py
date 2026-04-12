@@ -44,9 +44,27 @@ class TestConfigStructure:
         assert "length_of_stay" not in types
         assert "readmission_rate" not in types
 
+    def test_every_type_has_distributions(self):
+        """Every simulation type should have a distributions block."""
+        for sim_type, sim_config in self.config["simulation_types"].items():
+            assert "distributions" in sim_config, (
+                f"Simulation type '{sim_type}' missing 'distributions' block"
+            )
+            dists = sim_config["distributions"]
+            for dist_name, dist_info in dists.items():
+                assert "description" in dist_info, (
+                    f"'{sim_type}.{dist_name}' missing 'description'"
+                )
+                assert "default_spec" in dist_info, (
+                    f"'{sim_type}.{dist_name}' missing 'default_spec'"
+                )
+                spec = dist_info["default_spec"]
+                assert "type" in spec, f"'{sim_type}.{dist_name}' default_spec missing 'type'"
+                assert "params" in spec, f"'{sim_type}.{dist_name}' default_spec missing 'params'"
+
     @pytest.mark.parametrize(
         "required_key",
-        ["model_template", "schema", "parameters", "aggregation"],
+        ["model_template", "schema", "parameters", "aggregation", "distributions"],
     )
     def test_every_type_has_required_keys(self, required_key):
         for sim_type, sim_config in self.config["simulation_types"].items():
@@ -216,6 +234,53 @@ class TestConfigLoader:
             assert isinstance(template, str)
             assert len(template) > 0
 
+    def test_get_required_distributions_returns_dict(self):
+        for sim_type in config_loader.get_valid_types():
+            dists = config_loader.get_required_distributions(sim_type)
+            assert isinstance(dists, dict)
+            assert len(dists) > 0, f"{sim_type} should have at least one distribution"
+
+    def test_get_required_distributions_raises_for_unknown(self):
+        with pytest.raises(ValueError, match="No config"):
+            config_loader.get_required_distributions("nonexistent_type")
+
+    def test_get_required_distributions_has_description_and_spec(self):
+        for sim_type in config_loader.get_valid_types():
+            dists = config_loader.get_required_distributions(sim_type)
+            for dist_name, info in dists.items():
+                assert "description" in info, f"{sim_type}.{dist_name} missing description"
+                assert "default_spec" in info, f"{sim_type}.{dist_name} missing default_spec"
+
+    def test_get_default_distribution_specs_returns_specs(self):
+        for sim_type in config_loader.get_valid_types():
+            specs = config_loader.get_default_distribution_specs(sim_type)
+            assert isinstance(specs, dict)
+            for dist_name, spec in specs.items():
+                assert "type" in spec, f"{sim_type}.{dist_name} spec missing 'type'"
+                assert "params" in spec, f"{sim_type}.{dist_name} spec missing 'params'"
+
+    def test_get_default_distribution_specs_patient_volume(self):
+        specs = config_loader.get_default_distribution_specs("patient_volume")
+        assert "encounter_volume" in specs
+        assert specs["encounter_volume"]["type"] == "normal"
+
+    def test_get_default_distribution_specs_cost_comparison(self):
+        specs = config_loader.get_default_distribution_specs("cost_comparison")
+        assert "inperson_cost" in specs
+        assert "virtual_cost" in specs
+        assert specs["inperson_cost"]["type"] == "lognormal"
+
+    def test_get_default_distribution_specs_system_cost_roi(self):
+        specs = config_loader.get_default_distribution_specs("system_cost_roi")
+        assert "baseline_cost" in specs
+        assert "reduction_noise" in specs
+
+    def test_get_default_distribution_specs_revenue(self):
+        specs = config_loader.get_default_distribution_specs("revenue")
+        assert "gross_charges" in specs
+        assert "denial_rate" in specs
+        assert specs["denial_rate"]["type"] == "beta"
+
     def test_reset_config_clears_cache(self):
         config_loader.load_config()
         config_loader.reset_config()
@@ -258,6 +323,10 @@ class TestUCFunctionValidTypes:
         custom_types = ["foo", "bar"]
         registry = MonteCarloRegistry("cat", "sch", "123", "conn", valid_types=custom_types)
         stmts = registry.get_all_registration_sql()
-        for sql in stmts:
+        # At least the check_simulation and trigger_simulation SQLs should contain the custom types.
+        # list_distributions does not use valid_types.
+        type_aware_stmts = [sql for sql in stmts if "check_simulation" in sql or "trigger_simulation" in sql]
+        assert len(type_aware_stmts) >= 2
+        for sql in type_aware_stmts:
             assert "'bar'" in sql
             assert "'foo'" in sql

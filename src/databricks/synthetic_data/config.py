@@ -9,8 +9,8 @@ NUM_FACILITIES = 8
 NUM_ENCOUNTERS = 50_000
 
 # Date range (3 years of data)
-DATE_START = "2022-01-01"
-DATE_END = "2024-12-31"
+DATE_START = "2023-04-01"
+DATE_END = "2026-03-31"
 
 # Output directory
 DATA_DIR = "data"

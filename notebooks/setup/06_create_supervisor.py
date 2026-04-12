@@ -223,10 +223,54 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Wait for Internal Resources
+# MAGIC
+# MAGIC The serving endpoint reaches ONLINE before the internal MAS resources
+# MAGIC (example storage, agent registry) are fully ready.  If we add examples
+# MAGIC during this window they are silently dropped.  Poll `mas_list_examples`
+# MAGIC until it stops returning INTERNAL_ERROR — that confirms the MAS is truly
+# MAGIC ready to accept examples.
+
+# COMMAND ----------
+
+print("Waiting for MAS internal resources to become ready...")
+print("(Endpoint is ONLINE but example storage may still be initializing.)\n")
+
+internal_timeout_s = 600  # 10 minutes
+internal_poll_s = 15
+internal_elapsed = 0
+internal_ready = False
+
+while internal_elapsed < internal_timeout_s:
+    try:
+        _ = manager.mas_list_examples(tile_id)
+        # If we get here without exception, internal resources are ready
+        internal_ready = True
+        print(f"  [{internal_elapsed:>3}s] Internal resources READY.")
+        break
+    except Exception as e:
+        err_msg = str(e)
+        if "INTERNAL_ERROR" in err_msg or "Failed to fetch" in err_msg:
+            print(f"  [{internal_elapsed:>3}s] Still initializing...")
+        else:
+            # Different error — might be ready but with an unexpected response
+            print(f"  [{internal_elapsed:>3}s] Unexpected: {err_msg[:100]}")
+            internal_ready = True
+            break
+    time.sleep(internal_poll_s)
+    internal_elapsed += internal_poll_s
+
+if not internal_ready:
+    print(f"\nWARNING: Internal resources not ready after {internal_timeout_s}s.")
+    print("Examples may not persist. Check the MAS UI and re-run if needed.")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Add Training Examples
 # MAGIC
 # MAGIC Clear existing examples first to avoid duplicates on re-runs, then add
-# MAGIC the current set. Examples must be added **after** the endpoint is ONLINE.
+# MAGIC the current set. Examples must be added **after** internal resources are ready.
 
 # COMMAND ----------
 
@@ -262,17 +306,38 @@ print(f"Training examples added: {len(added)}/{len(examples)} succeeded.")
 # COMMAND ----------
 
 verified_list = []
-try:
-    verification = manager.mas_list_examples(tile_id)
-    verified_list = verification.get("examples", [])
-    print(f"Verification: {len(verified_list)} examples found in MAS.")
-    if len(verified_list) != len(examples):
-        print(f"  WARNING: Expected {len(examples)} but found {len(verified_list)}.")
-    for ex in verified_list:
-        q = ex.get("question", "?")[:60]
-        print(f"  - {q}")
-except Exception as e:
-    print(f"Warning verifying examples: {e}")
+max_verify_attempts = 3
+for attempt in range(1, max_verify_attempts + 1):
+    try:
+        verification = manager.mas_list_examples(tile_id)
+        verified_list = verification.get("examples", [])
+        print(f"Verification (attempt {attempt}): {len(verified_list)} examples found in MAS.")
+
+        if len(verified_list) >= len(examples):
+            # All examples present
+            for ex in verified_list:
+                q = ex.get("question", "?")[:60]
+                print(f"  - {q}")
+            break
+
+        if len(verified_list) == 0 and attempt < max_verify_attempts:
+            # Examples were silently dropped — re-add
+            print(f"  Examples were dropped. Re-adding (attempt {attempt + 1})...")
+            time.sleep(10)
+            added = manager.mas_add_examples_batch(tile_id, examples)
+            print(f"  Re-added: {len(added)}/{len(examples)} succeeded.")
+            time.sleep(5)  # Brief settle before re-verify
+        else:
+            print(f"  WARNING: Expected {len(examples)} but found {len(verified_list)}.")
+            for ex in verified_list:
+                q = ex.get("question", "?")[:60]
+                print(f"  - {q}")
+            break
+
+    except Exception as e:
+        print(f"Verification attempt {attempt} error: {e}")
+        if attempt < max_verify_attempts:
+            time.sleep(10)
 
 # COMMAND ----------
 

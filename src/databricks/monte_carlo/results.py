@@ -27,12 +27,15 @@ def compute_cache_key(
     parameters: str,
     seed: int,
     num_simulations: int,
+    distribution_version: int | str | None = None,
 ) -> str:
     """Compute a deterministic SHA-256 hash for cache lookup.
 
     The hash is derived from the simulation type, canonicalized JSON
-    parameters, seed, and simulation count so that identical requests
-    produce the same key regardless of dict ordering.
+    parameters, seed, simulation count, and distribution version so that
+    identical requests produce the same key regardless of dict ordering.
+    Re-fitting distributions (bumping version) automatically invalidates
+    cached results.
 
     Parameters
     ----------
@@ -44,6 +47,9 @@ def compute_cache_key(
         Random seed.
     num_simulations : int
         Total number of Monte Carlo trials.
+    distribution_version : int | str | None
+        Version of the fitted distribution specs used. ``None`` or
+        ``"default"`` when using config defaults.
 
     Returns
     -------
@@ -56,7 +62,8 @@ def compute_cache_key(
     except (json.JSONDecodeError, TypeError):
         canonical_params = parameters
 
-    payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}"
+    dist_ver = distribution_version if distribution_version is not None else "default"
+    payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}|{dist_ver}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -318,12 +325,13 @@ def update_run_status(
 
 
 def get_simulation_tables_ddl(catalog: str, schema: str) -> list[str]:
-    """Return CREATE TABLE IF NOT EXISTS DDL for the three simulation tables.
+    """Return CREATE TABLE IF NOT EXISTS DDL for the simulation tables.
 
     Tables:
       - ``simulation_runs``    -- run metadata and status
       - ``simulation_trials``  -- Bronze raw trial-level results
       - ``simulation_results`` -- Gold aggregated percentile results
+      - ``distribution_specs`` -- fitted distribution parameter store
 
     All tables use Delta format and are placed in the given Unity Catalog
     location.
@@ -399,4 +407,93 @@ TBLPROPERTIES (
     'delta.autoOptimize.autoCompact' = 'true'
 )
 """.strip(),
+        # ----- distribution_specs (fitted distribution parameter store) -----
+        f"""
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.distribution_specs (
+    simulation_type     STRING      NOT NULL COMMENT 'Simulation type this spec belongs to',
+    distribution_name   STRING      NOT NULL COMMENT 'Named distribution within the simulation type',
+    version             INT         NOT NULL COMMENT 'Monotonically increasing version (higher = newer)',
+    spec                STRING      NOT NULL COMMENT 'JSON distribution spec: {{"type": "lognormal", "params": {{...}}}}',
+    fit_metadata        STRING               COMMENT 'JSON fitting metadata: source table, n_samples, ks_stat, p_value',
+    created_at          STRING      NOT NULL COMMENT 'ISO-8601 UTC timestamp of spec creation'
+)
+USING DELTA
+COMMENT 'Fitted distribution parameter store for Monte Carlo simulations'
+TBLPROPERTIES (
+    'delta.autoOptimize.optimizeWrite' = 'true',
+    'delta.autoOptimize.autoCompact' = 'true'
+)
+""".strip(),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Distribution spec resolution
+# ---------------------------------------------------------------------------
+
+
+def get_latest_distribution_version(
+    spark: SparkSession,
+    catalog: str,
+    schema: str,
+    simulation_type: str,
+) -> int | None:
+    """Return the maximum version for *simulation_type*, or ``None`` if no specs exist."""
+    table = f"{catalog}.{schema}.distribution_specs"
+    try:
+        result = spark.sql(
+            f"""
+            SELECT MAX(version) AS max_version
+            FROM {table}
+            WHERE simulation_type = '{simulation_type}'
+            """
+        )
+        row = result.collect()[0]
+        return row["max_version"]  # None if no rows match
+    except Exception:
+        return None
+
+
+def resolve_distribution_specs(
+    spark: SparkSession,
+    catalog: str,
+    schema: str,
+    simulation_type: str,
+    version: int | None = None,
+) -> dict[str, dict]:
+    """Load distribution specs from the table for a given type + version.
+
+    Parameters
+    ----------
+    spark : SparkSession
+    catalog, schema : str
+    simulation_type : str
+    version : int | None
+        Specific version to load.  If ``None``, loads the latest version.
+
+    Returns
+    -------
+    dict
+        ``{distribution_name: spec_dict}`` where *spec_dict* has ``type``
+        and ``params`` keys.
+    """
+    table = f"{catalog}.{schema}.distribution_specs"
+
+    if version is None:
+        version = get_latest_distribution_version(spark, catalog, schema, simulation_type)
+        if version is None:
+            return {}
+
+    result = spark.sql(
+        f"""
+        SELECT distribution_name, spec
+        FROM {table}
+        WHERE simulation_type = '{simulation_type}'
+          AND version = {version}
+        """
+    )
+    rows = result.collect()
+    specs = {}
+    for row in rows:
+        specs[row["distribution_name"]] = json.loads(row["spec"])
+    return specs
