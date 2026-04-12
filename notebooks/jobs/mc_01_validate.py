@@ -5,6 +5,9 @@
 # MAGIC Validates incoming simulation parameters and checks whether a completed run
 # MAGIC with the same configuration already exists in the cache.  If a cache hit is
 # MAGIC found the downstream tasks can skip re-computation.
+# MAGIC
+# MAGIC Also resolves distribution specs — fitted from historical data if available,
+# MAGIC falling back to config.yaml defaults.
 
 # COMMAND ----------
 
@@ -31,9 +34,15 @@ import json
 import uuid
 
 from src.databricks.monte_carlo.engine import get_available_simulation_types
+from src.databricks.monte_carlo.config_loader import (
+    get_required_distributions,
+    get_default_distribution_specs,
+)
 from src.databricks.monte_carlo.results import (
     check_cache,
     compute_cache_key,
+    get_latest_distribution_version,
+    resolve_distribution_specs,
     write_run_metadata,
 )
 
@@ -85,14 +94,41 @@ print(f"[VALID] Parsed {len(params_dict)} parameter(s): {list(params_dict.keys()
 
 # COMMAND ----------
 
-# ---------- Step 3: Compute cache key ----------
+# ---------- Step 3: Resolve distribution specs ----------
 
-params_hash = compute_cache_key(simulation_type, parameters_json, seed, num_simulations)
+required = get_required_distributions(simulation_type)
+dist_version = get_latest_distribution_version(spark, catalog, schema, simulation_type)
+
+if dist_version is not None:
+    dist_specs = resolve_distribution_specs(spark, catalog, schema, simulation_type, dist_version)
+    print(f"[FITTED] Using distribution version {dist_version}")
+else:
+    dist_specs = get_default_distribution_specs(simulation_type)
+    dist_version = "default"
+    print("[DEFAULT] No fitted distributions found, using config defaults")
+
+# Build enriched params for downstream simulation (includes distributions)
+enriched_params = {**params_dict, "distributions": dist_specs, "distribution_version": dist_version}
+enriched_json = json.dumps(enriched_params)
+
+# IMPORTANT: parameters_json stays as the ORIGINAL user params (no distributions)
+# so that check_simulation UC function can match on the same string the user passes.
+
+print(f"Distribution specs resolved: {list(dist_specs.keys())}")
+
+# COMMAND ----------
+
+# ---------- Step 4: Compute cache key ----------
+
+params_hash = compute_cache_key(
+    simulation_type, parameters_json, seed, num_simulations,
+    distribution_version=dist_version,
+)
 print(f"Cache key (params_hash): {params_hash}")
 
 # COMMAND ----------
 
-# ---------- Step 4: Check cache ----------
+# ---------- Step 5: Check cache ----------
 
 cache_result = check_cache(spark, catalog, schema, params_hash)
 
@@ -111,7 +147,7 @@ if cache_result is not None:
 
 # COMMAND ----------
 
-# ---------- Step 5: Cache miss -- create new run ----------
+# ---------- Step 6: Cache miss -- create new run ----------
 
 print("[CACHE MISS] No completed run found for this configuration.")
 
@@ -137,14 +173,16 @@ except Exception as exc:
 
 # COMMAND ----------
 
-# ---------- Step 6: Set task values for downstream tasks ----------
+# ---------- Step 7: Set task values for downstream tasks ----------
 
 dbutils.jobs.taskValues.set(key="cache_hit", value= False)
 dbutils.jobs.taskValues.set(key="run_id", value= run_id)
 dbutils.jobs.taskValues.set(key="params_hash", value= params_hash)
+dbutils.jobs.taskValues.set(key="enriched_parameters", value=enriched_json)
 
 print("Task values set:")
 print(f"  cache_hit   = False")
 print(f"  run_id      = {run_id}")
 print(f"  params_hash = {params_hash}")
+print(f"  enriched_parameters includes distributions: {list(dist_specs.keys())}")
 print("\nValidation complete. Proceeding to simulation step.")

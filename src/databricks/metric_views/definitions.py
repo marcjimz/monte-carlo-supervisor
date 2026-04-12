@@ -1,4 +1,4 @@
-"""UC Metric View definitions using CREATE VIEW ... WITH METRICS LANGUAGE YAML.
+"""UC Metric View definitions — Women's Health focus.
 
 Metric view YAML ``source`` must be a single table or view — JOINs are not
 supported.  For views that need data from multiple tables we first create a
@@ -10,58 +10,46 @@ def get_base_view_definitions(catalog: str, schema: str) -> list[dict]:
     """Return regular SQL views that pre-join tables for metric views."""
     return [
         {
-            "name": "v_billing_encounters",
+            "name": "v_wh_billing_encounters",
             "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.v_billing_encounters AS
+CREATE OR REPLACE VIEW {catalog}.{schema}.v_wh_billing_encounters AS
 SELECT
     b.billing_id, b.encounter_id, b.total_charges, b.payer_id,
     b.allowed_amount, b.paid_amount, b.patient_responsibility, b.claim_status,
     b.payment_date, e.encounter_type, e.department, e.admission_date,
-    e.discharge_date, e.facility_id, e.patient_id, e.provider_id
+    e.discharge_date, e.facility_id, e.patient_id, e.provider_id,
+    d.icd10_code AS primary_icd10_code
 FROM {catalog}.{schema}.billing AS b
 JOIN {catalog}.{schema}.encounters AS e ON b.encounter_id = e.encounter_id
-""",
-        },
-        {
-            "name": "v_encounter_readmissions",
-            "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.v_encounter_readmissions AS
-SELECT
-    e.encounter_id, e.patient_id, e.provider_id, e.facility_id,
-    e.encounter_type, e.department, e.admission_date, e.discharge_date,
-    e.length_of_stay,
-    r.readmission_id, r.days_between, r.is_30_day,
-    d.icd10_code AS primary_icd10_code
-FROM {catalog}.{schema}.encounters AS e
-LEFT JOIN {catalog}.{schema}.readmissions AS r
-    ON e.encounter_id = r.original_encounter_id
 LEFT JOIN {catalog}.{schema}.diagnoses AS d
     ON e.encounter_id = d.encounter_id AND d.is_primary = 1
 """,
         },
         {
-            "name": "v_encounter_procedures",
+            "name": "v_wh_encounter_patients",
             "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.v_encounter_procedures AS
-SELECT
-    e.encounter_id, e.patient_id, e.facility_id, e.encounter_type,
-    e.department, e.admission_date, e.length_of_stay,
-    p.procedure_id, p.cpt_code, p.procedure_date
-FROM {catalog}.{schema}.encounters AS e
-LEFT JOIN {catalog}.{schema}.procedures AS p
-    ON e.encounter_id = p.encounter_id
-""",
-        },
-        {
-            "name": "v_encounter_patients",
-            "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.v_encounter_patients AS
+CREATE OR REPLACE VIEW {catalog}.{schema}.v_wh_encounter_patients AS
 SELECT
     e.encounter_id, e.patient_id, e.facility_id, e.encounter_type,
     e.department, e.admission_date, e.discharge_date, e.length_of_stay,
-    pt.date_of_birth, pt.gender, pt.insurance_type, pt.num_chronic
+    pt.date_of_birth, pt.gender, pt.insurance_type, pt.num_chronic,
+    pt.chronic_conditions
 FROM {catalog}.{schema}.encounters AS e
 JOIN {catalog}.{schema}.patients AS pt ON e.patient_id = pt.patient_id
+""",
+        },
+        {
+            "name": "v_wh_encounter_diagnoses",
+            "sql": f"""
+CREATE OR REPLACE VIEW {catalog}.{schema}.v_wh_encounter_diagnoses AS
+SELECT
+    e.encounter_id, e.patient_id, e.encounter_type, e.department,
+    e.admission_date, e.length_of_stay,
+    d.icd10_code, d.description AS diagnosis_description, d.is_primary,
+    ic.category AS diagnosis_category
+FROM {catalog}.{schema}.encounters AS e
+JOIN {catalog}.{schema}.diagnoses AS d ON e.encounter_id = d.encounter_id
+LEFT JOIN {catalog}.{schema}.icd10_codes AS ic ON d.icd10_code = ic.icd10_code
 """,
         },
     ]
@@ -71,239 +59,133 @@ def get_metric_view_definitions(catalog: str, schema: str) -> list[dict]:
     """Return all metric view definitions as (name, sql) pairs."""
     return [
         {
-            "name": "mv_encounter_summary",
+            "name": "mv_wh_cost_by_condition",
             "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.mv_encounter_summary
+CREATE OR REPLACE VIEW {catalog}.{schema}.mv_wh_cost_by_condition
 WITH METRICS
 LANGUAGE YAML
 AS $$
   version: 1.1
-  comment: "Hospital encounter KPIs by department, type, and time period. Use for volume trends, LOS analysis, and operational reporting."
-  source: {catalog}.{schema}.encounters
-  filter: admission_date IS NOT NULL
+  comment: "Women's health cost KPIs by ICD-10 condition, encounter type, and payer. Use for cost analysis, denial tracking, and condition-level financial reporting."
+  source: {catalog}.{schema}.v_wh_billing_encounters
   dimensions:
-    - name: Department
-      expr: department
-      comment: "Hospital department (Emergency, Cardiology, Orthopedics, etc.)"
+    - name: ICD-10 Code
+      expr: primary_icd10_code
+      comment: "Primary ICD-10 diagnosis code for the encounter"
     - name: Encounter Type
       expr: encounter_type
       comment: "Type of visit: Inpatient, Outpatient, Emergency, or Observation"
+    - name: Service Month
+      expr: DATE_TRUNC('MONTH', admission_date)
+      comment: "Month of service for cost trending"
+    - name: Payer ID
+      expr: payer_id
+      comment: "Insurance payer identifier"
+  measures:
+    - name: Total Cost
+      expr: SUM(paid_amount)
+      comment: "Total cost (paid amount) across encounters"
+    - name: Avg Cost per Encounter
+      expr: AVG(paid_amount)
+      comment: "Average cost per encounter"
+    - name: Encounter Count
+      expr: COUNT(1)
+      comment: "Total number of encounters"
+    - name: Denial Rate
+      expr: COUNT(1) FILTER (WHERE claim_status = 'Denied') * 1.0 / NULLIF(COUNT(1), 0)
+      comment: "Fraction of claims that were denied"
+$$;""",
+        },
+        {
+            "name": "mv_wh_encounter_summary",
+            "sql": f"""
+CREATE OR REPLACE VIEW {catalog}.{schema}.mv_wh_encounter_summary
+WITH METRICS
+LANGUAGE YAML
+AS $$
+  version: 1.1
+  comment: "Women's health encounter KPIs by type, department, and time period. Use for volume trends and operational reporting."
+  source: {catalog}.{schema}.encounters
+  filter: admission_date IS NOT NULL
+  dimensions:
+    - name: Encounter Type
+      expr: encounter_type
+      comment: "Type of visit: Inpatient, Outpatient, Emergency, or Observation"
+    - name: Department
+      expr: department
+      comment: "Department (OB/GYN, Internal Medicine, etc.)"
     - name: Admission Month
       expr: DATE_TRUNC('MONTH', admission_date)
       comment: "Month of admission for time-series trending"
-    - name: Admission Year
-      expr: YEAR(admission_date)
-      comment: "Year of admission"
-    - name: Facility ID
-      expr: facility_id
-      comment: "Facility where encounter occurred"
   measures:
     - name: Total Encounters
       expr: COUNT(1)
       comment: "Total number of patient encounters"
-    - name: Avg Length of Stay
-      expr: AVG(length_of_stay)
-      comment: "Average days from admission to discharge"
-    - name: Median Length of Stay
-      expr: PERCENTILE_APPROX(length_of_stay, 0.5)
-      comment: "Median length of stay in days"
-    - name: Max Length of Stay
-      expr: MAX(length_of_stay)
-      comment: "Maximum length of stay in days"
     - name: Unique Patients
       expr: COUNT(DISTINCT patient_id)
       comment: "Number of distinct patients seen"
-$$;""",
-        },
-        {
-            "name": "mv_revenue_by_payer",
-            "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.mv_revenue_by_payer
-WITH METRICS
-LANGUAGE YAML
-AS $$
-  version: 1.1
-  comment: "Revenue and reimbursement KPIs by payer, encounter type, and time period. Use for financial analysis, denial tracking, and payer mix analysis."
-  source: {catalog}.{schema}.v_billing_encounters
-  dimensions:
-    - name: Payer ID
-      expr: payer_id
-      comment: "Insurance payer identifier"
-    - name: Encounter Type
-      expr: encounter_type
-      comment: "Type of visit: Inpatient, Outpatient, Emergency, or Observation"
-    - name: Payment Month
-      expr: DATE_TRUNC('MONTH', admission_date)
-      comment: "Month of service for revenue trending"
-    - name: Claim Status
-      expr: claim_status
-      comment: "Claim status: Paid, Denied, or Pending"
-    - name: Facility ID
-      expr: facility_id
-      comment: "Facility where service was rendered"
-  measures:
-    - name: Total Revenue
-      expr: SUM(paid_amount)
-      comment: "Total amount collected from all payers"
-    - name: Total Charges
-      expr: SUM(total_charges)
-      comment: "Total gross charges before adjustments"
-    - name: Avg Reimbursement Rate
-      expr: SUM(paid_amount) / NULLIF(SUM(total_charges), 0)
-      comment: "Ratio of paid amount to total charges"
-    - name: Denial Count
-      expr: COUNT(1) FILTER (WHERE claim_status = 'Denied')
-      comment: "Number of denied claims"
-    - name: Denial Rate
-      expr: COUNT(1) FILTER (WHERE claim_status = 'Denied') * 1.0 / NULLIF(COUNT(1), 0)
-      comment: "Fraction of claims that were denied"
-    - name: Avg Patient Responsibility
-      expr: AVG(patient_responsibility)
-      comment: "Average out-of-pocket cost per encounter"
-$$;""",
-        },
-        {
-            "name": "mv_readmission_rates",
-            "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.mv_readmission_rates
-WITH METRICS
-LANGUAGE YAML
-AS $$
-  version: 1.1
-  comment: "30-day readmission rate KPIs by diagnosis, department, and time. Use for quality reporting and readmission risk analysis."
-  source: {catalog}.{schema}.v_encounter_readmissions
-  filter: encounter_type = 'Inpatient'
-  dimensions:
-    - name: Department
-      expr: department
-      comment: "Discharging department"
-    - name: Diagnosis Category
-      expr: SUBSTRING(primary_icd10_code, 1, 3)
-      comment: "First 3 characters of primary ICD-10 code"
-    - name: Discharge Quarter
-      expr: DATE_TRUNC('QUARTER', discharge_date)
-      comment: "Quarter of discharge for trending"
-    - name: Facility ID
-      expr: facility_id
-      comment: "Facility of original admission"
-  measures:
-    - name: Total Discharges
-      expr: COUNT(DISTINCT encounter_id)
-      comment: "Total inpatient discharges"
-    - name: Readmission Count
-      expr: COUNT(DISTINCT readmission_id)
-      comment: "Number of 30-day readmissions"
-    - name: Readmission Rate
-      expr: COUNT(DISTINCT readmission_id) * 1.0 / NULLIF(COUNT(DISTINCT encounter_id), 0)
-      comment: "30-day readmission rate as fraction"
-    - name: Avg Days to Readmission
-      expr: AVG(days_between)
-      comment: "Average days between discharge and readmission"
-$$;""",
-        },
-        {
-            "name": "mv_daily_census",
-            "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.mv_daily_census
-WITH METRICS
-LANGUAGE YAML
-AS $$
-  version: 1.1
-  comment: "Daily inpatient census and bed utilization. Use for capacity planning and occupancy analysis."
-  source: {catalog}.{schema}.encounters
-  filter: encounter_type = 'Inpatient' AND admission_date IS NOT NULL
-  dimensions:
-    - name: Department
-      expr: department
-      comment: "Hospital department"
-    - name: Facility ID
-      expr: facility_id
-      comment: "Facility identifier"
-    - name: Admission Date
-      expr: admission_date
-      comment: "Date of admission for daily census"
-    - name: Admission Month
-      expr: DATE_TRUNC('MONTH', admission_date)
-      comment: "Month for monthly census trending"
-  measures:
-    - name: Daily Admissions
-      expr: COUNT(1)
-      comment: "Number of admissions on a given day"
     - name: Avg Length of Stay
       expr: AVG(length_of_stay)
-      comment: "Average LOS for admitted patients"
-    - name: Total Bed Days
-      expr: SUM(length_of_stay)
-      comment: "Total patient-days (sum of all LOS)"
+      comment: "Average days from admission to discharge"
 $$;""",
         },
         {
-            "name": "mv_department_throughput",
+            "name": "mv_wh_diagnosis_prevalence",
             "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.mv_department_throughput
+CREATE OR REPLACE VIEW {catalog}.{schema}.mv_wh_diagnosis_prevalence
 WITH METRICS
 LANGUAGE YAML
 AS $$
   version: 1.1
-  comment: "Department-level operational throughput including patient volume and procedure counts."
-  source: {catalog}.{schema}.v_encounter_procedures
+  comment: "Women's health diagnosis prevalence by condition, time, and age group. Use for condition trending and population health analysis."
+  source: {catalog}.{schema}.v_wh_encounter_diagnoses
   dimensions:
-    - name: Department
-      expr: department
-      comment: "Hospital department"
-    - name: Encounter Type
-      expr: encounter_type
-      comment: "Type of visit"
+    - name: ICD-10 Code
+      expr: icd10_code
+      comment: "ICD-10 diagnosis code"
+    - name: Diagnosis Category
+      expr: diagnosis_category
+      comment: "ICD-10 category (Women's Health, Cardiovascular, etc.)"
     - name: Service Month
       expr: DATE_TRUNC('MONTH', admission_date)
-      comment: "Month of service"
-    - name: Facility ID
-      expr: facility_id
-      comment: "Facility identifier"
+      comment: "Month of service for trending"
   measures:
-    - name: Patient Volume
-      expr: COUNT(DISTINCT encounter_id)
-      comment: "Number of unique encounters"
-    - name: Procedure Count
-      expr: COUNT(procedure_id)
-      comment: "Total procedures performed"
-    - name: Procedures per Encounter
-      expr: COUNT(procedure_id) * 1.0 / NULLIF(COUNT(DISTINCT encounter_id), 0)
-      comment: "Average procedures per patient encounter"
-    - name: Avg Length of Stay
-      expr: AVG(length_of_stay)
-      comment: "Average length of stay"
+    - name: Diagnosis Count
+      expr: COUNT(1)
+      comment: "Total diagnosis occurrences"
+    - name: Unique Patients
+      expr: COUNT(DISTINCT patient_id)
+      comment: "Number of distinct patients with this diagnosis"
+    - name: Encounters per Patient
+      expr: COUNT(DISTINCT encounter_id) * 1.0 / NULLIF(COUNT(DISTINCT patient_id), 0)
+      comment: "Average encounters per patient for this diagnosis"
 $$;""",
         },
         {
-            "name": "mv_patient_demographics",
+            "name": "mv_wh_patient_demographics",
             "sql": f"""
-CREATE OR REPLACE VIEW {catalog}.{schema}.mv_patient_demographics
+CREATE OR REPLACE VIEW {catalog}.{schema}.mv_wh_patient_demographics
 WITH METRICS
 LANGUAGE YAML
 AS $$
   version: 1.1
-  comment: "Population health metrics by age group, gender, and insurance type. Use for demographic analysis and chronic condition prevalence."
-  source: {catalog}.{schema}.v_encounter_patients
+  comment: "Women's health population metrics by age group, insurance type, and chronic condition status. Use for demographic analysis and chronic condition prevalence."
+  source: {catalog}.{schema}.v_wh_encounter_patients
   dimensions:
     - name: Age Group
       expr: CASE
-        WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 18 THEN 'Pediatric (0-17)'
         WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 35 THEN 'Young Adult (18-34)'
         WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 50 THEN 'Adult (35-49)'
         WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 65 THEN 'Middle Age (50-64)'
         ELSE 'Senior (65+)'
         END
       comment: "Patient age group at time of encounter"
-    - name: Gender
-      expr: gender
-      comment: "Patient gender"
     - name: Insurance Type
       expr: insurance_type
       comment: "Patient insurance type"
-    - name: Encounter Year
-      expr: YEAR(admission_date)
-      comment: "Year of encounter"
+    - name: Chronic Condition Flag
+      expr: CASE WHEN num_chronic > 0 THEN 'Has Chronic Condition' ELSE 'No Chronic Condition' END
+      comment: "Whether the patient has any chronic conditions"
   measures:
     - name: Patient Count
       expr: COUNT(DISTINCT patient_id)
@@ -311,12 +193,9 @@ AS $$
     - name: Total Encounters
       expr: COUNT(1)
       comment: "Total encounters for demographic group"
-    - name: Encounters per Patient
+    - name: Avg Encounters per Patient
       expr: COUNT(1) * 1.0 / NULLIF(COUNT(DISTINCT patient_id), 0)
       comment: "Average encounters per patient"
-    - name: Avg Age
-      expr: AVG(FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25))
-      comment: "Average patient age at encounter"
 $$;""",
         },
     ]

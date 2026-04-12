@@ -1,11 +1,9 @@
-"""Tests for supervisor, Genie, and metric view configuration — pure Python, no Spark required.
+"""Tests for supervisor, Genie, and metric view configuration — Women's Health focus.
 
 Validates that generated configs match the AgentBricks API contract
 (BaseAgentDict, MultiAgentSupervisorExampleDict) and that all simulation
 types from config.yaml are propagated to instructions, examples, and agents.
 """
-
-import json
 
 from src.databricks.agentbricks.supervisor import (
     get_supervisor_config,
@@ -44,14 +42,14 @@ class TestSupervisorConfig:
         for key in ("name", "description", "agents", "instructions"):
             assert key in cfg, f"Missing key: {key}"
 
-    def test_has_three_agents(self):
+    def test_has_four_agents(self):
         cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
-        assert len(cfg["agents"]) == 3
+        assert len(cfg["agents"]) == 4
 
     def test_agent_names(self):
         cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
         names = {a["name"] for a in cfg["agents"]}
-        assert names == {"encounter_analytics", "simulation_checker", "simulation_trigger"}
+        assert names == {"encounter_analytics", "simulation_checker", "simulation_trigger", "distribution_catalog"}
 
     def test_agents_have_required_fields(self):
         """Every agent must have name, description, agent_type per BaseAgentDict."""
@@ -60,6 +58,11 @@ class TestSupervisorConfig:
             assert "name" in agent
             assert "description" in agent
             assert "agent_type" in agent
+
+    def test_description_mentions_womens_health(self):
+        cfg = get_supervisor_config(GENIE_SPACE_ID, CATALOG, SCHEMA)
+        desc = cfg["description"].lower()
+        assert "women" in desc or "health" in desc
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +94,7 @@ class TestSupervisorAgentsContract:
         """UC function agents must have unity_catalog_function.uc_path.{catalog,schema,name}."""
         agents = get_supervisor_agents(GENIE_SPACE_ID, CATALOG, SCHEMA)
         uc_agents = [a for a in agents if a["agent_type"] == "unity_catalog_function"]
-        assert len(uc_agents) == 2, f"Expected 2 UC function agents, got {len(uc_agents)}"
+        assert len(uc_agents) == 3, f"Expected 3 UC function agents, got {len(uc_agents)}"
 
         for agent in uc_agents:
             assert "unity_catalog_function" in agent, (
@@ -119,6 +122,14 @@ class TestSupervisorAgentsContract:
         assert uc_path["catalog"] == CATALOG
         assert uc_path["schema"] == SCHEMA
         assert uc_path["name"] == "trigger_simulation"
+
+    def test_distribution_catalog_points_to_list_distributions(self):
+        agents = get_supervisor_agents(GENIE_SPACE_ID, CATALOG, SCHEMA)
+        catalog_agent = [a for a in agents if a["name"] == "distribution_catalog"][0]
+        uc_path = catalog_agent["unity_catalog_function"]["uc_path"]
+        assert uc_path["catalog"] == CATALOG
+        assert uc_path["schema"] == SCHEMA
+        assert uc_path["name"] == "list_distributions"
 
     def test_agents_have_no_extra_type_specific_keys(self):
         """Each agent should only have the type-specific key matching its agent_type."""
@@ -207,6 +218,11 @@ class TestSupervisorInstructions:
                 f"Expected at least one of: {list(defaults.keys())}"
             )
 
+    def test_instructions_mention_distribution_catalog(self):
+        """Instructions should route distribution questions to distribution_catalog."""
+        instructions = get_supervisor_instructions()
+        assert "distribution_catalog" in instructions
+
     def test_instructions_are_non_trivial_length(self):
         """Instructions should be substantial (routing + workflow + params)."""
         instructions = get_supervisor_instructions()
@@ -262,16 +278,16 @@ class TestSupervisorExamples:
                 f"No example guideline references simulation type '{sim_type}'"
             )
 
-    def test_simulation_examples_reference_simulation_checker(self):
-        """Simulation examples should tell the MAS to call simulation_checker first."""
+    def test_simulation_examples_reference_appropriate_agent(self):
+        """Simulation examples referencing a sim type should route to simulation_checker or distribution_catalog."""
         examples = get_supervisor_examples()
         sim_types = set(config_loader.get_valid_types())
         for ex in examples:
             guideline = ex["guideline"]
-            # If the guideline references a sim type, it should mention simulation_checker
+            # If the guideline references a sim type, it should mention an appropriate agent
             if any(st in guideline for st in sim_types):
-                assert "simulation_checker" in guideline, (
-                    f"Example references a sim type but doesn't route to simulation_checker: "
+                assert "simulation_checker" in guideline or "distribution_catalog" in guideline, (
+                    f"Example references a sim type but doesn't route to simulation_checker or distribution_catalog: "
                     f"'{ex['question']}'"
                 )
 
@@ -282,6 +298,14 @@ class TestSupervisorExamples:
             ex for ex in examples if "encounter_analytics" in ex["guideline"]
         ]
         assert len(genie_examples) >= 1, "No examples route to encounter_analytics (Genie)"
+
+    def test_has_distribution_catalog_example(self):
+        """At least one example should route to distribution_catalog."""
+        examples = get_supervisor_examples()
+        dist_examples = [
+            ex for ex in examples if "distribution_catalog" in ex["guideline"]
+        ]
+        assert len(dist_examples) >= 1, "No examples route to distribution_catalog"
 
     def test_has_compound_example(self):
         """At least one compound example (historical + simulation) should exist."""
@@ -388,6 +412,10 @@ class TestGenieSpaceConfig:
         for table in cfg["tables"]:
             assert table.startswith(f"{CATALOG}.{SCHEMA}.")
 
+    def test_display_name_is_womens_health(self):
+        cfg = get_genie_space_config(CATALOG, SCHEMA)
+        assert "Women" in cfg["display_name"]
+
 
 # ---------------------------------------------------------------------------
 # Genie sample questions
@@ -413,10 +441,10 @@ class TestGenieSampleQuestions:
 
 
 class TestBaseViewDDL:
-    def test_returns_four_base_views(self):
+    def test_returns_three_base_views(self):
         views = get_base_view_definitions(CATALOG, SCHEMA)
         assert isinstance(views, list)
-        assert len(views) == 4
+        assert len(views) == 3
 
     def test_each_base_view_is_regular_sql_view(self):
         views = get_base_view_definitions(CATALOG, SCHEMA)
@@ -428,10 +456,10 @@ class TestBaseViewDDL:
 
 
 class TestMetricViewDDL:
-    def test_returns_six_views(self):
+    def test_returns_four_views(self):
         views = get_metric_view_definitions(CATALOG, SCHEMA)
         assert isinstance(views, list)
-        assert len(views) == 6
+        assert len(views) == 4
 
     def test_each_view_contains_create_and_metrics(self):
         views = get_metric_view_definitions(CATALOG, SCHEMA)
@@ -458,6 +486,14 @@ class TestMetricViewDDL:
         for view in views:
             assert f"{CATALOG}.{SCHEMA}." in view["sql"]
 
+    def test_wh_view_names(self):
+        """All metric views should have WH prefix."""
+        views = get_metric_view_definitions(CATALOG, SCHEMA)
+        for view in views:
+            assert view["name"].startswith("mv_wh_"), (
+                f"View {view['name']} should start with mv_wh_"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Simulation tables DDL
@@ -465,10 +501,10 @@ class TestMetricViewDDL:
 
 
 class TestSimulationTablesDDL:
-    def test_returns_three_ddl_strings(self):
+    def test_returns_four_ddl_strings(self):
         ddls = get_simulation_tables_ddl(CATALOG, SCHEMA)
         assert isinstance(ddls, list)
-        assert len(ddls) == 3
+        assert len(ddls) == 4
 
     def test_each_ddl_is_create_table(self):
         ddls = get_simulation_tables_ddl(CATALOG, SCHEMA)
@@ -522,3 +558,19 @@ class TestCacheKey:
         key1 = compute_cache_key("revenue", '{"a": 1, "b": 2}', 42, 100)
         key2 = compute_cache_key("revenue", '{"b": 2, "a": 1}', 42, 100)
         assert key1 == key2
+
+    def test_distribution_version_changes_hash(self):
+        key1 = compute_cache_key("patient_volume", '{}', 42, 100, distribution_version=1)
+        key2 = compute_cache_key("patient_volume", '{}', 42, 100, distribution_version=2)
+        assert key1 != key2
+
+    def test_default_distribution_version_matches_none(self):
+        key1 = compute_cache_key("patient_volume", '{}', 42, 100, distribution_version=None)
+        key2 = compute_cache_key("patient_volume", '{}', 42, 100, distribution_version="default")
+        assert key1 == key2
+
+    def test_distribution_version_vs_no_version(self):
+        """A specific version should differ from default."""
+        key1 = compute_cache_key("patient_volume", '{}', 42, 100)
+        key2 = compute_cache_key("patient_volume", '{}', 42, 100, distribution_version=1)
+        assert key1 != key2

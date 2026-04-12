@@ -1,4 +1,4 @@
-"""Tests for synthetic data generators — pure Python, no Spark required."""
+"""Tests for synthetic data generators — Women's Health focus, pure Python, no Spark required."""
 
 import pandas as pd
 import pytest
@@ -85,6 +85,16 @@ class TestGeneratePatients:
             "num_chronic",
         }
         assert expected_cols.issubset(set(patients_df.columns))
+
+    def test_all_female(self, patients_df: pd.DataFrame):
+        """All patients must be female for WH cohort."""
+        assert set(patients_df["gender"].unique()) == {"F"}
+
+    def test_all_adults(self, patients_df: pd.DataFrame):
+        """All patients should be 18+ (adult women's health)."""
+        ref_date = pd.Timestamp("2026-03-01")
+        ages = (ref_date - patients_df["date_of_birth"]).dt.days / 365.25
+        assert ages.min() >= 17.5  # allow small rounding tolerance
 
     def test_deterministic_with_same_seed(self):
         df1 = generate_patients(num_patients=50, seed=99)
@@ -197,6 +207,11 @@ class TestGenerateDiagnoses:
         # Every encounter should have at least one diagnosis
         assert encounter_ids_with_dx == encounter_ids_all
 
+    def test_has_womens_health_codes(self, encounters_df: pd.DataFrame):
+        """ICD-10 codes should include women's health category."""
+        icd10_df = generate_icd10_codes()
+        assert "Women's Health" in icd10_df["category"].values
+
 
 # ---------------------------------------------------------------------------
 # Reference data tests
@@ -209,10 +224,22 @@ class TestGenerateReferenceData:
         assert {"icd10_code", "description", "category"} == set(df.columns)
         assert len(df) > 0
 
+    def test_icd10_has_womens_health(self):
+        df = generate_icd10_codes()
+        categories = set(df["category"].unique())
+        assert "Women's Health" in categories
+
     def test_cpt_columns(self):
         df = generate_cpt_codes()
         assert {"cpt_code", "description", "category", "fee_low", "fee_high"} == set(df.columns)
         assert len(df) > 0
+
+    def test_cpt_has_gyn_procedures(self):
+        df = generate_cpt_codes()
+        # Should have hysteroscopy (58558) and lap hysterectomy (58571)
+        codes = set(df["cpt_code"])
+        assert "58558" in codes
+        assert "58571" in codes
 
     def test_payers_columns(self):
         df = generate_payers()
@@ -223,6 +250,10 @@ class TestGenerateReferenceData:
         df = generate_departments()
         assert {"department_id", "department_name"} == set(df.columns)
         assert len(df) > 0
+
+    def test_departments_has_obgyn(self):
+        df = generate_departments()
+        assert "OB/GYN" in df["department_name"].values
 
 
 # ---------------------------------------------------------------------------

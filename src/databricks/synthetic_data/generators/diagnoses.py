@@ -1,4 +1,4 @@
-"""Generate synthetic diagnosis and readmission records."""
+"""Generate synthetic diagnosis and readmission records — Women's Health focus."""
 
 import numpy as np
 import pandas as pd
@@ -7,38 +7,18 @@ import pandas as pd
 # Map departments to ICD-10 categories that are most relevant.
 # Departments not listed here will fall back to uniform sampling.
 _DEPT_CATEGORY_RELEVANCE: dict[str, list[str]] = {
-    "Emergency": ["Injury", "Signs/Symptoms", "Cardiovascular", "Respiratory", "Infectious"],
-    "Cardiology": ["Cardiovascular"],
-    "Orthopedics": ["Musculoskeletal", "Injury"],
-    "General Surgery": ["Gastrointestinal", "Musculoskeletal", "Injury"],
+    "OB/GYN": ["Women's Health", "Genitourinary", "Endocrine"],
     "Internal Medicine": [
         "Cardiovascular",
         "Endocrine",
-        "Respiratory",
         "Gastrointestinal",
         "Signs/Symptoms",
     ],
-    "Pediatrics": ["Respiratory", "Infectious", "Signs/Symptoms", "Injury"],
-    "Obstetrics": ["Genitourinary", "Signs/Symptoms", "Endocrine"],
-    "Neurology": ["Neurological"],
-    "Oncology": ["Neoplasm"],
-    "Pulmonology": ["Respiratory"],
-    "Gastroenterology": ["Gastrointestinal"],
-    "Nephrology": ["Genitourinary"],
-    "Endocrinology": ["Endocrine"],
-    "Dermatology": ["Infectious", "Signs/Symptoms"],
-    "Urology": ["Genitourinary"],
+    "Endocrinology": ["Endocrine", "Women's Health"],
     "Psychiatry": ["Mental Health"],
-    "Radiology": ["Signs/Symptoms", "Neoplasm", "Musculoskeletal"],
-    "Anesthesiology": ["Signs/Symptoms", "Cardiovascular"],
-    "Rehabilitation": ["Musculoskeletal", "Neurological", "Injury"],
-    "Intensive Care": [
-        "Cardiovascular",
-        "Respiratory",
-        "Infectious",
-        "Injury",
-        "Signs/Symptoms",
-    ],
+    "General Surgery": ["Women's Health", "Gastrointestinal"],
+    "Radiology": ["Signs/Symptoms", "Women's Health"],
+    "Emergency": ["Signs/Symptoms", "Women's Health", "Cardiovascular", "Infectious"],
 }
 
 
@@ -124,10 +104,7 @@ def generate_readmissions(
     """Generate 30-day readmission records for inpatient encounters.
 
     Approximately 6-7 % of inpatient encounters are flagged as having a
-    30-day readmission.  For each flagged encounter a matching *readmit*
-    encounter is drawn from a later inpatient encounter for the same
-    patient.  When no suitable readmit encounter exists the record is
-    still created with a synthetic ``days_between`` value.
+    30-day readmission.
 
     Args:
         encounters_df: DataFrame with at least ``encounter_id``,

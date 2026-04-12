@@ -81,9 +81,20 @@ resources:
               catalog: ${var.catalog}
               schema: ${var.schema}
 
+        - task_key: fit_distributions
+          depends_on:
+            - task_key: load_data
+            - task_key: create_sim_tables
+          notebook_task:
+            notebook_path: ../../notebooks/setup/07_fit_distributions.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
         - task_key: register_functions
           depends_on:
             - task_key: create_sim_tables
+            - task_key: fit_distributions
           notebook_task:
             notebook_path: ../../notebooks/setup/03_register_mc_functions.py
             base_parameters:

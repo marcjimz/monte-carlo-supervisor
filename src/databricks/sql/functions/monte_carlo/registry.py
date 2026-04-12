@@ -1,6 +1,7 @@
 """Registry for Monte Carlo UC functions."""
 
 from .check_simulation import CheckSimulationFunction
+from .list_distributions import ListDistributionsFunction
 from .run_simulation import RunSimulationFunction
 from .trigger_simulation import TriggerSimulationFunction
 
@@ -22,6 +23,7 @@ class MonteCarloRegistry:
     FUNCTIONS = [
         CheckSimulationFunction,
         TriggerSimulationFunction,
+        ListDistributionsFunction,
     ]
 
     DEPRECATED_FUNCTIONS = [

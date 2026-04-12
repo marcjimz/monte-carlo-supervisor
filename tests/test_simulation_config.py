@@ -29,9 +29,42 @@ class TestConfigStructure:
     def test_has_version(self):
         assert "version" in self.config
 
+    def test_expected_types_present(self):
+        """Verify the 4 WH simulation types are configured."""
+        types = set(self.config["simulation_types"].keys())
+        assert "patient_volume" in types
+        assert "revenue" in types
+        assert "cost_comparison" in types
+        assert "system_cost_roi" in types
+
+    def test_removed_types_absent(self):
+        """Verify removed general hospital types are gone."""
+        types = set(self.config["simulation_types"].keys())
+        assert "ed_wait_time" not in types
+        assert "length_of_stay" not in types
+        assert "readmission_rate" not in types
+
+    def test_every_type_has_distributions(self):
+        """Every simulation type should have a distributions block."""
+        for sim_type, sim_config in self.config["simulation_types"].items():
+            assert "distributions" in sim_config, (
+                f"Simulation type '{sim_type}' missing 'distributions' block"
+            )
+            dists = sim_config["distributions"]
+            for dist_name, dist_info in dists.items():
+                assert "description" in dist_info, (
+                    f"'{sim_type}.{dist_name}' missing 'description'"
+                )
+                assert "default_spec" in dist_info, (
+                    f"'{sim_type}.{dist_name}' missing 'default_spec'"
+                )
+                spec = dist_info["default_spec"]
+                assert "type" in spec, f"'{sim_type}.{dist_name}' default_spec missing 'type'"
+                assert "params" in spec, f"'{sim_type}.{dist_name}' default_spec missing 'params'"
+
     @pytest.mark.parametrize(
         "required_key",
-        ["model_template", "schema", "parameters", "aggregation"],
+        ["model_template", "schema", "parameters", "aggregation", "distributions"],
     )
     def test_every_type_has_required_keys(self, required_key):
         for sim_type, sim_config in self.config["simulation_types"].items():
@@ -44,6 +77,18 @@ class TestConfigStructure:
             agg = sim_config["aggregation"]
             assert "value_column" in agg, f"'{sim_type}' aggregation missing value_column"
             assert "group_column" in agg, f"'{sim_type}' aggregation missing group_column"
+
+    def test_additional_metrics_structure(self):
+        """Types with additional_metrics must have valid entries."""
+        for sim_type, sim_config in self.config["simulation_types"].items():
+            agg = sim_config["aggregation"]
+            for extra in agg.get("additional_metrics", []):
+                assert "value_column" in extra, (
+                    f"'{sim_type}' additional_metric missing value_column"
+                )
+                assert "group_column" in extra, (
+                    f"'{sim_type}' additional_metric missing group_column"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +116,11 @@ class TestModelTemplateRegistration:
         """Each template should be unique (no accidental overwrites)."""
         templates = model_templates.get_available_templates()
         assert len(templates) == len(set(templates))
+
+    def test_new_templates_registered(self):
+        """Verify hypothesis testing templates are registered."""
+        assert "cohort_cost_comparison" in model_templates.get_available_templates()
+        assert "multi_year_roi_projection" in model_templates.get_available_templates()
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +151,16 @@ class TestSchemaAggregationConsistency:
             assert group_col in schema, (
                 f"'{sim_type}' group_column '{group_col}' not found in schema: {schema}"
             )
+
+    def test_additional_metric_columns_in_schema(self):
+        """Additional metric columns must also appear in the schema."""
+        for sim_type, sim_config in self.config["simulation_types"].items():
+            schema = sim_config["schema"]
+            for extra in sim_config["aggregation"].get("additional_metrics", []):
+                value_col = extra["value_column"]
+                assert value_col in schema, (
+                    f"'{sim_type}' additional value_column '{value_col}' not in schema"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +196,22 @@ class TestConfigLoader:
         with pytest.raises(ValueError, match="No config"):
             config_loader.get_agg_config("nonexistent_type")
 
+    def test_get_all_agg_metrics(self):
+        """get_all_agg_metrics returns primary + additional metrics."""
+        metrics = config_loader.get_all_agg_metrics("cost_comparison")
+        assert len(metrics) == 2  # primary + 1 additional
+        assert metrics[0] == ("simulated_cost_per_encounter", "care_model")
+        assert metrics[1] == ("simulated_total_cost", "care_model")
+
+    def test_get_all_agg_metrics_system_cost_roi(self):
+        metrics = config_loader.get_all_agg_metrics("system_cost_roi")
+        assert len(metrics) == 3  # primary + 2 additional
+
+    def test_get_all_agg_metrics_no_additional(self):
+        """Types without additional_metrics return only primary."""
+        metrics = config_loader.get_all_agg_metrics("patient_volume")
+        assert len(metrics) == 1
+
     def test_get_default_params_returns_dict(self):
         for sim_type in config_loader.get_valid_types():
             params = config_loader.get_default_params(sim_type)
@@ -157,6 +233,53 @@ class TestConfigLoader:
             template = config_loader.get_model_template(sim_type)
             assert isinstance(template, str)
             assert len(template) > 0
+
+    def test_get_required_distributions_returns_dict(self):
+        for sim_type in config_loader.get_valid_types():
+            dists = config_loader.get_required_distributions(sim_type)
+            assert isinstance(dists, dict)
+            assert len(dists) > 0, f"{sim_type} should have at least one distribution"
+
+    def test_get_required_distributions_raises_for_unknown(self):
+        with pytest.raises(ValueError, match="No config"):
+            config_loader.get_required_distributions("nonexistent_type")
+
+    def test_get_required_distributions_has_description_and_spec(self):
+        for sim_type in config_loader.get_valid_types():
+            dists = config_loader.get_required_distributions(sim_type)
+            for dist_name, info in dists.items():
+                assert "description" in info, f"{sim_type}.{dist_name} missing description"
+                assert "default_spec" in info, f"{sim_type}.{dist_name} missing default_spec"
+
+    def test_get_default_distribution_specs_returns_specs(self):
+        for sim_type in config_loader.get_valid_types():
+            specs = config_loader.get_default_distribution_specs(sim_type)
+            assert isinstance(specs, dict)
+            for dist_name, spec in specs.items():
+                assert "type" in spec, f"{sim_type}.{dist_name} spec missing 'type'"
+                assert "params" in spec, f"{sim_type}.{dist_name} spec missing 'params'"
+
+    def test_get_default_distribution_specs_patient_volume(self):
+        specs = config_loader.get_default_distribution_specs("patient_volume")
+        assert "encounter_volume" in specs
+        assert specs["encounter_volume"]["type"] == "normal"
+
+    def test_get_default_distribution_specs_cost_comparison(self):
+        specs = config_loader.get_default_distribution_specs("cost_comparison")
+        assert "inperson_cost" in specs
+        assert "virtual_cost" in specs
+        assert specs["inperson_cost"]["type"] == "lognormal"
+
+    def test_get_default_distribution_specs_system_cost_roi(self):
+        specs = config_loader.get_default_distribution_specs("system_cost_roi")
+        assert "baseline_cost" in specs
+        assert "reduction_noise" in specs
+
+    def test_get_default_distribution_specs_revenue(self):
+        specs = config_loader.get_default_distribution_specs("revenue")
+        assert "gross_charges" in specs
+        assert "denial_rate" in specs
+        assert specs["denial_rate"]["type"] == "beta"
 
     def test_reset_config_clears_cache(self):
         config_loader.load_config()
@@ -200,6 +323,10 @@ class TestUCFunctionValidTypes:
         custom_types = ["foo", "bar"]
         registry = MonteCarloRegistry("cat", "sch", "123", "conn", valid_types=custom_types)
         stmts = registry.get_all_registration_sql()
-        for sql in stmts:
+        # At least the check_simulation and trigger_simulation SQLs should contain the custom types.
+        # list_distributions does not use valid_types.
+        type_aware_stmts = [sql for sql in stmts if "check_simulation" in sql or "trigger_simulation" in sql]
+        assert len(type_aware_stmts) >= 2
+        for sql in type_aware_stmts:
             assert "'bar'" in sql
             assert "'foo'" in sql

@@ -2,6 +2,9 @@
 
 Each template implements a reusable statistical model pattern. The config.yaml
 specifies which template to use for each simulation type.
+
+All stochastic draws go through ``distribution_sampler.sample_from_spec()``
+using distribution specs from ``params["distributions"]``.
 """
 
 from __future__ import annotations
@@ -10,6 +13,8 @@ from typing import Callable
 
 import numpy as np
 import pandas as pd
+
+from .distribution_sampler import sample_from_spec
 
 _TEMPLATE_REGISTRY: dict[str, Callable] = {}
 
@@ -47,10 +52,9 @@ def _simulate_patient_volume(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
     """Simulate monthly patient encounter volume.
 
     Parameters (in *params*):
-        monthly_mean       - average encounters per month (default 10000)
-        monthly_std        - std-dev of encounters per month (default 1500)
+        distributions.encounter_volume - distribution spec for base encounter volume
         growth_rate        - year-over-year growth rate (default 0.03)
-        seasonality_amp    - amplitude of seasonal sine wave (default 0.12)
+        seasonality_amp    - amplitude of seasonal sine wave (default 0.08)
         num_months         - forecast horizon in months (default 12)
         trials_per_batch   - number of trials in this batch (default 200)
     """
@@ -58,20 +62,21 @@ def _simulate_patient_volume(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
     seed = int(pdf["batch_seed"].iloc[0])
     rng = np.random.default_rng(seed)
 
-    monthly_mean = params.get("monthly_mean", 10000)
-    monthly_std = params.get("monthly_std", 1500)
+    dist_specs = params.get("distributions", {})
     growth_rate = params.get("growth_rate", 0.03)
-    seasonality_amp = params.get("seasonality_amp", 0.12)
+    seasonality_amp = params.get("seasonality_amp", 0.08)
     num_months = params.get("num_months", 12)
     trials_per_batch = params.get("trials_per_batch", 200)
+
+    encounter_spec = dist_specs.get("encounter_volume", {"type": "normal", "params": {"loc": 4200, "scale": 600}})
 
     rows: list[dict] = []
     for trial in range(trials_per_batch):
         for m in range(num_months):
             growth_factor = 1.0 + growth_rate * (m / 12.0)
             seasonal_factor = 1.0 + seasonality_amp * np.sin(2 * np.pi * (m - 1) / 12.0)
-            mean_adj = monthly_mean * growth_factor * seasonal_factor
-            value = rng.normal(mean_adj, monthly_std)
+            base_value = sample_from_spec(rng, encounter_spec)
+            value = float(base_value[0]) * growth_factor * seasonal_factor
             rows.append(
                 {
                     "batch_id": batch_id,
@@ -88,10 +93,9 @@ def _simulate_revenue(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
     """Simulate monthly revenue and charges.
 
     Parameters (in *params*):
-        avg_monthly_revenue   - baseline monthly revenue (default 12_000_000)
-        revenue_std           - std-dev (default 2_000_000)
+        distributions.gross_charges - distribution spec for monthly gross charges
+        distributions.denial_rate   - distribution spec for claim denial rate (beta)
         avg_charge_to_rev     - charge-to-revenue ratio (default 1.35)
-        denial_rate           - claim denial rate (default 0.08)
         num_months            - forecast horizon (default 12)
         trials_per_batch      - trials in this batch (default 200)
     """
@@ -99,19 +103,20 @@ def _simulate_revenue(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
     seed = int(pdf["batch_seed"].iloc[0])
     rng = np.random.default_rng(seed)
 
-    avg_rev = params.get("avg_monthly_revenue", 12_000_000)
-    rev_std = params.get("revenue_std", 2_000_000)
+    dist_specs = params.get("distributions", {})
     charge_ratio = params.get("avg_charge_to_rev", 1.35)
-    denial_rate = params.get("denial_rate", 0.08)
     num_months = params.get("num_months", 12)
     trials_per_batch = params.get("trials_per_batch", 200)
+
+    charges_spec = dist_specs.get("gross_charges", {"type": "normal", "params": {"loc": 6750000, "scale": 1080000}})
+    denial_spec = dist_specs.get("denial_rate", {"type": "beta", "params": {"a": 2, "b": 23}})
 
     rows: list[dict] = []
     for trial in range(trials_per_batch):
         for m in range(num_months):
-            gross_charges = rng.normal(avg_rev * charge_ratio, rev_std * charge_ratio)
+            gross_charges = float(sample_from_spec(rng, charges_spec)[0])
             gross_charges = max(0.0, gross_charges)
-            denied_fraction = rng.beta(2, (2 / denial_rate) - 2) if denial_rate > 0 else 0.0
+            denied_fraction = float(sample_from_spec(rng, denial_spec)[0])
             net_revenue = gross_charges * (1.0 - denied_fraction) / charge_ratio
             rows.append(
                 {
@@ -125,152 +130,160 @@ def _simulate_revenue(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-@register_template("grouped_lognormal_mean")
-def _simulate_length_of_stay(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Simulate average length-of-stay by department.
+@register_template("cohort_cost_comparison")
+def _simulate_cost_comparison(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
+    """Compare costs between virtual and in-person care for women's health.
+
+    Per trial: draw in-person cost from distribution spec, virtual cost from
+    distribution spec (lower mean). Output 2 rows per trial (one per care_model)
+    with cost_per_encounter, total_cost, encounter_count.
 
     Parameters (in *params*):
-        departments        - list of department names (default: common set)
-        los_baseline       - dict of dept -> (mu, sigma) log-normal params
-        trials_per_batch   - trials per batch (default 200)
-        patients_per_trial - patients sampled per department per trial (default 500)
+        distributions.inperson_cost  - cost per in-person encounter (lognormal)
+        distributions.virtual_cost   - cost per virtual encounter (lognormal)
+        member_count            - covered population size (default 50000)
+        virtual_penetration     - fraction using virtual care (default 0.30)
+        annual_encounter_rate   - avg encounters per member per year (default 2.5)
+        num_months              - projection horizon in months (default 12)
+        trials_per_batch        - trials per batch (default 200)
     """
     batch_id = int(pdf["id"].iloc[0])
     seed = int(pdf["batch_seed"].iloc[0])
     rng = np.random.default_rng(seed)
 
-    default_departments = [
-        "Emergency", "Cardiology", "Orthopedics", "General Surgery",
-        "Internal Medicine", "Pediatrics", "Oncology", "Neurology",
-        "Intensive Care", "Pulmonology",
-    ]
-    departments = params.get("departments", default_departments)
-    los_baseline = params.get(
-        "los_baseline",
-        {
-            "Emergency": (0.0, 0.3),
-            "Cardiology": (1.4, 0.6),
-            "Orthopedics": (1.5, 0.7),
-            "General Surgery": (1.2, 0.7),
-            "Internal Medicine": (1.1, 0.6),
-            "Pediatrics": (0.8, 0.5),
-            "Oncology": (1.6, 0.8),
-            "Neurology": (1.3, 0.7),
-            "Intensive Care": (1.8, 0.9),
-            "Pulmonology": (1.3, 0.6),
-        },
-    )
+    dist_specs = params.get("distributions", {})
+    member_count = params.get("member_count", 50000)
+    virtual_pen = params.get("virtual_penetration", 0.30)
+    num_months = params.get("num_months", 12)
     trials_per_batch = params.get("trials_per_batch", 200)
-    patients_per_trial = params.get("patients_per_trial", 500)
+    annual_encounter_rate = params.get("annual_encounter_rate", 2.5)
+
+    inperson_spec = dist_specs.get("inperson_cost", {"type": "lognormal", "params": {"mean": 7.09, "sigma": 0.22}})
+    virtual_spec = dist_specs.get("virtual_cost", {"type": "lognormal", "params": {"mean": 6.11, "sigma": 0.22}})
 
     rows: list[dict] = []
     for trial in range(trials_per_batch):
-        for dept in departments:
-            mu, sigma = los_baseline.get(dept, (1.0, 0.5))
-            samples = rng.lognormal(mu, sigma, size=patients_per_trial)
-            avg_los = float(np.mean(samples))
-            rows.append(
-                {
-                    "batch_id": batch_id,
-                    "trial_id": batch_id * trials_per_batch + trial,
-                    "department": dept,
-                    "simulated_avg_los": avg_los,
-                }
-            )
+        trial_id = batch_id * trials_per_batch + trial
+
+        # In-person arm: all members stay in-person
+        ip_cost_per_enc = float(sample_from_spec(rng, inperson_spec)[0])
+        ip_encounter_count = member_count * annual_encounter_rate * (num_months / 12.0)
+        ip_total_cost = ip_cost_per_enc * ip_encounter_count
+
+        rows.append({
+            "batch_id": batch_id,
+            "trial_id": trial_id,
+            "care_model": "in_person",
+            "simulated_cost_per_encounter": ip_cost_per_enc,
+            "simulated_total_cost": ip_total_cost,
+            "simulated_encounter_count": ip_encounter_count,
+        })
+
+        # Virtual arm: fraction shifts to virtual care
+        n_virtual = member_count * virtual_pen
+        n_inperson = member_count - n_virtual
+        vt_cost_per_enc = float(sample_from_spec(rng, virtual_spec)[0])
+        ip_cost_remaining = float(sample_from_spec(rng, inperson_spec)[0])
+
+        virtual_encounters = n_virtual * annual_encounter_rate * (num_months / 12.0)
+        inperson_encounters = n_inperson * annual_encounter_rate * (num_months / 12.0)
+        blended_total = (vt_cost_per_enc * virtual_encounters +
+                         ip_cost_remaining * inperson_encounters)
+        total_encounters = virtual_encounters + inperson_encounters
+        blended_cost_per_enc = blended_total / total_encounters if total_encounters > 0 else 0.0
+
+        rows.append({
+            "batch_id": batch_id,
+            "trial_id": trial_id,
+            "care_model": "virtual_blend",
+            "simulated_cost_per_encounter": blended_cost_per_enc,
+            "simulated_total_cost": blended_total,
+            "simulated_encounter_count": total_encounters,
+        })
+
     return pd.DataFrame(rows)
 
 
-@register_template("grouped_binomial_rate")
-def _simulate_readmission_rate(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Simulate 30-day readmission rates by department.
+@register_template("multi_year_roi_projection")
+def _simulate_system_cost_roi(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
+    """Project total system cost reduction and ROI from virtual care partnership.
+
+    Per trial: draw baseline from distribution spec, then for each year: inflate
+    costs, apply encounter reduction (excluding surgical if include_surgery=false),
+    compute gross_savings, subtract annual solution cost for net_savings,
+    compute ROI. Output 1 row per year.
 
     Parameters (in *params*):
-        departments          - list of department names
-        base_readmission_rate - dict of dept -> base rate (default ~0.12)
-        trials_per_batch     - trials per batch (default 200)
-        discharges_per_trial - discharges sampled per department per trial (default 300)
+        distributions.baseline_cost    - baseline annual system cost (lognormal)
+        distributions.reduction_noise  - noise on encounter reduction (normal)
+        encounter_reduction_pct - pct reduction in encounters (default 0.08)
+        labor_inflation_rate    - annual labor inflation (default 0.04)
+        expense_inflation       - annual non-labor inflation (default 0.03)
+        include_surgery         - include surgical costs in reduction (default false)
+        solution_cost           - total investment cost over period (default 2B)
+        num_years               - projection horizon in years (default 5)
+        labor_fraction          - fraction of cost from labor (default 0.55)
+        surgical_fraction       - fraction from surgical encounters (default 0.15)
+        trials_per_batch        - trials per batch (default 200)
     """
     batch_id = int(pdf["id"].iloc[0])
     seed = int(pdf["batch_seed"].iloc[0])
     rng = np.random.default_rng(seed)
 
-    default_departments = [
-        "Emergency", "Cardiology", "Orthopedics", "General Surgery",
-        "Internal Medicine", "Pediatrics", "Oncology", "Neurology",
-        "Intensive Care", "Pulmonology",
-    ]
-    departments = params.get("departments", default_departments)
-    base_rates = params.get(
-        "base_readmission_rate",
-        {
-            "Emergency": 0.15,
-            "Cardiology": 0.18,
-            "Orthopedics": 0.08,
-            "General Surgery": 0.12,
-            "Internal Medicine": 0.14,
-            "Pediatrics": 0.06,
-            "Oncology": 0.20,
-            "Neurology": 0.16,
-            "Intensive Care": 0.22,
-            "Pulmonology": 0.17,
-        },
-    )
+    dist_specs = params.get("distributions", {})
+    reduction_pct = params.get("encounter_reduction_pct", 0.08)
+    labor_inflation = params.get("labor_inflation_rate", 0.04)
+    expense_inflation = params.get("expense_inflation", 0.03)
+    include_surgery = params.get("include_surgery", False)
+    total_solution_cost = params.get("solution_cost", 2_000_000_000)
+    num_years = params.get("num_years", 5)
+    labor_frac = params.get("labor_fraction", 0.55)
+    surgical_frac = params.get("surgical_fraction", 0.15)
     trials_per_batch = params.get("trials_per_batch", 200)
-    discharges_per_trial = params.get("discharges_per_trial", 300)
+
+    baseline_spec = dist_specs.get("baseline_cost", {"type": "lognormal", "params": {"mean": 20.03, "sigma": 0.05}})
+    noise_spec = dist_specs.get("reduction_noise", {"type": "normal", "params": {"loc": 0, "scale": 0.1}})
+
+    # Annual solution cost = total / num_years
+    annual_solution_cost = total_solution_cost / max(num_years, 1)
 
     rows: list[dict] = []
     for trial in range(trials_per_batch):
-        for dept in departments:
-            rate = base_rates.get(dept, 0.12)
-            readmissions = rng.binomial(discharges_per_trial, rate)
-            simulated_rate = readmissions / discharges_per_trial
-            rows.append(
-                {
-                    "batch_id": batch_id,
-                    "trial_id": batch_id * trials_per_batch + trial,
-                    "department": dept,
-                    "simulated_readmission_rate": float(simulated_rate),
-                }
-            )
-    return pd.DataFrame(rows)
+        trial_id = batch_id * trials_per_batch + trial
+        # Draw stochastic baseline
+        base_cost = float(sample_from_spec(rng, baseline_spec)[0])
 
+        for year in range(1, num_years + 1):
+            # Inflate baseline
+            labor_cost = base_cost * labor_frac * (1 + labor_inflation) ** year
+            non_labor_cost = base_cost * (1 - labor_frac) * (1 + expense_inflation) ** year
+            inflated_baseline = labor_cost + non_labor_cost
 
-@register_template("hourly_gamma")
-def _simulate_ed_wait_time(pdf: pd.DataFrame, params: dict) -> pd.DataFrame:
-    """Simulate emergency department wait times by hour of day.
+            # Reducible portion: exclude surgical unless include_surgery
+            if include_surgery:
+                reducible_fraction = 1.0
+            else:
+                reducible_fraction = 1.0 - surgical_frac
 
-    Parameters (in *params*):
-        base_wait_minutes   - baseline mean wait in minutes (default 45)
-        peak_multiplier     - multiplier during peak hours (default 2.0)
-        peak_hours          - list of peak hours 0-23 (default [10-14, 18-21])
-        trials_per_batch    - trials per batch (default 200)
-        patients_per_hour   - patients sampled per hour per trial (default 50)
-    """
-    batch_id = int(pdf["id"].iloc[0])
-    seed = int(pdf["batch_seed"].iloc[0])
-    rng = np.random.default_rng(seed)
+            # Apply encounter reduction with noise from distribution spec
+            noise = float(sample_from_spec(rng, noise_spec)[0])
+            effective_reduction = reduction_pct * (1 + noise)
+            effective_reduction = max(0, min(effective_reduction, 0.5))  # cap at 50%
 
-    base_wait = params.get("base_wait_minutes", 45)
-    peak_mult = params.get("peak_multiplier", 2.0)
-    peak_hours = set(params.get("peak_hours", [10, 11, 12, 13, 14, 18, 19, 20, 21]))
-    trials_per_batch = params.get("trials_per_batch", 200)
-    patients_per_hour = params.get("patients_per_hour", 50)
+            gross_savings = inflated_baseline * reducible_fraction * effective_reduction
+            reduced_cost = inflated_baseline - gross_savings
+            net_savings = gross_savings - annual_solution_cost
+            roi = net_savings / annual_solution_cost if annual_solution_cost > 0 else 0.0
 
-    rows: list[dict] = []
-    for trial in range(trials_per_batch):
-        for hour in range(24):
-            mean_wait = base_wait * (peak_mult if hour in peak_hours else 1.0)
-            # Gamma distribution to keep wait times positive with right skew
-            shape = (mean_wait / 15.0) ** 2  # variance ~ 15^2 base
-            scale = mean_wait / shape if shape > 0 else 1.0
-            samples = rng.gamma(shape, scale, size=patients_per_hour)
-            avg_wait = float(np.mean(samples))
-            rows.append(
-                {
-                    "batch_id": batch_id,
-                    "trial_id": batch_id * trials_per_batch + trial,
-                    "hour_of_day": hour,
-                    "simulated_wait_minutes": avg_wait,
-                }
-            )
+            rows.append({
+                "batch_id": batch_id,
+                "trial_id": trial_id,
+                "year": year,
+                "simulated_baseline_cost": inflated_baseline,
+                "simulated_reduced_cost": reduced_cost,
+                "simulated_gross_savings": gross_savings,
+                "simulated_net_savings": net_savings,
+                "simulated_roi": roi,
+            })
+
     return pd.DataFrame(rows)

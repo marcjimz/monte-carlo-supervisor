@@ -95,7 +95,7 @@ RETURN (
             ELSE concat(
                 '{{"status":"not_found","simulation_type":"', p_simulation_type,
                 '","message":"No matching simulation found for these parameters. ',
-                'Call trigger_simulation with the same parameters to start a new distributed Spark job."}}'
+                'Call trigger_simulation with the same parameters to start a new distributed Spark job, OR if you already triggered, keep polling — the Spark cluster may still be starting up."}}'
             )
         END
     FROM (SELECT 1 AS x) dummy

@@ -1,60 +1,43 @@
 icd10_code,description,category
+N95.1,Menopausal and female climacteric states,Women's Health
+N95.0,Postmenopausal bleeding,Women's Health
+R10.2,Pelvic and perineal pain,Women's Health
+G89.29,Other chronic pain,Women's Health
+G89.4,Chronic pain syndrome,Women's Health
+N94.1,Dyspareunia,Women's Health
+N80.0,Endometriosis of uterus,Women's Health
+D25.9,"Leiomyoma of uterus, unspecified",Women's Health
+N92.0,Excessive and frequent menstruation with regular cycle,Women's Health
+N92.1,Excessive and frequent menstruation with irregular cycle,Women's Health
+N93.9,"Abnormal uterine and vaginal bleeding, unspecified",Women's Health
+N81.2,Incomplete uterovaginal prolapse,Women's Health
+N76.0,Acute vaginitis,Women's Health
+N73.0,Acute parametritis and pelvic cellulitis,Women's Health
+E28.2,Polycystic ovarian syndrome,Women's Health
+N39.0,"Urinary tract infection, site not specified",Genitourinary
+N18.3,"Chronic kidney disease, stage 3",Genitourinary
+N30.00,Acute cystitis without hematuria,Genitourinary
+N75.1,Abscess of Bartholin gland,Genitourinary
 I10,Essential hypertension,Cardiovascular
 I25.10,Atherosclerotic heart disease,Cardiovascular
 I48.91,"Atrial fibrillation, unspecified",Cardiovascular
 I50.9,"Heart failure, unspecified",Cardiovascular
-I50.22,Chronic systolic heart failure,Cardiovascular
-I50.32,Chronic diastolic heart failure,Cardiovascular
-I21.9,"Acute myocardial infarction, unspecified",Cardiovascular
-I63.9,"Cerebral infarction, unspecified",Cardiovascular
-I70.0,Atherosclerosis of aorta,Cardiovascular
-J44.1,COPD with acute exacerbation,Respiratory
-J44.0,COPD with acute lower respiratory infection,Respiratory
-J45.20,"Mild intermittent asthma, uncomplicated",Respiratory
-J45.40,"Moderate persistent asthma, uncomplicated",Respiratory
-J18.9,"Pneumonia, unspecified organism",Respiratory
-J96.00,Acute respiratory failure,Respiratory
-J06.9,Acute upper respiratory infection,Respiratory
 E11.9,Type 2 diabetes without complications,Endocrine
 E11.65,Type 2 diabetes with hyperglycemia,Endocrine
-E11.22,Type 2 diabetes with diabetic CKD,Endocrine
 E78.5,"Hyperlipidemia, unspecified",Endocrine
 E66.01,Morbid obesity due to excess calories,Endocrine
 E03.9,"Hypothyroidism, unspecified",Endocrine
-M54.5,Low back pain,Musculoskeletal
-M17.11,"Primary osteoarthritis, right knee",Musculoskeletal
-M79.3,"Panniculitis, unspecified",Musculoskeletal
-S72.001A,Fracture of unspecified part of neck of right femur,Musculoskeletal
-M16.11,"Primary osteoarthritis, right hip",Musculoskeletal
-K21.0,GERD with esophagitis,Gastrointestinal
-K80.20,Calculus of gallbladder without cholecystitis,Gastrointestinal
-K57.30,Diverticulosis of large intestine,Gastrointestinal
-K92.1,Melena,Gastrointestinal
-K35.80,Unspecified acute appendicitis,Gastrointestinal
-N18.3,"Chronic kidney disease, stage 3",Genitourinary
-N18.4,"Chronic kidney disease, stage 4",Genitourinary
-N39.0,"Urinary tract infection, site not specified",Genitourinary
-N40.0,Benign prostatic hyperplasia without obstruction,Genitourinary
 F32.1,"Major depressive disorder, single episode, moderate",Mental Health
 F41.1,Generalized anxiety disorder,Mental Health
-F10.20,"Alcohol dependence, uncomplicated",Mental Health
-F17.210,"Nicotine dependence, cigarettes, uncomplicated",Mental Health
-C34.90,Malignant neoplasm of unspecified part of lung,Neoplasm
-C50.919,Malignant neoplasm of unspecified site of breast,Neoplasm
-C18.9,"Malignant neoplasm of colon, unspecified",Neoplasm
-C61,Malignant neoplasm of prostate,Neoplasm
-G20,Parkinson's disease,Neurological
-G30.9,"Alzheimer's disease, unspecified",Neurological
-G40.909,"Epilepsy, unspecified, not intractable",Neurological
-G43.909,"Migraine, unspecified, not intractable",Neurological
-A41.9,"Sepsis, unspecified organism",Infectious
-B34.9,"Viral infection, unspecified",Infectious
-U07.1,COVID-19,Infectious
-S06.0X0A,Concussion without loss of consciousness,Injury
-S52.501A,Unspecified fracture of lower end of radius,Injury
-T81.4XXA,Infection following a procedure,Injury
+F32.9,"Major depressive disorder, single episode, unspecified",Mental Health
+F43.10,"Post-traumatic stress disorder, unspecified",Mental Health
 R06.00,"Dyspnea, unspecified",Signs/Symptoms
 R07.9,"Chest pain, unspecified",Signs/Symptoms
 R50.9,"Fever, unspecified",Signs/Symptoms
 R11.2,"Nausea with vomiting, unspecified",Signs/Symptoms
 R10.9,Unspecified abdominal pain,Signs/Symptoms
+K21.0,GERD with esophagitis,Gastrointestinal
+K80.20,Calculus of gallbladder without cholecystitis,Gastrointestinal
+K57.30,Diverticulosis of large intestine,Gastrointestinal
+A41.9,"Sepsis, unspecified organism",Infectious
+B34.9,"Viral infection, unspecified",Infectious

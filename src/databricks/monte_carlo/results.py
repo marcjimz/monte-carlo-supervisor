@@ -27,12 +27,15 @@ def compute_cache_key(
     parameters: str,
     seed: int,
     num_simulations: int,
+    distribution_version: int | str | None = None,
 ) -> str:
     """Compute a deterministic SHA-256 hash for cache lookup.
 
     The hash is derived from the simulation type, canonicalized JSON
-    parameters, seed, and simulation count so that identical requests
-    produce the same key regardless of dict ordering.
+    parameters, seed, simulation count, and distribution version so that
+    identical requests produce the same key regardless of dict ordering.
+    Re-fitting distributions (bumping version) automatically invalidates
+    cached results.
 
     Parameters
     ----------
@@ -44,6 +47,9 @@ def compute_cache_key(
         Random seed.
     num_simulations : int
         Total number of Monte Carlo trials.
+    distribution_version : int | str | None
+        Version of the fitted distribution specs used. ``None`` or
+        ``"default"`` when using config defaults.
 
     Returns
     -------
@@ -56,7 +62,8 @@ def compute_cache_key(
     except (json.JSONDecodeError, TypeError):
         canonical_params = parameters
 
-    payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}"
+    dist_ver = distribution_version if distribution_version is not None else "default"
+    payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}|{dist_ver}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -220,63 +227,66 @@ def aggregate_to_gold(
     the ``simulation_results`` Gold table.
 
     For each simulation type the aggregation groups by the natural dimension
-    (e.g. ``month`` for patient_volume, ``department`` for LOS) and computes
-    mean, std-dev, and the 5th / 10th / 25th / 50th / 75th / 90th / 95th
-    percentiles of the simulated metric.
+    (e.g. ``month`` for patient_volume, ``care_model`` for cost_comparison)
+    and computes mean, std-dev, and the 5th / 10th / 25th / 50th / 75th /
+    90th / 95th percentiles of the simulated metric.
+
+    If additional_metrics are configured (e.g. for cost_comparison or
+    system_cost_roi), each metric is aggregated separately and written as
+    distinct rows with a unique ``metric_name``.
     """
     trials_table = f"{catalog}.{schema}.simulation_trials"
     results_table = f"{catalog}.{schema}.simulation_results"
 
-    value_col, group_col = config_loader.get_agg_config(simulation_type)
-
+    all_metrics = config_loader.get_all_agg_metrics(simulation_type)
     trials_df = spark.read.table(trials_table).filter(F.col("run_id") == run_id)
-
-    # Build aggregation expressions
-    agg_exprs = [
-        F.count("*").alias("num_trials"),
-        F.mean(value_col).alias("mean_value"),
-        F.stddev(value_col).alias("std_value"),
-        F.min(value_col).alias("min_value"),
-        F.max(value_col).alias("max_value"),
-    ]
-    for p in _PERCENTILES:
-        alias = f"p{int(p * 100):02d}"
-        agg_exprs.append(F.percentile_approx(value_col, p).alias(alias))
-
-    agg_df = trials_df.groupBy(group_col).agg(*agg_exprs)
-
     now = datetime.now(timezone.utc).isoformat()
 
-    gold_df = (
-        agg_df.withColumn("run_id", F.lit(run_id))
-        .withColumn("simulation_type", F.lit(simulation_type))
-        .withColumn("metric_name", F.lit(value_col))
-        .withColumn("group_key", F.lit(group_col))
-        .withColumnRenamed(group_col, "group_value")
-        .withColumn("created_at", F.lit(now))
-        .select(
-            "run_id",
-            "simulation_type",
-            "metric_name",
-            "group_key",
-            F.col("group_value").cast(StringType()).alias("group_value"),
-            "num_trials",
-            "mean_value",
-            "std_value",
-            "min_value",
-            "max_value",
-            "p05",
-            "p10",
-            "p25",
-            "p50",
-            "p75",
-            "p90",
-            "p95",
-            "created_at",
-        )
-    )
+    for value_col, group_col in all_metrics:
+        # Build aggregation expressions
+        agg_exprs = [
+            F.count("*").alias("num_trials"),
+            F.mean(value_col).alias("mean_value"),
+            F.stddev(value_col).alias("std_value"),
+            F.min(value_col).alias("min_value"),
+            F.max(value_col).alias("max_value"),
+        ]
+        for p in _PERCENTILES:
+            alias = f"p{int(p * 100):02d}"
+            agg_exprs.append(F.percentile_approx(value_col, p).alias(alias))
 
-    gold_df.write.format("delta").mode("append").saveAsTable(results_table)
+        agg_df = trials_df.groupBy(group_col).agg(*agg_exprs)
+
+        gold_df = (
+            agg_df.withColumn("run_id", F.lit(run_id))
+            .withColumn("simulation_type", F.lit(simulation_type))
+            .withColumn("metric_name", F.lit(value_col))
+            .withColumn("group_key", F.lit(group_col))
+            .withColumnRenamed(group_col, "group_value")
+            .withColumn("created_at", F.lit(now))
+            .select(
+                "run_id",
+                "simulation_type",
+                "metric_name",
+                "group_key",
+                F.col("group_value").cast(StringType()).alias("group_value"),
+                "num_trials",
+                "mean_value",
+                "std_value",
+                "min_value",
+                "max_value",
+                "p05",
+                "p10",
+                "p25",
+                "p50",
+                "p75",
+                "p90",
+                "p95",
+                "created_at",
+            )
+        )
+
+        gold_df.write.format("delta").mode("append").saveAsTable(results_table)
 
 
 # ---------------------------------------------------------------------------
@@ -315,12 +325,13 @@ def update_run_status(
 
 
 def get_simulation_tables_ddl(catalog: str, schema: str) -> list[str]:
-    """Return CREATE TABLE IF NOT EXISTS DDL for the three simulation tables.
+    """Return CREATE TABLE IF NOT EXISTS DDL for the simulation tables.
 
     Tables:
       - ``simulation_runs``    -- run metadata and status
       - ``simulation_trials``  -- Bronze raw trial-level results
       - ``simulation_results`` -- Gold aggregated percentile results
+      - ``distribution_specs`` -- fitted distribution parameter store
 
     All tables use Delta format and are placed in the given Unity Catalog
     location.
@@ -396,4 +407,93 @@ TBLPROPERTIES (
     'delta.autoOptimize.autoCompact' = 'true'
 )
 """.strip(),
+        # ----- distribution_specs (fitted distribution parameter store) -----
+        f"""
+CREATE TABLE IF NOT EXISTS {catalog}.{schema}.distribution_specs (
+    simulation_type     STRING      NOT NULL COMMENT 'Simulation type this spec belongs to',
+    distribution_name   STRING      NOT NULL COMMENT 'Named distribution within the simulation type',
+    version             INT         NOT NULL COMMENT 'Monotonically increasing version (higher = newer)',
+    spec                STRING      NOT NULL COMMENT 'JSON distribution spec: {{"type": "lognormal", "params": {{...}}}}',
+    fit_metadata        STRING               COMMENT 'JSON fitting metadata: source table, n_samples, ks_stat, p_value',
+    created_at          STRING      NOT NULL COMMENT 'ISO-8601 UTC timestamp of spec creation'
+)
+USING DELTA
+COMMENT 'Fitted distribution parameter store for Monte Carlo simulations'
+TBLPROPERTIES (
+    'delta.autoOptimize.optimizeWrite' = 'true',
+    'delta.autoOptimize.autoCompact' = 'true'
+)
+""".strip(),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Distribution spec resolution
+# ---------------------------------------------------------------------------
+
+
+def get_latest_distribution_version(
+    spark: SparkSession,
+    catalog: str,
+    schema: str,
+    simulation_type: str,
+) -> int | None:
+    """Return the maximum version for *simulation_type*, or ``None`` if no specs exist."""
+    table = f"{catalog}.{schema}.distribution_specs"
+    try:
+        result = spark.sql(
+            f"""
+            SELECT MAX(version) AS max_version
+            FROM {table}
+            WHERE simulation_type = '{simulation_type}'
+            """
+        )
+        row = result.collect()[0]
+        return row["max_version"]  # None if no rows match
+    except Exception:
+        return None
+
+
+def resolve_distribution_specs(
+    spark: SparkSession,
+    catalog: str,
+    schema: str,
+    simulation_type: str,
+    version: int | None = None,
+) -> dict[str, dict]:
+    """Load distribution specs from the table for a given type + version.
+
+    Parameters
+    ----------
+    spark : SparkSession
+    catalog, schema : str
+    simulation_type : str
+    version : int | None
+        Specific version to load.  If ``None``, loads the latest version.
+
+    Returns
+    -------
+    dict
+        ``{distribution_name: spec_dict}`` where *spec_dict* has ``type``
+        and ``params`` keys.
+    """
+    table = f"{catalog}.{schema}.distribution_specs"
+
+    if version is None:
+        version = get_latest_distribution_version(spark, catalog, schema, simulation_type)
+        if version is None:
+            return {}
+
+    result = spark.sql(
+        f"""
+        SELECT distribution_name, spec
+        FROM {table}
+        WHERE simulation_type = '{simulation_type}'
+          AND version = {version}
+        """
+    )
+    rows = result.collect()
+    specs = {}
+    for row in rows:
+        specs[row["distribution_name"]] = json.loads(row["spec"])
+    return specs

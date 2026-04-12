@@ -1,24 +1,24 @@
-"""Configuration for synthetic data generation."""
+"""Configuration for synthetic data generation — Women's Health focus."""
 
 SEED = 42
 
-# Volume targets
-NUM_PATIENTS = 25_000
-NUM_PROVIDERS = 500
-NUM_FACILITIES = 15
-NUM_ENCOUNTERS = 120_000
+# Volume targets (WH-scoped: adult women only)
+NUM_PATIENTS = 10_000
+NUM_PROVIDERS = 200
+NUM_FACILITIES = 8
+NUM_ENCOUNTERS = 50_000
 
 # Date range (3 years of data)
-DATE_START = "2022-01-01"
-DATE_END = "2024-12-31"
+DATE_START = "2023-04-01"
+DATE_END = "2026-03-31"
 
 # Output directory
 DATA_DIR = "data"
 
-# Encounter type distribution
+# Encounter type distribution (WH: primarily outpatient)
 ENCOUNTER_TYPE_WEIGHTS = {
-    "Outpatient": 0.45,
-    "Emergency": 0.25,
+    "Outpatient": 0.60,
+    "Emergency": 0.10,
     "Inpatient": 0.20,
     "Observation": 0.10,
 }
@@ -35,66 +35,40 @@ INSURANCE_WEIGHTS = {
     "Other": 0.03,
 }
 
-# Department list
+# Department list (WH-relevant subset)
 DEPARTMENTS = [
-    "Emergency",
-    "Cardiology",
-    "Orthopedics",
-    "General Surgery",
+    "OB/GYN",
     "Internal Medicine",
-    "Pediatrics",
-    "Obstetrics",
-    "Neurology",
-    "Oncology",
-    "Pulmonology",
-    "Gastroenterology",
-    "Nephrology",
     "Endocrinology",
-    "Dermatology",
-    "Urology",
     "Psychiatry",
+    "General Surgery",
     "Radiology",
-    "Anesthesiology",
-    "Rehabilitation",
-    "Intensive Care",
+    "Emergency",
 ]
 
-# Chronic conditions (can have multiple)
+# Chronic conditions relevant to women's health
 CHRONIC_CONDITIONS = [
-    "Diabetes",
+    "PCOS",
+    "Endometriosis",
     "Hypertension",
-    "COPD",
-    "Heart Failure",
-    "Asthma",
-    "Chronic Kidney Disease",
+    "Diabetes",
     "Obesity",
     "Depression",
-    "Arthritis",
-    "Atrial Fibrillation",
+    "Anxiety",
+    "Hypothyroidism",
+    "Menopause-related conditions",
+    "Chronic Pelvic Pain",
 ]
 
 # Specialties aligned with departments
 SPECIALTIES = [
-    "Emergency Medicine",
-    "Cardiology",
-    "Orthopedic Surgery",
-    "General Surgery",
-    "Internal Medicine",
-    "Pediatrics",
     "Obstetrics & Gynecology",
-    "Neurology",
-    "Oncology",
-    "Pulmonology",
-    "Gastroenterology",
-    "Nephrology",
+    "Internal Medicine",
     "Endocrinology",
-    "Dermatology",
-    "Urology",
     "Psychiatry",
+    "General Surgery",
     "Radiology",
-    "Anesthesiology",
-    "Physical Medicine",
-    "Critical Care",
+    "Emergency Medicine",
 ]
 
 # LOS parameters by encounter type (log-normal mu, sigma)

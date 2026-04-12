@@ -91,6 +91,51 @@ def get_model_template(simulation_type: str, config: dict | None = None) -> str:
     return sim_config["model_template"]
 
 
+def get_all_agg_metrics(simulation_type: str, config: dict | None = None) -> list[tuple[str, str]]:
+    """Return all (value_column, group_column) pairs for the given simulation type.
+
+    Includes the primary aggregation metric plus any additional_metrics defined
+    in config.yaml.  This is used by results.py to write multiple Gold rows.
+    """
+    cfg = config or load_config()
+    sim_config = cfg["simulation_types"].get(simulation_type)
+    if sim_config is None:
+        available = ", ".join(get_valid_types(cfg))
+        raise ValueError(
+            f"No config for simulation type '{simulation_type}'. Available: {available}"
+        )
+    agg = sim_config["aggregation"]
+    metrics = [(agg["value_column"], agg["group_column"])]
+    for extra in agg.get("additional_metrics", []):
+        metrics.append((extra["value_column"], extra["group_column"]))
+    return metrics
+
+
+def get_required_distributions(simulation_type: str, config: dict | None = None) -> dict[str, dict]:
+    """Return ``{dist_name: {description, default_spec}}`` for the given type.
+
+    Returns an empty dict if the simulation type has no ``distributions`` block.
+    """
+    cfg = config or load_config()
+    sim_config = cfg["simulation_types"].get(simulation_type)
+    if sim_config is None:
+        available = ", ".join(get_valid_types(cfg))
+        raise ValueError(
+            f"No config for simulation type '{simulation_type}'. Available: {available}"
+        )
+    return sim_config.get("distributions", {})
+
+
+def get_default_distribution_specs(simulation_type: str, config: dict | None = None) -> dict[str, dict]:
+    """Return ``{dist_name: default_spec}`` for the given type.
+
+    Extracts the ``default_spec`` from each entry in the ``distributions``
+    block.  Used when no fitted distribution specs are available.
+    """
+    dists = get_required_distributions(simulation_type, config)
+    return {name: info["default_spec"] for name, info in dists.items()}
+
+
 def get_sim_type_config(simulation_type: str, config: dict | None = None) -> dict:
     """Return the full config dict for a single simulation type.
 

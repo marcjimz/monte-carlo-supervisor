@@ -111,7 +111,7 @@ def main(output_dir: str = "data", seed: int = SEED) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate synthetic hospital data CSVs")
+    parser = argparse.ArgumentParser(description="Generate synthetic women's health data CSVs")
     parser.add_argument(
         "--output-dir", default="data", help="Output directory (default: data)"
     )

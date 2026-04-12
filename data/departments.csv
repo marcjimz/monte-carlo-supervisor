@@ -1,21 +1,8 @@
 department_id,department_name
-DEPT001,Emergency
-DEPT002,Cardiology
-DEPT003,Orthopedics
-DEPT004,General Surgery
-DEPT005,Internal Medicine
-DEPT006,Pediatrics
-DEPT007,Obstetrics
-DEPT008,Neurology
-DEPT009,Oncology
-DEPT010,Pulmonology
-DEPT011,Gastroenterology
-DEPT012,Nephrology
-DEPT013,Endocrinology
-DEPT014,Dermatology
-DEPT015,Urology
-DEPT016,Psychiatry
-DEPT017,Radiology
-DEPT018,Anesthesiology
-DEPT019,Rehabilitation
-DEPT020,Intensive Care
+DEPT001,OB/GYN
+DEPT002,Internal Medicine
+DEPT003,Endocrinology
+DEPT004,Psychiatry
+DEPT005,General Surgery
+DEPT006,Radiology
+DEPT007,Emergency
