@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Check, Minus, Play } from "lucide-react";
+import { Minus, Play } from "lucide-react";
 import { api } from "../../lib/api";
 import type { Matrix, MatrixCell } from "../../lib/types";
 import { formatNumber } from "../../lib/utils";
