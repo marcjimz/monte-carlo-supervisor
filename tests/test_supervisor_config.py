@@ -198,7 +198,7 @@ class TestSupervisorInstructions:
             )
 
     def test_instructions_contain_workflow_steps(self):
-        """Instructions must describe the check → trigger → poll workflow."""
+        """Instructions must describe the check → trigger → check workflow."""
         instructions = get_supervisor_instructions()
         assert "simulation_checker" in instructions
         assert "simulation_trigger" in instructions

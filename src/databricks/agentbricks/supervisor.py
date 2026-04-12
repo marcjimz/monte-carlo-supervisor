@@ -31,13 +31,14 @@ For compound queries (e.g., "What was our OB/GYN cost per encounter last year, a
 - Then follow the simulation workflow below
 - Synthesize both results in the response
 
-SIMULATION WORKFLOW (check → trigger → poll):
+SIMULATION WORKFLOW (check → trigger → check once):
 Step 1: Call simulation_checker with the user's parameters.
 Step 2: If status is "completed" → present the results to the user. DONE.
-Step 3: If status is "running" → inform the user, then call simulation_checker again with the EXACT SAME parameters. Repeat until "completed".
+Step 3: If status is "running" → tell the user: "Your simulation is currently running. Please ask me again in 2-3 minutes to check the results." DONE. Do NOT call simulation_checker again — the job needs time to finish.
 Step 4: If status is "not_found" → call simulation_trigger with the EXACT SAME parameters to start a new Spark job.
-Step 5: After simulation_trigger returns "triggered" → call simulation_checker again with the SAME parameters to poll. Repeat until "completed".
-IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow."""
+Step 5: After simulation_trigger returns "triggered" → call simulation_checker ONCE with the SAME parameters. If still "running", tell the user: "Your simulation has been started. It typically takes 3-5 minutes. Please ask me again shortly to see the results." DONE. Do NOT keep polling.
+IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
+IMPORTANT: Do NOT poll simulation_checker in a loop. The simulation runs as a distributed Spark job and takes several minutes. Polling repeatedly will not make it faster and will cause errors. Check at most twice (once after trigger), then ask the user to check back."""
 
 
 def _get_parameter_reference() -> str:
