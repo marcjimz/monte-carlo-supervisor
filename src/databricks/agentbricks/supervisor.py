@@ -31,14 +31,14 @@ For compound queries (e.g., "What was our OB/GYN cost per encounter last year, a
 - Then follow the simulation workflow below
 - Synthesize both results in the response
 
-SIMULATION WORKFLOW (check → trigger → check once):
+SIMULATION WORKFLOW (check → trigger → poll):
 Step 1: Call simulation_checker with the user's parameters.
 Step 2: If status is "completed" → present the results to the user. DONE.
-Step 3: If status is "running" → tell the user: "Your simulation is currently running. Please ask me again in 2-3 minutes to check the results." DONE. Do NOT call simulation_checker again — the job needs time to finish.
-Step 4: If status is "not_found" → call simulation_trigger with the EXACT SAME parameters to start a new Spark job.
-Step 5: After simulation_trigger returns "triggered" → call simulation_checker ONCE with the SAME parameters. If still "running", tell the user: "Your simulation has been started. It typically takes 3-5 minutes. Please ask me again shortly to see the results." DONE. Do NOT keep polling.
-IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
-IMPORTANT: Do NOT poll simulation_checker in a loop. The simulation runs as a distributed Spark job and takes several minutes. Polling repeatedly will not make it faster and will cause errors. Check at most twice (once after trigger), then ask the user to check back."""
+Step 3: If status is "running" → call simulation_checker again with the EXACT SAME parameters. Repeat until "completed".
+Step 4: If status is "not_found" AND you have NOT yet triggered → call simulation_trigger with the EXACT SAME parameters to start a new Spark job.
+Step 5: After simulation_trigger returns "triggered" → call simulation_checker with the SAME parameters to poll. Repeat until "completed".
+IMPORTANT: After triggering, check_simulation may return "not_found" for 1-2 minutes while the distributed Spark cluster starts. This is NORMAL — do NOT call trigger_simulation again. Keep calling check_simulation until you see "running" or "completed".
+IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow."""
 
 
 def _get_parameter_reference() -> str:

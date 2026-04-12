@@ -125,8 +125,7 @@ Compare virtual vs in-person care costs for 50,000 members with 30% virtual pene
 
 - The supervisor detects simulation intent and routes to `simulation_checker` first
 - If cached: returns results immediately showing cost comparison metrics
-- If not cached: routes to `simulation_trigger`, which calls the UC Function to trigger a Databricks Job, then tells the user to check back in a few minutes
-- Re-ask the same question after 3-5 minutes; the supervisor will find cached results
+- If not cached: routes to `simulation_trigger`, which calls the UC Function to trigger a Databricks Job, then polls `simulation_checker` repeatedly until results are ready
 - The MC pipeline runs: validate params, resolve fitted distributions, run 10,000 Spark-distributed trials, aggregate to Gold
 - Results show:
   - In-person mean cost: ~$4,924/encounter
@@ -157,7 +156,7 @@ Project the 5-year system cost ROI assuming 8% encounter reduction and a $2B par
 
 ### Expected Behavior
 
-- Routes through `simulation_checker` → `simulation_trigger` → informs user to check back in 3-5 minutes
+- Routes through `simulation_checker` → `simulation_trigger` → polls `simulation_checker` until completion
 - Simulation models 5 years with labor/expense inflation, encounter reduction (excluding surgical), and applies the $2B investment cost
 - Results show:
   - Gross savings: $38-44M/year, growing with inflation
@@ -226,7 +225,7 @@ After the 6 scenes, summarize the key architectural advantages:
 ## Common Questions and Answers
 
 **Q: How long does a simulation take?**
-A: First run: typically 3-5 minutes depending on cluster size and num_simulations (default 10,000 trials across 50 Spark partitions). The supervisor will trigger the job and ask you to check back after a few minutes. Subsequent identical requests return from cache in under 1 second.
+A: First run: typically 3-5 minutes depending on cluster size and num_simulations (default 10,000 trials across 50 Spark partitions). The supervisor will trigger the job and poll automatically until results are ready, using the Agent Bricks long-running task continuation pattern. Subsequent identical requests return from cache in under 1 second.
 
 **Q: What simulation types are available?**
 A: Four types: `patient_volume` (encounter forecasting), `revenue` (financial projections with payer mix), `cost_comparison` (virtual vs in-person H2 hypothesis), and `system_cost_roi` (multi-year ROI with investment analysis, H5 hypothesis).
