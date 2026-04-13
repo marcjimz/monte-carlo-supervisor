@@ -1,10 +1,34 @@
-import { useEffect, useState, useRef } from "react";
-import { X, Plus, Send, MessageSquare } from "lucide-react";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { X, Plus, Send, MessageSquare, Pencil, Bot, Play } from "lucide-react";
 import { api } from "../../lib/api";
-import type { Thread, Message } from "../../lib/types";
+import { useUser } from "../../lib/user-context";
+import { getInitials } from "../../lib/utils";
+import type { Thread, Message, SimulationTriggeredEvent } from "../../lib/types";
 import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { Spinner } from "../ui/spinner";
+import { MarkdownContent } from "../ui/markdown";
+
+const SIM_TYPE_LABELS: Record<string, string> = {
+  cost_comparison: "Cost Comparison",
+  system_cost_roi: "System Cost ROI",
+  patient_volume: "Patient Volume",
+  revenue_projection: "Revenue Projection",
+};
+
+const THINKING_MESSAGES = [
+  "Agent thinking...",
+  "Consulting the data...",
+  "Querying the warehouse...",
+  "Orchestrating agents...",
+  "Analyzing patterns...",
+  "Crunching numbers...",
+  "Connecting the dots...",
+  "Routing to the right agent...",
+  "Searching for insights...",
+  "Running the numbers...",
+];
 
 interface Props {
   analysisId: string;
@@ -12,11 +36,20 @@ interface Props {
 }
 
 export function ThreadDrawer({ analysisId, onClose }: Props) {
+  const { user } = useUser();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
+  const [thinkingMsg, setThinkingMsg] = useState("");
+  const [triggeredSims, setTriggeredSims] = useState<SimulationTriggeredEvent[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Thread title editing
+  const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+
   const messagesEnd = useRef<HTMLDivElement>(null);
 
   const fetchThreads = () => {
@@ -43,7 +76,21 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeThread?.messages]);
+  }, [activeThread?.messages, streamingContent]);
+
+  // Rotate thinking messages while waiting for first token
+  useEffect(() => {
+    if (!sending || streamingContent) return;
+    setThinkingMsg(
+      THINKING_MESSAGES[Math.floor(Math.random() * THINKING_MESSAGES.length)]!,
+    );
+    const interval = setInterval(() => {
+      setThinkingMsg(
+        THINKING_MESSAGES[Math.floor(Math.random() * THINKING_MESSAGES.length)]!,
+      );
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [sending, streamingContent]);
 
   const handleCreateThread = async () => {
     const thread = await api.post<Thread>(
@@ -54,14 +101,35 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
     loadThread(thread.id);
   };
 
-  const handleSend = async () => {
+  const handleSaveTitle = async (threadId: string) => {
+    if (!editTitle.trim()) {
+      setEditingThreadId(null);
+      return;
+    }
+    await api.patch(`/threads/${threadId}`, { title: editTitle.trim() });
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId ? { ...t, title: editTitle.trim() } : t,
+      ),
+    );
+    if (activeThread?.id === threadId) {
+      setActiveThread((prev) =>
+        prev ? { ...prev, title: editTitle.trim() } : prev,
+      );
+    }
+    setEditingThreadId(null);
+  };
+
+  const handleSend = useCallback(async () => {
     if (!message.trim() || !activeThread || sending) return;
     setSending(true);
+    setStreamingContent("");
+    setTriggeredSims([]);
     const content = message;
     setMessage("");
 
-    // Optimistic update
-    const tempMsg: Message = {
+    // Optimistic user message
+    const tempUserMsg: Message = {
       id: crypto.randomUUID(),
       thread_id: activeThread.id,
       role: "user",
@@ -70,36 +138,83 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
       created_at: new Date().toISOString(),
     };
     setActiveThread((prev) =>
-      prev ? { ...prev, messages: [...prev.messages, tempMsg] } : prev,
+      prev ? { ...prev, messages: [...prev.messages, tempUserMsg] } : prev,
     );
 
     try {
-      const result = await api.post<{
-        user_message: Message;
-        assistant_message: Message;
-      }>(`/threads/${activeThread.id}/messages`, { content });
+      const resp = await fetch(`/api/threads/${activeThread.id}/messages/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
 
-      // Replace optimistic with real + add assistant
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Stream failed: ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+      let finalMessage: Message | null = null;
+      let realUserMsg: Message | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop()!;
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === "user_message") {
+              realUserMsg = data.message;
+            } else if (data.type === "delta") {
+              accumulated += data.content;
+              setStreamingContent(accumulated);
+            } else if (data.type === "simulation_triggered") {
+              setTriggeredSims((prev) => [...prev, data.simulation]);
+            } else if (data.type === "done") {
+              finalMessage = data.message;
+            }
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
+
+      // Replace optimistic messages with real ones
       setActiveThread((prev) => {
         if (!prev) return prev;
-        const msgs = prev.messages.filter((m) => m.id !== tempMsg.id);
-        return {
-          ...prev,
-          messages: [...msgs, result.user_message, result.assistant_message],
-        };
+        const msgs = prev.messages.filter((m) => m.id !== tempUserMsg.id);
+        if (realUserMsg) msgs.push(realUserMsg);
+        else msgs.push(tempUserMsg); // keep optimistic if no real one
+        if (finalMessage) msgs.push(finalMessage);
+        return { ...prev, messages: msgs };
       });
-    } catch {
+    } catch (err) {
+      console.error("Stream error:", err);
       // Remove optimistic message on error
       setActiveThread((prev) =>
         prev
-          ? { ...prev, messages: prev.messages.filter((m) => m.id !== tempMsg.id) }
+          ? {
+              ...prev,
+              messages: prev.messages.filter((m) => m.id !== tempUserMsg.id),
+            }
           : prev,
       );
-      setMessage(content); // Restore for retry
+      setMessage(content);
     } finally {
       setSending(false);
+      setStreamingContent("");
     }
-  };
+  }, [message, activeThread, sending]);
+
+  const initials = user?.email ? getInitials(user.email) : "U";
 
   return (
     <div className="fixed right-0 top-0 h-full w-96 border-l border-border bg-card shadow-lg z-30 flex flex-col">
@@ -118,6 +233,40 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
           </Button>
         </div>
       </div>
+
+      {/* Active thread title */}
+      {activeThread && (
+        <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+          {editingThreadId === activeThread.id ? (
+            <Input
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveTitle(activeThread.id);
+                if (e.key === "Escape") setEditingThreadId(null);
+              }}
+              onBlur={() => handleSaveTitle(activeThread.id)}
+              className="h-7 text-sm"
+              autoFocus
+            />
+          ) : (
+            <>
+              <span className="text-sm font-medium truncate flex-1">
+                {activeThread.title}
+              </span>
+              <button
+                onClick={() => {
+                  setEditingThreadId(activeThread.id);
+                  setEditTitle(activeThread.title);
+                }}
+                className="text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Thread list (collapsed) */}
       {threads.length > 1 && (
@@ -151,27 +300,85 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
               Start a conversation
             </Button>
           </div>
-        ) : activeThread.messages.length === 0 ? (
+        ) : activeThread.messages.length === 0 && !sending ? (
           <p className="text-center text-muted-foreground text-sm py-8">
             Ask the agent about simulations, data, or results.
           </p>
         ) : (
-          activeThread.messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
+          <>
+            {activeThread.messages.map((msg) => (
               <div
-                className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-foreground"
-                }`}
+                key={msg.id}
+                className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                {/* Assistant avatar (left) */}
+                {msg.role === "assistant" && (
+                  <div className="shrink-0 w-7 h-7 rounded-full bg-accent flex items-center justify-center mt-0.5">
+                    <Bot className="h-3.5 w-3.5 text-accent-foreground" />
+                  </div>
+                )}
+
+                <div
+                  className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-foreground"
+                  }`}
+                >
+                  {msg.role === "assistant" ? (
+                    <MarkdownContent content={msg.content} />
+                  ) : (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                </div>
+
+                {/* User avatar (right) */}
+                {msg.role === "user" && (
+                  <div className="shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center mt-0.5">
+                    <span className="text-[10px] font-bold text-primary-foreground">
+                      {initials}
+                    </span>
+                  </div>
+                )}
               </div>
-            </div>
-          ))
+            ))}
+
+            {/* Streaming assistant message */}
+            {sending && (
+              <div className="flex gap-2 justify-start">
+                <div className="shrink-0 w-7 h-7 rounded-full bg-accent flex items-center justify-center mt-0.5">
+                  <Bot className="h-3.5 w-3.5 text-accent-foreground" />
+                </div>
+                <div className="max-w-[75%] rounded-lg px-3 py-2 text-sm bg-muted text-foreground">
+                  {streamingContent ? (
+                    <MarkdownContent content={streamingContent} />
+                  ) : (
+                    <p className="text-muted-foreground italic flex items-center gap-2">
+                      <Spinner className="h-3 w-3" />
+                      {thinkingMsg}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Simulation triggered notifications */}
+            {triggeredSims.map((sim) => (
+              <div
+                key={sim.run_id}
+                className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs"
+              >
+                <Play className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span className="font-medium">Simulation triggered</span>
+                <span className="text-muted-foreground">
+                  {SIM_TYPE_LABELS[sim.simulation_type] ?? sim.simulation_type}
+                </span>
+                <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
+                  {sim.status}
+                </Badge>
+              </div>
+            ))}
+          </>
         )}
         <div ref={messagesEnd} />
       </div>

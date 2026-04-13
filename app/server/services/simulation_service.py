@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from server import db
 from server.services.sql_client import execute_uc_function
@@ -46,7 +49,70 @@ async def trigger_simulation(
             "p_seed": seed,
         },
     )
-    return json.loads(result_str)
+    result = json.loads(result_str)
+
+    # Extract job_run_id from nested job_response (Jobs API returns {"run_id": N})
+    job_resp = result.get("job_response")
+    if isinstance(job_resp, str):
+        try:
+            job_resp = json.loads(job_resp)
+        except (json.JSONDecodeError, TypeError):
+            job_resp = None
+    if isinstance(job_resp, dict) and "run_id" in job_resp:
+        result["job_run_id"] = job_resp["run_id"]
+
+    # Insert a SUBMITTED placeholder into Lakebase so the UI sees it immediately
+    try:
+        await insert_submitted_placeholder(
+            simulation_type, parameters, num_simulations, seed,
+            job_run_id=str(result.get("job_run_id", "")),
+        )
+    except Exception:
+        logger.warning("Failed to insert SUBMITTED placeholder", exc_info=True)
+
+    return result
+
+
+async def insert_submitted_placeholder(
+    simulation_type: str,
+    parameters: dict,
+    num_simulations: int = 10000,
+    seed: int = 42,
+    job_run_id: str = "",
+) -> dict:
+    """Insert a SUBMITTED placeholder into Lakebase so the UI sees it immediately.
+
+    Returns the placeholder metadata dict matching sync_simulation_runs schema.
+    """
+    canonical_params = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
+    placeholder_run_id = f"pending-{uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}|default"
+    params_hash = hashlib.sha256(payload.encode()).hexdigest()
+
+    await db.execute(
+        """INSERT INTO sync_simulation_runs
+           (run_id, simulation_type, parameters, params_hash, seed,
+            num_simulations, status, job_run_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (run_id) DO NOTHING""",
+        placeholder_run_id, simulation_type, canonical_params, params_hash,
+        seed, num_simulations, "SUBMITTED",
+        str(job_run_id), now, now,
+    )
+
+    return {
+        "run_id": placeholder_run_id,
+        "simulation_type": simulation_type,
+        "parameters": canonical_params,
+        "params_hash": params_hash,
+        "seed": seed,
+        "num_simulations": num_simulations,
+        "status": "SUBMITTED",
+        "job_run_id": str(job_run_id),
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 async def list_simulations(

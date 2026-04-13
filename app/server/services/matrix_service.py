@@ -79,6 +79,35 @@ async def get_matrix(matrix_id: UUID) -> dict | None:
     return result
 
 
+async def update_matrix(matrix_id: UUID, name: str | None, description: str | None) -> dict | None:
+    """Update matrix name and/or description."""
+    fields = []
+    args = []
+    idx = 1
+
+    if name is not None:
+        fields.append(f"name = ${idx}")
+        args.append(name)
+        idx += 1
+
+    if description is not None:
+        fields.append(f"description = ${idx}")
+        args.append(description)
+        idx += 1
+
+    if not fields:
+        return await get_matrix(matrix_id)
+
+    fields.append("updated_at = NOW()")
+    args.append(matrix_id)
+
+    await db.fetch_one(
+        f"UPDATE analysis_matrices SET {', '.join(fields)} WHERE id = ${idx} RETURNING *",
+        *args,
+    )
+    return await get_matrix(matrix_id)
+
+
 async def delete_matrix(matrix_id: UUID) -> bool:
     """Delete a matrix and cascade to cells."""
     result = await db.execute(

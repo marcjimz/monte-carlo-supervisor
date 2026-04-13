@@ -55,6 +55,7 @@ export interface Matrix {
   id: string;
   analysis_id: string;
   name: string;
+  description: string | null;
   simulation_type: string;
   row_parameter: string;
   row_values: number[];
@@ -127,6 +128,19 @@ export interface SimulationResult {
 
 export interface SimulationDetail extends SimulationRun {
   results: SimulationResult[];
+}
+
+export interface SimulationTriggeredEvent {
+  run_id: string;
+  simulation_type: string;
+  parameters: string;
+  params_hash: string;
+  seed: number;
+  num_simulations: number;
+  status: string;
+  job_run_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DistributionSpec {

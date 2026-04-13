@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/api";
+import { useUser } from "../lib/user-context";
 import type { Analysis } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import { Button } from "../components/ui/button";
@@ -14,6 +15,19 @@ export function AnalysesPage() {
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const { user } = useUser();
+
+  const handleDelete = async (e: React.MouseEvent, analysisId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm("Delete this analysis? This cannot be undone.")) return;
+    try {
+      await api.delete(`/analyses/${analysisId}`);
+      setAnalyses((prev) => prev.filter((a) => a.id !== analysisId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchAnalyses = () => {
     setLoading(true);
@@ -74,9 +88,20 @@ export function AnalysesPage() {
                     {a.description}
                   </CardDescription>
                 )}
-                <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>{a.owner_email}</span>
-                  <span>{formatDate(a.created_at)}</span>
+                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    <span>{a.owner_email}</span>
+                    <span>{formatDate(a.created_at)}</span>
+                  </div>
+                  {user?.email === a.owner_email && (
+                    <button
+                      onClick={(e) => handleDelete(e, a.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1 -m-1"
+                      title="Delete analysis"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </Card>
             </Link>

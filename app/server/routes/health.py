@@ -54,4 +54,22 @@ async def simulation_types():
             "schema": type_config.get("schema", ""),
         }
 
-    return {"simulation_types": types}
+    result: dict = {"simulation_types": types}
+    if settings.dashboard_id:
+        result["dashboard_id"] = settings.dashboard_id
+        result["dashboard_url"] = (
+            f"https://{settings.databricks_host}/embed/dashboardsv3/{settings.dashboard_id}"
+            if settings.databricks_host
+            else ""
+        )
+    return result
+
+
+@router.post("/admin/reseed")
+async def reseed_demo_data():
+    """Delete and re-seed demo data."""
+    from server.services.seed_service import delete_demo_data, seed_demo_data
+
+    await delete_demo_data()
+    await seed_demo_data()
+    return {"status": "reseeded"}

@@ -14,3 +14,7 @@ env:
     value: mas-97e7e569-endpoint
   - name: SQL_WAREHOUSE_ID
     value: 0cd7ea0fa4c57f0f
+  - name: DASHBOARD_ID
+    value: "01f136d736ae1ce7b649daca07537d64"
+  - name: SEED_DEMO_DATA
+    value: "true"

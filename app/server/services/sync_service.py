@@ -64,6 +64,29 @@ async def sync_simulation_runs():
         )
         count += 1
 
+    # Clean up SUBMITTED placeholders that now have a real counterpart
+    try:
+        deleted = await db.execute(
+            """DELETE FROM sync_simulation_runs s
+               WHERE s.status = 'SUBMITTED'
+               AND EXISTS (
+                   SELECT 1 FROM sync_simulation_runs r
+                   WHERE r.simulation_type = s.simulation_type
+                     AND r.parameters = s.parameters
+                     AND r.seed = s.seed
+                     AND r.num_simulations = s.num_simulations
+                     AND r.status != 'SUBMITTED'
+               )"""
+        )
+        # Also clean up stale placeholders older than 30 minutes with no match
+        await db.execute(
+            """DELETE FROM sync_simulation_runs
+               WHERE status = 'SUBMITTED'
+               AND created_at < (NOW() - INTERVAL '30 minutes')::text"""
+        )
+    except Exception:
+        logger.warning("Failed to clean up SUBMITTED placeholders", exc_info=True)
+
     # Only update sync metadata if query succeeded (even if 0 rows from incremental)
     if rows is not None:
         await db.execute(

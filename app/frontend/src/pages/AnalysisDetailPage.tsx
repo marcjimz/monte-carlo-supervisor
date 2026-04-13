@@ -1,25 +1,38 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import * as Tabs from "@radix-ui/react-tabs";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Pencil, Check, X } from "lucide-react";
 import { api } from "../lib/api";
+import { useUser } from "../lib/user-context";
 import type { AnalysisDetail, Matrix, SimulationTypeConfig } from "../lib/types";
 import { cn } from "../lib/utils";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Spinner } from "../components/ui/spinner";
 import { MatrixBuilder } from "../components/matrices/MatrixBuilder";
 import { MatrixView } from "../components/matrices/MatrixView";
 import { SimulationBrowser } from "../components/simulations/SimulationBrowser";
 import { ThreadDrawer } from "../components/threads/ThreadDrawer";
+import { DistributionsPanel } from "../components/distributions/DistributionsPanel";
 
 export function AnalysisDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useUser();
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
   const [matrices, setMatrices] = useState<Matrix[]>([]);
   const [simTypes, setSimTypes] = useState<Record<string, SimulationTypeConfig>>({});
+  const [dashboardUrl, setDashboardUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Inline editing state
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [editDesc, setEditDesc] = useState("");
+
+  const isOwner = user?.email === analysis?.owner_email;
 
   const fetchAnalysis = useCallback(() => {
     if (!id) return;
@@ -42,10 +55,37 @@ export function AnalysisDetailPage() {
     fetchAnalysis();
     fetchMatrices();
     api
-      .get<{ simulation_types: Record<string, SimulationTypeConfig> }>("/config/simulation-types")
-      .then((data) => setSimTypes(data.simulation_types))
+      .get<{
+        simulation_types: Record<string, SimulationTypeConfig>;
+        dashboard_url?: string;
+      }>("/config/simulation-types")
+      .then((data) => {
+        setSimTypes(data.simulation_types);
+        if (data.dashboard_url) setDashboardUrl(data.dashboard_url);
+      })
       .catch(console.error);
   }, [fetchAnalysis, fetchMatrices]);
+
+  const handleSaveName = async () => {
+    if (!editName.trim() || !id) {
+      setEditingName(false);
+      return;
+    }
+    await api.patch(`/analyses/${id}`, { name: editName.trim() });
+    setAnalysis((prev) => (prev ? { ...prev, name: editName.trim() } : prev));
+    setEditingName(false);
+  };
+
+  const handleSaveDesc = async () => {
+    if (!id) {
+      setEditingDesc(false);
+      return;
+    }
+    const val = editDesc.trim() || null;
+    await api.patch(`/analyses/${id}`, { description: val });
+    setAnalysis((prev) => (prev ? { ...prev, description: val } : prev));
+    setEditingDesc(false);
+  };
 
   if (loading) {
     return (
@@ -64,24 +104,97 @@ export function AnalysisDetailPage() {
       <div className={cn("flex-1 overflow-y-auto", drawerOpen && "mr-96")}>
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold">{analysis.name}</h2>
+              {editingName ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveName();
+                      if (e.key === "Escape") setEditingName(false);
+                    }}
+                    className="h-9 text-xl font-bold w-80"
+                    autoFocus
+                  />
+                  <Button variant="ghost" size="icon" onClick={handleSaveName}>
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setEditingName(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold">{analysis.name}</h2>
+                  {isOwner && (
+                    <button
+                      onClick={() => {
+                        setEditName(analysis.name);
+                        setEditingName(true);
+                      }}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </>
+              )}
               <Badge
                 variant={analysis.status === "published" ? "success" : "secondary"}
               >
                 {analysis.status}
               </Badge>
             </div>
-            {analysis.description && (
-              <p className="text-muted-foreground mt-1">{analysis.description}</p>
+
+            {editingDesc ? (
+              <div className="mt-2 flex gap-1 items-start">
+                <textarea
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="flex-1 rounded-md border border-border bg-transparent px-3 py-2 text-sm resize-none"
+                  rows={3}
+                  autoFocus
+                />
+                <div className="flex flex-col gap-1">
+                  <Button variant="ghost" size="icon" onClick={handleSaveDesc}>
+                    <Check className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setEditingDesc(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 mt-1">
+                {analysis.description ? (
+                  <p className="text-muted-foreground">{analysis.description}</p>
+                ) : isOwner ? (
+                  <p className="text-muted-foreground/50 italic">
+                    Add a description...
+                  </p>
+                ) : null}
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setEditDesc(analysis.description ?? "");
+                      setEditingDesc(true);
+                    }}
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             )}
+
             <p className="text-xs text-muted-foreground mt-1">
               Owner: {analysis.owner_email}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {analysis.status === "draft" && (
+          <div className="flex items-center gap-2 shrink-0">
+            {isOwner && analysis.status === "draft" && (
               <Button
                 variant="outline"
                 size="sm"
@@ -104,32 +217,40 @@ export function AnalysisDetailPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs.Root defaultValue="matrices">
+        <Tabs.Root defaultValue="distributions">
           <Tabs.List className="flex border-b border-border mb-6">
-            {["matrices", "simulations"].map((tab) => (
+            {["distributions", "matrices", ...(analysis.status === "published" && !isOwner ? [] : ["simulations"])].map((tab) => (
               <Tabs.Trigger
                 key={tab}
                 value={tab}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground border-b-2 border-transparent data-[state=active]:text-foreground data-[state=active]:border-primary transition-colors"
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab === "distributions"
+                  ? "Explore & Chat with your Data"
+                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
               </Tabs.Trigger>
             ))}
           </Tabs.List>
 
+          <Tabs.Content value="distributions">
+            <DistributionsPanel dashboardUrl={dashboardUrl} />
+          </Tabs.Content>
+
           <Tabs.Content value="matrices">
-            <MatrixBuilder
-              analysisId={id!}
-              simTypes={simTypes}
-              onCreated={fetchMatrices}
-            />
+            {isOwner && (
+              <MatrixBuilder
+                analysisId={id!}
+                simTypes={simTypes}
+                onCreated={fetchMatrices}
+              />
+            )}
             {matrices.length === 0 ? (
               <p className="text-muted-foreground text-sm py-4">
-                No matrices yet. Create one above.
+                {isOwner ? "No matrices yet. Create one above." : "No matrices yet."}
               </p>
             ) : (
               matrices.map((m) => (
-                <MatrixView key={m.id} matrixId={m.id} />
+                <MatrixView key={m.id} matrixId={m.id} readOnly={!isOwner} />
               ))
             )}
           </Tabs.Content>
@@ -139,6 +260,7 @@ export function AnalysisDetailPage() {
               analysisId={id!}
               linkedRunIds={analysis.simulations.map((s) => s.run_id)}
               onLink={fetchAnalysis}
+              isOwner={isOwner}
             />
           </Tabs.Content>
         </Tabs.Root>

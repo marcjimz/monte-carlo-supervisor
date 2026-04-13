@@ -7,8 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from server.auth import User, get_current_user
-from server.models.matrices import MatrixCreate
-from server.services import matrix_service
+from server.models.matrices import MatrixCreate, MatrixUpdate
+from server.services import analysis_service, matrix_service
 
 router = APIRouter(tags=["matrices"])
 
@@ -23,6 +23,8 @@ async def list_matrices(analysis_id: UUID, user: User = Depends(get_current_user
 async def create_matrix(
     analysis_id: UUID, body: MatrixCreate, user: User = Depends(get_current_user)
 ):
+    if not await analysis_service.can_edit(analysis_id, user.email):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this analysis")
     matrix = await matrix_service.create_matrix(
         analysis_id=analysis_id,
         name=body.name,
@@ -49,15 +51,36 @@ async def get_matrix(matrix_id: UUID, user: User = Depends(get_current_user)):
     return matrix
 
 
+@router.patch("/matrices/{matrix_id}")
+async def update_matrix(
+    matrix_id: UUID, body: MatrixUpdate, user: User = Depends(get_current_user)
+):
+    matrix = await matrix_service.get_matrix(matrix_id)
+    if not matrix:
+        raise HTTPException(status_code=404, detail="Matrix not found")
+    if not await analysis_service.can_edit(matrix["analysis_id"], user.email):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this analysis")
+    updated = await matrix_service.update_matrix(matrix_id, body.name, body.description)
+    return updated
+
+
 @router.delete("/matrices/{matrix_id}", status_code=204)
 async def delete_matrix(matrix_id: UUID, user: User = Depends(get_current_user)):
-    deleted = await matrix_service.delete_matrix(matrix_id)
-    if not deleted:
+    matrix = await matrix_service.get_matrix(matrix_id)
+    if not matrix:
         raise HTTPException(status_code=404, detail="Matrix not found")
+    if not await analysis_service.can_edit(matrix["analysis_id"], user.email):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this analysis")
+    await matrix_service.delete_matrix(matrix_id)
 
 
 @router.post("/matrices/{matrix_id}/run")
 async def run_matrix(matrix_id: UUID, user: User = Depends(get_current_user)):
+    matrix = await matrix_service.get_matrix(matrix_id)
+    if not matrix:
+        raise HTTPException(status_code=404, detail="Matrix not found")
+    if not await analysis_service.can_edit(matrix["analysis_id"], user.email):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this analysis")
     result = await matrix_service.run_matrix(matrix_id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
@@ -68,6 +91,11 @@ async def run_matrix(matrix_id: UUID, user: User = Depends(get_current_user)):
 async def run_cell(
     matrix_id: UUID, cell_id: UUID, user: User = Depends(get_current_user)
 ):
+    matrix = await matrix_service.get_matrix(matrix_id)
+    if not matrix:
+        raise HTTPException(status_code=404, detail="Matrix not found")
+    if not await analysis_service.can_edit(matrix["analysis_id"], user.email):
+        raise HTTPException(status_code=403, detail="Not authorized to edit this analysis")
     result = await matrix_service.run_cell(matrix_id, cell_id)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])

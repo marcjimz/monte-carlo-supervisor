@@ -9,10 +9,12 @@ const NAV_ITEMS = [
 
 export function Sidebar() {
   return (
-    <aside className="flex w-56 flex-col border-r border-border bg-card">
-      <div className="flex h-14 items-center px-4 border-b border-border">
-        <FlaskConical className="h-6 w-6 text-primary mr-2" />
-        <span className="font-bold text-sm">MC Supervisor</span>
+    <aside className="flex w-56 flex-col border-r border-primary bg-card">
+      <div className="flex h-14 items-center gap-2 px-4 bg-primary border-b border-border">
+        <img src="/logo.png" alt="Intermountain Health" className="h-7" />
+        <span className="font-bold text-sm leading-tight text-primary-foreground">
+          Accelerate
+        </span>
       </div>
       <nav className="flex-1 p-3 space-y-1">
         {NAV_ITEMS.map((item) => (
@@ -33,6 +35,9 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      <div className="p-3 border-t border-border text-[10px] text-muted-foreground">
+        Powered by Intermountain Health
+      </div>
     </aside>
   );
 }

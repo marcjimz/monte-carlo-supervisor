@@ -107,6 +107,15 @@ else:
     dist_version = "default"
     print("[DEFAULT] No fitted distributions found, using config defaults")
 
+# Apply user-provided distribution overrides (if any)
+dist_overrides = params_dict.pop("distribution_overrides", {})
+if dist_overrides:
+    from monte_carlo.distribution_sampler import validate_spec
+    for dist_name, override_spec in dist_overrides.items():
+        validate_spec(override_spec)  # Raises ValueError if malformed
+        dist_specs[dist_name] = override_spec
+        print(f"[OVERRIDE] {dist_name} → {override_spec['type']}({override_spec['params']})")
+
 # Build enriched params for downstream simulation (includes distributions)
 enriched_params = {**params_dict, "distributions": dist_specs, "distribution_version": dist_version}
 enriched_json = json.dumps(enriched_params)

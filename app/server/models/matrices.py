@@ -23,6 +23,11 @@ class MatrixCreate(BaseModel):
     seed: int = 42
 
 
+class MatrixUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class MatrixCell(BaseModel):
     id: UUID
     matrix_id: UUID
@@ -42,6 +47,7 @@ class Matrix(BaseModel):
     id: UUID
     analysis_id: UUID
     name: str
+    description: str | None = None
     simulation_type: str
     row_parameter: str
     row_values: list[float]

@@ -32,3 +32,10 @@ export function formatDate(dateStr: string): string {
 export function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
+
+export function getInitials(email: string): string {
+  const parts = email.split("@")[0]?.split(/[._-]/) ?? [];
+  return parts.length >= 2
+    ? (parts[0]![0]! + parts[1]![0]!).toUpperCase()
+    : (parts[0] ?? "U").slice(0, 2).toUpperCase();
+}

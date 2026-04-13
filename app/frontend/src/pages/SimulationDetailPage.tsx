@@ -11,15 +11,42 @@ import {
 } from "recharts";
 import { ArrowLeft } from "lucide-react";
 import { api } from "../lib/api";
-import type { SimulationDetail, SimulationResult } from "../lib/types";
+import type { SimulationDetail, SimulationResult, SimulationTypeConfig } from "../lib/types";
 import { formatNumber } from "../lib/utils";
 import { Badge } from "../components/ui/badge";
 import { Card, CardTitle } from "../components/ui/card";
 import { Spinner } from "../components/ui/spinner";
 
+const DIST_NAME_LABELS: Record<string, string> = {
+  encounter_volume: "Volume",
+  gross_charges: "Gross Charges",
+  denial_rate: "Denial Rate",
+  inperson_cost: "In-Person Cost",
+  virtual_cost: "Virtual Cost",
+  baseline_cost: "Baseline Cost",
+  reduction_noise: "Reduction Noise",
+};
+
+const DIST_TYPE_LABELS: Record<string, string> = {
+  normal: "Normal",
+  lognormal: "Log-Normal",
+  beta: "Beta",
+  gamma: "Gamma",
+  uniform: "Uniform",
+};
+
+const PARAM_LABELS: Record<string, Record<string, string>> = {
+  normal: { loc: "Mean", scale: "Std Dev" },
+  lognormal: { mean: "Log Mean", sigma: "Log Std Dev" },
+  beta: { a: "\u03b1", b: "\u03b2" },
+  gamma: { shape: "k", scale: "\u03b8" },
+  uniform: { low: "Min", high: "Max" },
+};
+
 export function SimulationDetailPage() {
   const { runId } = useParams<{ runId: string }>();
   const [sim, setSim] = useState<SimulationDetail | null>(null);
+  const [simTypes, setSimTypes] = useState<Record<string, SimulationTypeConfig>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,6 +56,10 @@ export function SimulationDetailPage() {
       .then(setSim)
       .catch(console.error)
       .finally(() => setLoading(false));
+    api
+      .get<{ simulation_types: Record<string, SimulationTypeConfig> }>("/config/simulation-types")
+      .then((data) => setSimTypes(data.simulation_types))
+      .catch(console.error);
   }, [runId]);
 
   if (loading) {
@@ -45,10 +76,37 @@ export function SimulationDetailPage() {
 
   // Parse parameters
   let params: Record<string, unknown> = {};
+  let distOverrides: Record<string, { type: string; params: Record<string, number> }> = {};
   try {
-    params = JSON.parse(sim.parameters);
+    const parsed = JSON.parse(sim.parameters);
+    distOverrides = parsed.distribution_overrides ?? {};
+    // Remove distribution_overrides from display params
+    const { distribution_overrides: _, ...rest } = parsed;
+    params = rest;
   } catch {
     // ignore
+  }
+
+  // Build distribution display: config defaults merged with any overrides
+  const typeConfig = simTypes[sim.simulation_type];
+  const distributions: Array<{
+    name: string;
+    label: string;
+    type: string;
+    params: Record<string, number>;
+    overridden: boolean;
+  }> = [];
+  if (typeConfig) {
+    for (const [name, def] of Object.entries(typeConfig.distributions)) {
+      const override = distOverrides[name];
+      distributions.push({
+        name,
+        label: DIST_NAME_LABELS[name] ?? name,
+        type: override?.type ?? def.default_spec.type,
+        params: override?.params ?? def.default_spec.params,
+        overridden: !!override,
+      });
+    }
   }
 
   // Group results by metric
@@ -113,6 +171,34 @@ export function SimulationDetailPage() {
         </div>
       </Card>
 
+      {/* Distributions */}
+      {distributions.length > 0 && (
+        <Card className="mb-6">
+          <CardTitle className="text-sm mb-3">Distributions</CardTitle>
+          <div className="grid gap-2 md:grid-cols-2">
+            {distributions.map((d) => (
+              <div
+                key={d.name}
+                className="border border-border rounded-md px-3 py-2 bg-muted/30"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">{d.label}</span>
+                  <Badge variant="secondary">{DIST_TYPE_LABELS[d.type] ?? d.type}</Badge>
+                  {d.overridden && (
+                    <Badge variant="warning">Custom</Badge>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground font-mono mt-1">
+                  {Object.entries(d.params)
+                    .map(([k, v]) => `${PARAM_LABELS[d.type]?.[k] ?? k}=${v}`)
+                    .join(", ")}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Results by metric */}
       {Array.from(metricGroups.entries()).map(([metric, results]) => (
         <Card key={metric} className="mb-6">
@@ -170,7 +256,7 @@ export function SimulationDetailPage() {
               <XAxis dataKey="name" fontSize={12} />
               <YAxis fontSize={12} />
               <Tooltip />
-              <Bar dataKey="mean" fill="#1e40af" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="mean" fill="#110057" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>

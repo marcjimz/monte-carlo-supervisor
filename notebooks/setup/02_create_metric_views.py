@@ -83,7 +83,7 @@ display(
 # MAGIC
 # MAGIC | View | Purpose |
 # MAGIC |------|---------|
-# MAGIC | `mv_wh_cost_by_condition` | Cost KPIs by ICD-10 condition, encounter type, payer |
+# MAGIC | `mv_wh_cost_by_condition` | Cost KPIs by department, ICD-10 condition, encounter type, payer |
 # MAGIC | `mv_wh_encounter_summary` | Encounter volume by type, department, and time |
 # MAGIC | `mv_wh_diagnosis_prevalence` | Diagnosis prevalence by condition and time |
 # MAGIC | `mv_wh_patient_demographics` | Population health by age, insurance, chronic conditions |

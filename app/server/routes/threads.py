@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from server.auth import User, get_current_user
 from server.models.threads import MessageCreate, ThreadCreate, ThreadUpdate
@@ -60,3 +61,14 @@ async def send_message(
 ):
     result = await thread_service.send_message(thread_id, body.content)
     return result
+
+
+@router.post("/threads/{thread_id}/messages/stream")
+async def send_message_stream(
+    thread_id: UUID, body: MessageCreate, user: User = Depends(get_current_user)
+):
+    return StreamingResponse(
+        thread_service.send_message_stream(thread_id, body.content),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
