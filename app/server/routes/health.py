@@ -65,7 +65,7 @@ async def simulation_types():
     if settings.genie_space_id:
         result["genie_space_id"] = settings.genie_space_id
         result["genie_url"] = (
-            f"https://{settings.databricks_host}/genie/rooms/{settings.genie_space_id}/embed"
+            f"https://{settings.databricks_host}/genie/rooms/{settings.genie_space_id}"
             if settings.databricks_host
             else ""
         )
