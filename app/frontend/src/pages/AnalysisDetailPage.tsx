@@ -253,10 +253,10 @@ export function AnalysisDetailPage() {
             {[
               { value: "explore", label: "Explore Data" },
               { value: "chat", label: "Chat with Data" },
-              { value: "matrices", label: "Matrices" },
               ...(analysis.status === "published" && !isOwner
                 ? []
                 : [{ value: "simulations", label: "Simulations" }]),
+              { value: "matrices", label: "Matrices" },
             ].map((tab) => (
               <Tabs.Trigger
                 key={tab.value}
