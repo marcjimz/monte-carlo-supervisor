@@ -252,7 +252,7 @@ export function AnalysisDetailPage() {
           <Tabs.List className="flex border-b border-border mb-6">
             {[
               { value: "explore", label: "Explore Data" },
-              { value: "chat", label: "Chat with Data" },
+              { value: "chat", label: "Chat with Data", disabled: true },
               ...(analysis.status === "published" && !isOwner
                 ? []
                 : [{ value: "simulations", label: "Simulations" }]),
@@ -261,7 +261,8 @@ export function AnalysisDetailPage() {
               <Tabs.Trigger
                 key={tab.value}
                 value={tab.value}
-                className="px-4 py-2 text-sm font-medium text-muted-foreground border-b-2 border-transparent data-[state=active]:text-foreground data-[state=active]:border-primary transition-colors"
+                disabled={"disabled" in tab && tab.disabled}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground border-b-2 border-transparent data-[state=active]:text-foreground data-[state=active]:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {tab.label}
               </Tabs.Trigger>
