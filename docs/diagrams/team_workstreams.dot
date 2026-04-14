@@ -41,7 +41,7 @@ digraph TeamWorkstreams {
 
             w1_t1 [label="12 Hospital Tables\n(Delta Lake)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
             w1_t2 [label="6 UC Metric Views\n(Semantic Layer)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
-            w1_t3 [label="Data Quality\n+ Governance", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
+            w1_t3 [label="Data Quality,\nGovernance + RLS/CLM", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
 
             w1_skills [label="Skills: PySpark, Delta Lake,\nUnity Catalog, SQL", shape=box, style="filled,rounded", fillcolor="#D6EAFF", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#1B6ACB", penwidth=1];
 
