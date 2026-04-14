@@ -22,6 +22,15 @@ async def list_simulations(
     return {"simulations": runs}
 
 
+@router.get("/by-hash/{params_hash}")
+async def get_simulation_by_hash(params_hash: str, user: User = Depends(get_current_user)):
+    """Look up the most recent simulation by params_hash (stable across placeholder cleanup)."""
+    run = await simulation_service.get_simulation_by_hash(params_hash)
+    if not run:
+        raise HTTPException(status_code=404, detail="Simulation not found")
+    return run
+
+
 @router.get("/{run_id}")
 async def get_simulation(run_id: str, user: User = Depends(get_current_user)):
     run = await simulation_service.get_simulation(run_id)

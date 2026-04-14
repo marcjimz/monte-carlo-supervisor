@@ -64,6 +64,27 @@ async def sync_simulation_runs():
         )
         count += 1
 
+    # Transfer analysis links from placeholder run_ids to real run_ids
+    # before deleting placeholders (so the link survives cleanup)
+    try:
+        await db.execute(
+            """INSERT INTO analysis_simulations (analysis_id, run_id, added_by)
+               SELECT a.analysis_id, r.run_id, a.added_by
+               FROM analysis_simulations a
+               JOIN sync_simulation_runs p
+                 ON p.run_id = a.run_id AND p.status = 'SUBMITTED'
+               JOIN sync_simulation_runs r
+                 ON r.simulation_type = p.simulation_type
+                AND r.parameters = p.parameters
+                AND r.seed = p.seed
+                AND r.num_simulations = p.num_simulations
+                AND r.status != 'SUBMITTED'
+                AND r.run_id != p.run_id
+               ON CONFLICT (analysis_id, run_id) DO NOTHING"""
+        )
+    except Exception:
+        logger.warning("Failed to transfer analysis links from placeholders", exc_info=True)
+
     # Clean up SUBMITTED placeholders that now have a real counterpart
     try:
         await db.execute(

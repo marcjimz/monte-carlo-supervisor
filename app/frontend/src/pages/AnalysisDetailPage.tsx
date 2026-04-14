@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import * as Tabs from "@radix-ui/react-tabs";
-import { MessageSquare, Pencil, Check, X } from "lucide-react";
+import { MessageSquare, Pencil, Check, X, RefreshCw } from "lucide-react";
 import { api } from "../lib/api";
 import { useUser } from "../lib/user-context";
 import type { AnalysisDetail, Matrix, SimulationTypeConfig } from "../lib/types";
@@ -27,6 +27,7 @@ export function AnalysisDetailPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState(768); // default double-wide
   const [simRefreshKey, setSimRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Inline editing state
   const [editingName, setEditingName] = useState(false);
@@ -212,6 +213,26 @@ export function AnalysisDetailPage() {
               </Button>
             )}
             <Button
+              variant="outline"
+              size="icon"
+              title="Refresh data"
+              disabled={refreshing}
+              onClick={async () => {
+                setRefreshing(true);
+                try {
+                  await Promise.all([
+                    fetchAnalysis(),
+                    fetchMatrices(),
+                  ]);
+                  setSimRefreshKey((k) => k + 1);
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            </Button>
+            <Button
               variant={drawerOpen ? "default" : "outline"}
               size="icon"
               onClick={() => setDrawerOpen(!drawerOpen)}
@@ -289,6 +310,7 @@ export function AnalysisDetailPage() {
           onClose={() => setDrawerOpen(false)}
           width={drawerWidth}
           onWidthChange={setDrawerWidth}
+          onMatrixCreated={fetchMatrices}
         />
       )}
     </div>

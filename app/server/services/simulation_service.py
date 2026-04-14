@@ -165,6 +165,17 @@ async def get_simulation(run_id: str) -> dict | None:
     )
 
 
+async def get_simulation_by_hash(params_hash: str) -> dict | None:
+    """Get the most recent non-placeholder simulation by params_hash."""
+    return await db.fetch_one(
+        """SELECT * FROM sync_simulation_runs
+           WHERE params_hash = $1
+           ORDER BY CASE WHEN status = 'SUBMITTED' THEN 1 ELSE 0 END, updated_at DESC
+           LIMIT 1""",
+        params_hash,
+    )
+
+
 async def get_simulation_results(run_id: str) -> list[dict]:
     """Get results for a simulation run."""
     return await db.fetch_all(

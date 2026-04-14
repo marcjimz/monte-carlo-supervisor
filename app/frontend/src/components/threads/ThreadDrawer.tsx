@@ -35,12 +35,13 @@ interface Props {
   onClose: () => void;
   width: number;
   onWidthChange: (w: number) => void;
+  onMatrixCreated?: () => void;
 }
 
 const MIN_WIDTH = 384;   // w-96
 const MAX_WIDTH = 1200;
 
-export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Props) {
+export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatrixCreated }: Props) {
   const { user } = useUser();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -58,6 +59,31 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
 
   const messagesEnd = useRef<HTMLDivElement>(null);
 
+  // Poll for new messages when a matrix was created (background results arrive later)
+  useEffect(() => {
+    if (createdMatrices.length === 0 || !activeThread) return;
+
+    const knownCount = activeThread.messages.length;
+    const interval = setInterval(async () => {
+      try {
+        const updated = await api.get<Thread>(`/threads/${activeThread.id}`);
+        if (updated.messages.length > knownCount) {
+          setActiveThread(updated);
+          onMatrixCreated?.(); // refresh matrices too
+        }
+      } catch {
+        // ignore
+      }
+    }, 15_000); // every 15s
+
+    // Stop polling after 10 minutes
+    const timeout = setTimeout(() => clearInterval(interval), 10 * 60 * 1000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [createdMatrices.length, activeThread?.id]);
+
   // Poll triggered simulations for status updates
   useEffect(() => {
     const incomplete = triggeredSims.filter(
@@ -68,16 +94,29 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
     const interval = setInterval(async () => {
       for (const sim of incomplete) {
         try {
-          const updated = await api.get<{ status: string }>(`/simulations/${sim.run_id}`);
-          if (updated.status !== sim.status) {
+          // Try by run_id first, fall back to params_hash (placeholder may be cleaned up)
+          let updated: { status: string } | null = null;
+          try {
+            updated = await api.get<{ status: string }>(`/simulations/${sim.run_id}`);
+          } catch {
+            // Placeholder deleted by sync — look up real run by params_hash
+            if (sim.params_hash) {
+              try {
+                updated = await api.get<{ status: string }>(`/simulations/by-hash/${sim.params_hash}`);
+              } catch {
+                // not synced yet
+              }
+            }
+          }
+          if (updated && updated.status !== sim.status) {
             setTriggeredSims((prev) =>
               prev.map((s) =>
-                s.run_id === sim.run_id ? { ...s, status: updated.status } : s,
+                s.run_id === sim.run_id ? { ...s, status: updated!.status } : s,
               ),
             );
           }
         } catch {
-          // ignore — run_id may not be synced yet
+          // ignore
         }
       }
     }, 5000);
@@ -174,6 +213,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
       prev ? { ...prev, messages: [...prev.messages, tempUserMsg] } : prev,
     );
 
+    let accumulated = "";
     try {
       const resp = await fetch(`/api/threads/${activeThread.id}/messages/stream`, {
         method: "POST",
@@ -188,7 +228,6 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let accumulated = "";
       let finalMessage: Message | null = null;
       let realUserMsg: Message | null = null;
 
@@ -201,6 +240,8 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
         buffer = lines.pop()!;
 
         for (const line of lines) {
+          // Skip SSE comments (heartbeat keep-alives)
+          if (line.startsWith(":")) continue;
           if (!line.startsWith("data: ")) continue;
           try {
             const data = JSON.parse(line.slice(6));
@@ -213,6 +254,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
               setTriggeredSims((prev) => [...prev, data.simulation]);
             } else if (data.type === "matrix_created") {
               setCreatedMatrices((prev) => [...prev, data.matrix]);
+              onMatrixCreated?.();
             } else if (data.type === "done") {
               finalMessage = data.message;
             }
@@ -233,16 +275,28 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Prop
       });
     } catch (err) {
       console.error("Stream error:", err);
-      // Remove optimistic message on error
-      setActiveThread((prev) =>
-        prev
-          ? {
-              ...prev,
-              messages: prev.messages.filter((m) => m.id !== tempUserMsg.id),
-            }
-          : prev,
-      );
-      setMessage(content);
+      // If we already received content, keep it as the assistant message
+      // rather than discarding everything
+      setActiveThread((prev) => {
+        if (!prev) return prev;
+        const msgs = prev.messages.filter((m) => m.id !== tempUserMsg.id);
+        msgs.push(tempUserMsg); // keep the user message
+        if (accumulated) {
+          msgs.push({
+            id: crypto.randomUUID(),
+            thread_id: activeThread.id,
+            role: "assistant" as const,
+            content: accumulated,
+            metadata: null,
+            created_at: new Date().toISOString(),
+          });
+        }
+        return { ...prev, messages: msgs };
+      });
+      // Only restore text to input if nothing was received
+      if (!accumulated) {
+        setMessage(content);
+      }
     } finally {
       setSending(false);
       setStreamingContent("");
