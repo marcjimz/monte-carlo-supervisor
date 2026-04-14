@@ -38,8 +38,8 @@ export function AnalysisDetailPage() {
   const isOwner = user?.email === analysis?.owner_email;
 
   const fetchAnalysis = useCallback(() => {
-    if (!id) return;
-    api
+    if (!id) return Promise.resolve();
+    return api
       .get<AnalysisDetail>(`/analyses/${id}`)
       .then(setAnalysis)
       .catch(console.error)
@@ -47,8 +47,8 @@ export function AnalysisDetailPage() {
   }, [id]);
 
   const fetchMatrices = useCallback(() => {
-    if (!id) return;
-    api
+    if (!id) return Promise.resolve();
+    return api
       .get<{ matrices: Matrix[] }>(`/analyses/${id}/matrices`)
       .then((data) => setMatrices(data.matrices))
       .catch(console.error);
@@ -277,7 +277,7 @@ export function AnalysisDetailPage() {
             ) : (
               matrices.map((m) => (
                 <MatrixView
-                  key={m.id}
+                  key={`${m.id}-${simRefreshKey}`}
                   matrixId={m.id}
                   readOnly={!isOwner}
                   onDelete={() => setMatrices((prev) => prev.filter((x) => x.id !== m.id))}

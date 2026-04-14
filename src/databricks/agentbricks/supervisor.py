@@ -44,8 +44,9 @@ IMPORTANT: Never change parameters between calls. Always use identical values fo
 MATRIX WORKFLOW (for parameter sweeps):
 When the user wants to compare results across multiple parameter values (sensitivity analysis, parameter sweep, grid search):
 Step 1: Call matrix_builder with the simulation type, two parameters to sweep, and their value arrays.
-Step 2: The system will automatically create the matrix and trigger all cell simulations.
-Step 3: Tell the user the matrix has been created and they can view it on the Matrices tab.
+Step 2: The system will create the matrix with all cells in "pending" state.
+Step 3: Tell the user: "Your matrix has been created on the Matrices tab. Click **Run All** there to trigger the simulations, then results will populate as cells complete."
+IMPORTANT: The matrix is created but simulations are NOT automatically triggered. The user must click Run All on the Matrices tab.
 IMPORTANT: Use JSON arrays for p_row_values and p_col_values (e.g. '[0.05, 0.08, 0.10, 0.15]').
 IMPORTANT: Only override p_base_parameters for non-swept parameters the user explicitly mentions."""
 
@@ -171,10 +172,10 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
         {
             "name": "matrix_builder",
             "description": (
-                "Creates a parameter sweep matrix that runs multiple simulations varying "
-                "two parameters across a grid of values. Use this for sensitivity analysis, "
-                "parameter sweeps, or comparing outcomes across ranges. The system creates "
-                "the matrix and automatically triggers all cell simulations. "
+                "Creates a parameter sweep matrix for comparing outcomes across a grid of "
+                "two parameters. Use this for sensitivity analysis, parameter sweeps, or "
+                "comparing outcomes across ranges. The matrix is created with pending cells; "
+                "the user then clicks Run All on the Matrices tab to trigger simulations. "
                 f"Supports: {types_str}."
             ),
             "agent_type": "unity_catalog_function",

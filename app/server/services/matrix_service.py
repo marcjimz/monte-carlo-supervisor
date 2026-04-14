@@ -12,7 +12,7 @@ from server.services import analysis_service, simulation_service
 
 logger = logging.getLogger(__name__)
 
-MAX_CONCURRENT_TRIGGERS = 3
+MAX_CONCURRENT_TRIGGERS = 10
 
 
 async def create_matrix(
@@ -320,8 +320,12 @@ async def run_matrix(matrix_id: UUID) -> dict:
     if not matrix:
         return {"error": "Matrix not found"}
 
-    # Get pending/failed cells
-    cells = [c for c in matrix["cells"] if c["status"] in ("pending", "failed")]
+    # Get cells that need processing: pending, failed, or stuck running (no results)
+    cells = [
+        c for c in matrix["cells"]
+        if c["status"] in ("pending", "failed")
+        or (c["status"] in ("running", "queued") and c.get("result_mean") is None)
+    ]
 
     if not cells:
         return {"message": "No cells to run", "total": len(matrix["cells"])}

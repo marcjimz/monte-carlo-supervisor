@@ -368,8 +368,8 @@ async def _handle_matrix_builder(
         return None
     created_matrix_ids.add(dedup_key)
 
-    # Resolve output_metric and group columns from the app's own config.yaml
-    output_metric = args.get("p_output_metric") or ""
+    # Always resolve output_metric from config (MAS doesn't know correct metric names)
+    output_metric = ""
     output_group_key = None
     output_group_value = None
     try:
@@ -380,13 +380,11 @@ async def _handle_matrix_builder(
             cfg = yaml.safe_load(f)
         sim_cfg = cfg.get("simulation_types", {}).get(sim_type, {})
         agg = sim_cfg.get("aggregation", {})
-        if not output_metric:
-            output_metric = agg.get("value_column", "mean_value")
+        output_metric = agg.get("value_column", "mean_value")
         output_group_key = agg.get("group_column")
     except Exception:
         logger.debug("Could not resolve agg config for %s", sim_type)
-        if not output_metric:
-            output_metric = "mean_value"
+        output_metric = "mean_value"
 
     # Parse base_parameters
     try:
@@ -437,8 +435,8 @@ async def _handle_matrix_builder(
             seed=seed,
         )
 
-        # Kick off all cell simulations in background (with thread_id for auto-results)
-        asyncio.create_task(_run_matrix_background(matrix["id"], thread_id))
+        # Matrix created — user runs simulations via the UI "Run All" button.
+        # (Auto-trigger removed for reliability; can be re-enabled later.)
 
         # Build SSE payload
         matrix_payload = {

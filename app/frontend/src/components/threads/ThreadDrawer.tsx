@@ -59,31 +59,6 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
 
   const messagesEnd = useRef<HTMLDivElement>(null);
 
-  // Poll for new messages when a matrix was created (background results arrive later)
-  useEffect(() => {
-    if (createdMatrices.length === 0 || !activeThread) return;
-
-    const knownCount = activeThread.messages.length;
-    const interval = setInterval(async () => {
-      try {
-        const updated = await api.get<Thread>(`/threads/${activeThread.id}`);
-        if (updated.messages.length > knownCount) {
-          setActiveThread(updated);
-          onMatrixCreated?.(); // refresh matrices too
-        }
-      } catch {
-        // ignore
-      }
-    }, 15_000); // every 15s
-
-    // Stop polling after 10 minutes
-    const timeout = setTimeout(() => clearInterval(interval), 10 * 60 * 1000);
-    return () => {
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
-  }, [createdMatrices.length, activeThread?.id]);
-
   // Poll triggered simulations for status updates
   useEffect(() => {
     const incomplete = triggeredSims.filter(
@@ -521,7 +496,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
                   {matrix.rows}x{matrix.cols} ({matrix.total_cells} cells)
                 </span>
                 <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
-                  Running...
+                  Ready to run
                 </Badge>
               </div>
             ))}
