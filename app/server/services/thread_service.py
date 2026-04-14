@@ -172,67 +172,97 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
         mas_client = get_mas_client()
         stream = mas_client.invoke_stream(mas_messages)
 
-        # Use heartbeat to keep the SSE connection alive through the
-        # Databricks Apps reverse proxy during long MAS continuations.
-        while True:
+        # Use a queue to decouple the MAS stream consumer from the SSE
+        # producer.  Previously we used asyncio.wait_for(stream.__anext__())
+        # for heartbeats, but that throws CancelledError into the async
+        # generator on timeout — destroying the httpx stream connection.
+        # The queue approach keeps the consumer running uninterrupted.
+        _SENTINEL = object()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def _consume_stream():
             try:
-                event = await asyncio.wait_for(stream.__anext__(), timeout=15)
-            except StopAsyncIteration:
-                break
-            except asyncio.TimeoutError:
-                yield ": heartbeat\n\n"
-                continue
+                async for event in stream:
+                    await queue.put(event)
+            except Exception as exc:
+                await queue.put(exc)
+            finally:
+                await queue.put(_SENTINEL)
 
-            # Track whether we yield something to the client for this event.
-            yielded = False
+        consumer_task = asyncio.create_task(_consume_stream())
 
-            if event["type"] == "text_delta":
-                full_content += event["content"]
-                yield f"data: {json.dumps({'type': 'delta', 'content': event['content']})}\n\n"
-                yielded = True
-
-            elif event["type"] == "tool_call" and "trigger_simulation" in event.get("agent_name", ""):
-                args = event.get("arguments", {})
-                sim_type = args.get("p_simulation_type", "")
-                params_str = args.get("p_parameters", "{}")
+        try:
+            while True:
                 try:
-                    params = json.loads(params_str) if isinstance(params_str, str) else (params_str or {})
-                except json.JSONDecodeError:
-                    params = {}
-                num_sims = int(args.get("p_num_simulations", 10000))
-                seed = int(args.get("p_seed", 42))
+                    item = await asyncio.wait_for(queue.get(), timeout=15)
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
 
-                dedup_key = f"{sim_type}|{json.dumps(params, sort_keys=True)}|{seed}|{num_sims}"
-                if dedup_key not in triggered_hashes:
-                    triggered_hashes.add(dedup_key)
-                    try:
-                        placeholder = await insert_submitted_placeholder(
-                            sim_type, params, num_sims, seed,
-                        )
-                        if analysis_id and placeholder.get("run_id"):
-                            try:
-                                await analysis_service.link_simulation(
-                                    analysis_id, placeholder["run_id"], "agent",
-                                )
-                            except Exception:
-                                logger.warning("Failed to link sim to analysis", exc_info=True)
-                        yield f"data: {json.dumps({'type': 'simulation_triggered', 'simulation': placeholder})}\n\n"
-                        yielded = True
-                    except Exception:
-                        logger.warning("Failed to insert placeholder from stream", exc_info=True)
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    raise item
 
-            elif event["type"] == "tool_call" and "create_matrix" in event.get("agent_name", ""):
-                sse_event = await _handle_matrix_builder(
-                    thread_id, event.get("arguments", {}), created_matrix_ids,
-                )
-                if sse_event:
-                    yield sse_event
+                event = item
+
+                # Track whether we yield something to the client for this event.
+                yielded = False
+
+                if event["type"] == "text_delta":
+                    full_content += event["content"]
+                    yield f"data: {json.dumps({'type': 'delta', 'content': event['content']})}\n\n"
                     yielded = True
 
-            # Keep proxy alive during MAS internal polling (e.g. repeated
-            # check_simulation calls that we don't forward to the client).
-            if not yielded:
-                yield ": heartbeat\n\n"
+                elif event["type"] == "tool_call" and "trigger_simulation" in event.get("agent_name", ""):
+                    args = event.get("arguments", {})
+                    sim_type = args.get("p_simulation_type", "")
+                    params_str = args.get("p_parameters", "{}")
+                    try:
+                        params = json.loads(params_str) if isinstance(params_str, str) else (params_str or {})
+                    except json.JSONDecodeError:
+                        params = {}
+                    num_sims = int(args.get("p_num_simulations", 10000))
+                    seed = int(args.get("p_seed", 42))
+
+                    dedup_key = f"{sim_type}|{json.dumps(params, sort_keys=True)}|{seed}|{num_sims}"
+                    if dedup_key not in triggered_hashes:
+                        triggered_hashes.add(dedup_key)
+                        try:
+                            placeholder = await insert_submitted_placeholder(
+                                sim_type, params, num_sims, seed,
+                            )
+                            if analysis_id and placeholder.get("run_id"):
+                                try:
+                                    await analysis_service.link_simulation(
+                                        analysis_id, placeholder["run_id"], "agent",
+                                    )
+                                except Exception:
+                                    logger.warning("Failed to link sim to analysis", exc_info=True)
+                            yield f"data: {json.dumps({'type': 'simulation_triggered', 'simulation': placeholder})}\n\n"
+                            yielded = True
+                        except Exception:
+                            logger.warning("Failed to insert placeholder from stream", exc_info=True)
+
+                elif event["type"] == "tool_call" and "create_matrix" in event.get("agent_name", ""):
+                    sse_event = await _handle_matrix_builder(
+                        thread_id, event.get("arguments", {}), created_matrix_ids,
+                    )
+                    if sse_event:
+                        yield sse_event
+                        yielded = True
+
+                # Keep proxy alive during MAS internal polling (e.g. repeated
+                # check_simulation calls that we don't forward to the client).
+                if not yielded:
+                    yield ": heartbeat\n\n"
+
+        finally:
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
     except Exception as e:
         logger.exception("MAS streaming invocation failed")
