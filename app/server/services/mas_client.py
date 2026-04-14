@@ -122,18 +122,29 @@ class MASClient:
                     "POST", url, json=payload, headers=headers, timeout=600,
                 ) as resp:
                     resp.raise_for_status()
+                    line_count = 0
+                    event_count = 0
                     async for line in resp.aiter_lines():
+                        line_count += 1
                         if not line or not line.startswith("data: "):
                             continue
                         data_str = line[6:]
                         if data_str == "[DONE]":
+                            logger.info(
+                                "MAS stream [DONE] after %d lines, %d events",
+                                line_count, event_count,
+                            )
                             break
                         try:
                             event = json.loads(data_str)
                         except json.JSONDecodeError:
+                            logger.warning("MAS stream: bad JSON on line %d: %s", line_count, data_str[:200])
                             continue
 
+                        event_count += 1
                         event_type = event.get("type", "")
+                        if event_count <= 3 or event_count % 20 == 0:
+                            logger.info("MAS event #%d: type=%s", event_count, event_type)
 
                         # --- Text delta ---
                         if event_type == "response.output_text.delta":
@@ -196,6 +207,11 @@ class MASClient:
                                     "output": item.get("output", ""),
                                     "call_id": call_id,
                                 }
+
+            logger.info(
+                "MAS stream ended (continuation=%d, lines=%d, events=%d, continue_requested=%s)",
+                continuation, line_count, event_count, continue_request is not None,
+            )
 
             # If no continuation requested, we're done
             if not continue_request:

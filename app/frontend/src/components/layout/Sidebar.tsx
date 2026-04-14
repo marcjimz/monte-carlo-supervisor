@@ -10,12 +10,15 @@ const NAV_ITEMS = [
 export function Sidebar() {
   return (
     <aside className="flex w-56 flex-col border-r border-primary bg-card">
-      <div className="flex h-14 items-center gap-2 px-4 bg-primary border-b border-border">
+      <NavLink
+        to="/"
+        className="flex h-14 items-center gap-2 px-4 bg-primary border-b border-border hover:opacity-90 transition-opacity"
+      >
         <img src="/logo.png" alt="Intermountain Health" className="h-7" />
         <span className="font-bold text-sm leading-tight text-primary-foreground">
           Accelerate
         </span>
-      </div>
+      </NavLink>
       <nav className="flex-1 p-3 space-y-1">
         {NAV_ITEMS.map((item) => (
           <NavLink

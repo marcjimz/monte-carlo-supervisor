@@ -16,6 +16,7 @@ import { SimulationBrowser } from "../components/simulations/SimulationBrowser";
 import { SimulationBuilder } from "../components/simulations/SimulationBuilder";
 import { ThreadDrawer } from "../components/threads/ThreadDrawer";
 import { DistributionsPanel } from "../components/distributions/DistributionsPanel";
+import { GeniePanel } from "../components/distributions/GeniePanel";
 
 export function AnalysisDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,7 @@ export function AnalysisDetailPage() {
   const [matrices, setMatrices] = useState<Matrix[]>([]);
   const [simTypes, setSimTypes] = useState<Record<string, SimulationTypeConfig>>({});
   const [dashboardUrl, setDashboardUrl] = useState("");
+  const [genieUrl, setGenieUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerWidth, setDrawerWidth] = useState(768); // default double-wide
@@ -63,9 +65,14 @@ export function AnalysisDetailPage() {
         simulation_types: Record<string, SimulationTypeConfig>;
         dashboard_url?: string;
       }>("/config/simulation-types")
-      .then((data) => {
+      .then((data: {
+        simulation_types: Record<string, SimulationTypeConfig>;
+        dashboard_url?: string;
+        genie_url?: string;
+      }) => {
         setSimTypes(data.simulation_types);
         if (data.dashboard_url) setDashboardUrl(data.dashboard_url);
+        if (data.genie_url) setGenieUrl(data.genie_url);
       })
       .catch(console.error);
   }, [fetchAnalysis, fetchMatrices]);
@@ -241,23 +248,32 @@ export function AnalysisDetailPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs.Root defaultValue="distributions">
+        <Tabs.Root defaultValue="explore">
           <Tabs.List className="flex border-b border-border mb-6">
-            {["distributions", "matrices", ...(analysis.status === "published" && !isOwner ? [] : ["simulations"])].map((tab) => (
+            {[
+              { value: "explore", label: "Explore Data" },
+              { value: "chat", label: "Chat with Data" },
+              { value: "matrices", label: "Matrices" },
+              ...(analysis.status === "published" && !isOwner
+                ? []
+                : [{ value: "simulations", label: "Simulations" }]),
+            ].map((tab) => (
               <Tabs.Trigger
-                key={tab}
-                value={tab}
+                key={tab.value}
+                value={tab.value}
                 className="px-4 py-2 text-sm font-medium text-muted-foreground border-b-2 border-transparent data-[state=active]:text-foreground data-[state=active]:border-primary transition-colors"
               >
-                {tab === "distributions"
-                  ? "Explore & Chat with your Data"
-                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.label}
               </Tabs.Trigger>
             ))}
           </Tabs.List>
 
-          <Tabs.Content value="distributions">
+          <Tabs.Content value="explore">
             <DistributionsPanel dashboardUrl={dashboardUrl} />
+          </Tabs.Content>
+
+          <Tabs.Content value="chat">
+            <GeniePanel genieUrl={genieUrl} />
           </Tabs.Content>
 
           <Tabs.Content value="matrices">

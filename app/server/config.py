@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # AI/BI Dashboard
     dashboard_id: str = ""
 
+    # Genie Space
+    genie_space_id: str = ""
+
     # Feature flags
     seed_demo_data: bool = True
 

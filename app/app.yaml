@@ -16,5 +16,7 @@ env:
     value: 0cd7ea0fa4c57f0f
   - name: DASHBOARD_ID
     value: "01f136d736ae1ce7b649daca07537d64"
+  - name: GENIE_SPACE_ID
+    value: "01f1362a8359132d9a8645eed1fdc9c0"
   - name: SEED_DEMO_DATA
     value: "true"
