@@ -85,6 +85,14 @@ async def publish_analysis(analysis_id: UUID) -> dict | None:
     )
 
 
+async def unpublish_analysis(analysis_id: UUID) -> dict | None:
+    """Set analysis status back to draft."""
+    return await db.fetch_one(
+        "UPDATE analyses SET status = 'draft', updated_at = NOW() WHERE id = $1 RETURNING *",
+        analysis_id,
+    )
+
+
 async def can_access(analysis_id: UUID, user_email: str) -> bool:
     """Check if a user can access an analysis."""
     row = await db.fetch_one(

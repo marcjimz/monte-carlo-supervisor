@@ -75,6 +75,17 @@ async def publish_analysis(analysis_id: UUID, user: User = Depends(get_current_u
     return analysis
 
 
+@router.post("/{analysis_id}/unpublish")
+async def unpublish_analysis(analysis_id: UUID, user: User = Depends(get_current_user)):
+    if not await analysis_service.can_edit(analysis_id, user.email):
+        raise HTTPException(status_code=403, detail="Edit access denied")
+
+    analysis = await analysis_service.unpublish_analysis(analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return analysis
+
+
 # --- Collaborators ---
 
 

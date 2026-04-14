@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import * as Tabs from "@radix-ui/react-tabs";
 import { MessageSquare, Pencil, Check, X, RefreshCw } from "lucide-react";
+import { ShareDialog } from "../components/analyses/ShareDialog";
 import { api } from "../lib/api";
 import { useUser } from "../lib/user-context";
 import type { AnalysisDetail, Matrix, SimulationTypeConfig } from "../lib/types";
@@ -200,17 +201,14 @@ export function AnalysisDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {isOwner && analysis.status === "draft" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  await api.post(`/analyses/${id}/publish`);
-                  fetchAnalysis();
-                }}
-              >
-                Publish
-              </Button>
+            {isOwner && (
+              <ShareDialog
+                analysisId={analysis.id}
+                isPublished={analysis.status === "published"}
+                ownerEmail={analysis.owner_email}
+                collaborators={analysis.collaborators}
+                onUpdate={fetchAnalysis}
+              />
             )}
             <Button
               variant="outline"
