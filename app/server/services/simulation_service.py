@@ -21,7 +21,10 @@ async def check_simulation(
     seed: int = 42,
 ) -> dict:
     """Call check_simulation UC function."""
-    result_str = execute_uc_function(
+    import asyncio
+
+    result_str = await asyncio.to_thread(
+        execute_uc_function,
         "check_simulation",
         {
             "p_simulation_type": simulation_type,
@@ -40,7 +43,10 @@ async def trigger_simulation(
     seed: int = 42,
 ) -> dict:
     """Call trigger_simulation UC function."""
-    result_str = execute_uc_function(
+    import asyncio
+
+    result_str = await asyncio.to_thread(
+        execute_uc_function,
         "trigger_simulation",
         {
             "p_simulation_type": simulation_type,
@@ -63,10 +69,12 @@ async def trigger_simulation(
 
     # Insert a SUBMITTED placeholder into Lakebase so the UI sees it immediately
     try:
-        await insert_submitted_placeholder(
+        placeholder = await insert_submitted_placeholder(
             simulation_type, parameters, num_simulations, seed,
             job_run_id=str(result.get("job_run_id", "")),
         )
+        if placeholder:
+            result["run_id"] = placeholder["run_id"]
     except Exception:
         logger.warning("Failed to insert SUBMITTED placeholder", exc_info=True)
 
@@ -85,7 +93,7 @@ async def insert_submitted_placeholder(
     Returns the placeholder metadata dict matching sync_simulation_runs schema.
     """
     canonical_params = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
-    placeholder_run_id = f"pending-{uuid4().hex[:12]}"
+    placeholder_run_id = uuid4().hex
     now = datetime.now(timezone.utc).isoformat()
     payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}|default"
     params_hash = hashlib.sha256(payload.encode()).hexdigest()

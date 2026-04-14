@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { ArrowUpDown, Check, Minus, Pencil, Play, X } from "lucide-react";
+import { ArrowUpDown, Check, Minus, Pencil, Play, Trash2, X } from "lucide-react";
 import { api } from "../../lib/api";
 import type { Matrix, MatrixCell } from "../../lib/types";
 import { formatNumber } from "../../lib/utils";
@@ -12,6 +12,7 @@ import { Badge } from "../ui/badge";
 interface Props {
   matrixId: string;
   readOnly?: boolean;
+  onDelete?: () => void;
 }
 
 const SIM_TYPE_LABELS: Record<string, string> = {
@@ -34,23 +35,54 @@ function formatCellValue(param: string, value: number): string {
     (param.includes("penetration") ||
       param.includes("rate") ||
       param.includes("ratio") ||
-      param.includes("percent")) &&
+      param.includes("percent") ||
+      param.includes("pct") ||
+      param.includes("fraction")) &&
     value > 0 &&
     value <= 1
   ) {
     return `${(value * 100).toFixed(0)}%`;
   }
+  if (param.includes("cost") || param.includes("savings") || param.includes("revenue") || param.includes("charge")) {
+    if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
+    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(0)}M`;
+    if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+    return `$${formatNumber(value, 0)}`;
+  }
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
   if (value % 1 !== 0) return formatNumber(value, 2);
   return formatNumber(value, 0);
 }
 
-/** Format a result value with $ prefix and smart abbreviation. */
-function formatResultValue(value: number): string {
-  if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(value) >= 10_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${formatNumber(value, 0)}`;
+/** Detect how to format a metric based on its name. */
+type MetricFormat = "currency" | "ratio" | "count";
+
+function detectMetricFormat(metricName: string): MetricFormat {
+  const lower = metricName.toLowerCase();
+  if (lower.includes("roi") || lower.includes("_rate") || lower.includes("_ratio") || lower.includes("_pct"))
+    return "ratio";
+  if (lower.includes("encounter") || lower.includes("volume") || lower.includes("count"))
+    return "count";
+  return "currency";
+}
+
+/** Format a result value based on metric type. */
+function formatResultValue(value: number, format: MetricFormat = "currency"): string {
+  switch (format) {
+    case "ratio":
+      return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(1)}%`;
+    case "count":
+      if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+      if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+      return formatNumber(value, 0);
+    default:
+      if (Math.abs(value) >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
+      if (Math.abs(value) >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+      if (Math.abs(value) >= 10_000) return `$${(value / 1_000).toFixed(0)}K`;
+      return `$${formatNumber(value, 0)}`;
+  }
 }
 
 /** Compute heatmap opacity for a normalized 0-1 value. */
@@ -58,7 +90,7 @@ function heatmapOpacity(normalized: number): number {
   return 0.03 + normalized * 0.42;
 }
 
-export function MatrixView({ matrixId, readOnly = false }: Props) {
+export function MatrixView({ matrixId, readOnly = false, onDelete }: Props) {
   const [matrix, setMatrix] = useState<Matrix | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
@@ -69,6 +101,8 @@ export function MatrixView({ matrixId, readOnly = false }: Props) {
   const [editName, setEditName] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
   const [editDesc, setEditDesc] = useState("");
+  const [runningAll, setRunningAll] = useState(false);
+  const [runError, setRunError] = useState("");
 
   const fetchMatrix = useCallback(() => {
     api
@@ -85,10 +119,10 @@ export function MatrixView({ matrixId, readOnly = false }: Props) {
   // Auto-poll when there are running cells
   useEffect(() => {
     if (!matrix) return;
-    const hasRunning = matrix.cells.some(
-      (c) => c.status === "running" || c.status === "queued",
+    const hasIncomplete = matrix.cells.some(
+      (c) => c.status === "running" || c.status === "queued" || c.status === "pending",
     );
-    if (!hasRunning) return;
+    if (!hasIncomplete) return;
 
     const interval = setInterval(async () => {
       setPolling(true);
@@ -134,19 +168,37 @@ export function MatrixView({ matrixId, readOnly = false }: Props) {
   const totalCells = matrix.row_values.length * matrix.col_values.length;
 
   const handleRunAll = async () => {
-    await api.post(`/matrices/${matrixId}/run`);
-    fetchMatrix();
+    setRunningAll(true);
+    setRunError("");
+    try {
+      await api.post(`/matrices/${matrixId}/run`);
+      fetchMatrix();
+    } catch (err) {
+      console.error("Run all failed:", err);
+      setRunError(err instanceof Error ? err.message : "Failed to trigger runs");
+      fetchMatrix(); // still refresh — some cells may have been triggered
+    } finally {
+      setRunningAll(false);
+    }
   };
 
   const handleRunCell = async (cellId: string) => {
-    await api.post(`/matrices/${matrixId}/cells/${cellId}/run`);
-    fetchMatrix();
+    setRunError("");
+    try {
+      await api.post(`/matrices/${matrixId}/cells/${cellId}/run`);
+      fetchMatrix();
+    } catch (err) {
+      console.error("Run cell failed:", err);
+      setRunError(err instanceof Error ? err.message : "Failed to trigger cell");
+      fetchMatrix();
+    }
   };
 
   const rowLabel = formatParamName(matrix.row_parameter);
   const colLabel = formatParamName(matrix.col_parameter);
   const simTypeLabel = SIM_TYPE_LABELS[matrix.simulation_type] ?? matrix.simulation_type;
   const outputLabel = formatParamName(matrix.output_metric);
+  const metricFormat = detectMetricFormat(matrix.output_metric);
 
   const handleSaveName = async () => {
     if (!editName.trim()) {
@@ -281,12 +333,37 @@ export function MatrixView({ matrixId, readOnly = false }: Props) {
             </span>
           </div>
         </div>
-        {!readOnly && runnableCount > 0 && (
-          <Button size="sm" onClick={handleRunAll}>
-            <Play className="h-3 w-3 mr-1" />
-            Run All ({runnableCount})
-          </Button>
-        )}
+          <div className="flex items-center gap-2 shrink-0">
+          {!readOnly && runnableCount > 0 && (
+            <Button size="sm" onClick={handleRunAll} disabled={runningAll}>
+              {runningAll ? (
+                <>
+                  <Spinner className="h-3 w-3 mr-1" />
+                  Running...
+                </>
+              ) : (
+                <>
+                  <Play className="h-3 w-3 mr-1" />
+                  Run All ({runnableCount})
+                </>
+              )}
+            </Button>
+          )}
+          {!readOnly && onDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                if (window.confirm("Delete this matrix? This cannot be undone.")) {
+                  api.delete(`/matrices/${matrixId}`).then(onDelete).catch(console.error);
+                }
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Matrix table */}
@@ -330,6 +407,7 @@ export function MatrixView({ matrixId, readOnly = false }: Props) {
                         cell={cell}
                         onRun={handleRunCell}
                         readOnly={readOnly}
+                        metricFormat={metricFormat}
                       />
                     </td>
                   );
@@ -339,6 +417,13 @@ export function MatrixView({ matrixId, readOnly = false }: Props) {
           </tbody>
         </table>
       </div>
+
+      {/* Error display */}
+      {runError && (
+        <p className="mt-2 text-sm text-destructive bg-destructive/10 rounded px-3 py-2">
+          {runError}
+        </p>
+      )}
 
       {/* Legend footer */}
       <div className="mt-3 space-y-1.5">
@@ -380,10 +465,12 @@ function CellDisplay({
   cell,
   onRun,
   readOnly,
+  metricFormat,
 }: {
   cell: MatrixCell | undefined;
   onRun: (cellId: string) => void;
   readOnly: boolean;
+  metricFormat: MetricFormat;
 }) {
   if (!cell) return <Minus className="h-4 w-4 text-muted-foreground mx-auto" />;
 
@@ -393,15 +480,15 @@ function CellDisplay({
         <div className="flex flex-col items-center leading-tight">
           {cell.result_p05 != null && (
             <span className="text-[10px] opacity-70 font-mono">
-              P5 {formatResultValue(cell.result_p05)}
+              P5 {formatResultValue(cell.result_p05, metricFormat)}
             </span>
           )}
           <span className="text-sm font-mono font-bold">
-            {cell.result_mean != null ? formatResultValue(cell.result_mean) : "---"}
+            {cell.result_mean != null ? formatResultValue(cell.result_mean, metricFormat) : "---"}
           </span>
           {cell.result_p95 != null && (
             <span className="text-[10px] opacity-70 font-mono">
-              P95 {formatResultValue(cell.result_p95)}
+              P95 {formatResultValue(cell.result_p95, metricFormat)}
             </span>
           )}
         </div>

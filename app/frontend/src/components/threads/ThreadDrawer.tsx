@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { X, Plus, Send, MessageSquare, Pencil, Bot, Play } from "lucide-react";
+import { X, Plus, Send, MessageSquare, Pencil, Bot, Play, Grid3X3 } from "lucide-react";
 import { api } from "../../lib/api";
 import { useUser } from "../../lib/user-context";
 import { getInitials } from "../../lib/utils";
-import type { Thread, Message, SimulationTriggeredEvent } from "../../lib/types";
+import type { Thread, Message, SimulationTriggeredEvent, MatrixCreatedEvent } from "../../lib/types";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
@@ -33,9 +33,14 @@ const THINKING_MESSAGES = [
 interface Props {
   analysisId: string;
   onClose: () => void;
+  width: number;
+  onWidthChange: (w: number) => void;
 }
 
-export function ThreadDrawer({ analysisId, onClose }: Props) {
+const MIN_WIDTH = 384;   // w-96
+const MAX_WIDTH = 1200;
+
+export function ThreadDrawer({ analysisId, onClose, width, onWidthChange }: Props) {
   const { user } = useUser();
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
@@ -44,6 +49,7 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
   const [streamingContent, setStreamingContent] = useState("");
   const [thinkingMsg, setThinkingMsg] = useState("");
   const [triggeredSims, setTriggeredSims] = useState<SimulationTriggeredEvent[]>([]);
+  const [createdMatrices, setCreatedMatrices] = useState<MatrixCreatedEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Thread title editing
@@ -51,6 +57,32 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
   const [editTitle, setEditTitle] = useState("");
 
   const messagesEnd = useRef<HTMLDivElement>(null);
+
+  // Poll triggered simulations for status updates
+  useEffect(() => {
+    const incomplete = triggeredSims.filter(
+      (s) => s.status !== "COMPLETED" && s.status !== "FAILED",
+    );
+    if (incomplete.length === 0) return;
+
+    const interval = setInterval(async () => {
+      for (const sim of incomplete) {
+        try {
+          const updated = await api.get<{ status: string }>(`/simulations/${sim.run_id}`);
+          if (updated.status !== sim.status) {
+            setTriggeredSims((prev) =>
+              prev.map((s) =>
+                s.run_id === sim.run_id ? { ...s, status: updated.status } : s,
+              ),
+            );
+          }
+        } catch {
+          // ignore — run_id may not be synced yet
+        }
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [triggeredSims]);
 
   const fetchThreads = () => {
     api
@@ -125,6 +157,7 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
     setSending(true);
     setStreamingContent("");
     setTriggeredSims([]);
+    setCreatedMatrices([]);
     const content = message;
     setMessage("");
 
@@ -178,6 +211,8 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
               setStreamingContent(accumulated);
             } else if (data.type === "simulation_triggered") {
               setTriggeredSims((prev) => [...prev, data.simulation]);
+            } else if (data.type === "matrix_created") {
+              setCreatedMatrices((prev) => [...prev, data.matrix]);
             } else if (data.type === "done") {
               finalMessage = data.message;
             }
@@ -216,8 +251,43 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
 
   const initials = user?.email ? getInitials(user.email) : "U";
 
+  // Drag-to-resize
+  const dragging = useRef(false);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      dragging.current = true;
+      const startX = e.clientX;
+      const startW = width;
+
+      const onMove = (ev: PointerEvent) => {
+        if (!dragging.current) return;
+        const delta = startX - ev.clientX;
+        const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW + delta));
+        onWidthChange(next);
+      };
+      const onUp = () => {
+        dragging.current = false;
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    },
+    [width, onWidthChange],
+  );
+
   return (
-    <div className="fixed right-0 top-0 h-full w-96 border-l border-border bg-card shadow-lg z-30 flex flex-col">
+    <div
+      className="fixed right-0 top-0 h-full border-l border-border bg-card shadow-lg z-30 flex flex-col"
+      style={{ width }}
+    >
+      {/* Resize handle */}
+      <div
+        onPointerDown={handlePointerDown}
+        className="absolute left-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors z-10"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
@@ -373,8 +443,31 @@ export function ThreadDrawer({ analysisId, onClose }: Props) {
                 <span className="text-muted-foreground">
                   {SIM_TYPE_LABELS[sim.simulation_type] ?? sim.simulation_type}
                 </span>
+                <Badge
+                  variant={sim.status === "COMPLETED" ? "success" : sim.status === "FAILED" ? "destructive" : "outline"}
+                  className="ml-auto text-[10px] px-1.5 py-0"
+                >
+                  {sim.status === "COMPLETED" ? "Completed" : sim.status === "FAILED" ? "Failed" : sim.status}
+                </Badge>
+              </div>
+            ))}
+
+            {/* Matrix created notifications */}
+            {createdMatrices.map((matrix) => (
+              <div
+                key={matrix.id}
+                className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs"
+              >
+                <Grid3X3 className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span className="font-medium">Matrix created</span>
+                <span className="text-muted-foreground">
+                  {SIM_TYPE_LABELS[matrix.simulation_type] ?? matrix.simulation_type}
+                </span>
+                <span className="text-muted-foreground">
+                  {matrix.rows}x{matrix.cols} ({matrix.total_cells} cells)
+                </span>
                 <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
-                  {sim.status}
+                  Running...
                 </Badge>
               </div>
             ))}

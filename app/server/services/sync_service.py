@@ -66,7 +66,7 @@ async def sync_simulation_runs():
 
     # Clean up SUBMITTED placeholders that now have a real counterpart
     try:
-        deleted = await db.execute(
+        await db.execute(
             """DELETE FROM sync_simulation_runs s
                WHERE s.status = 'SUBMITTED'
                AND EXISTS (
@@ -83,6 +83,13 @@ async def sync_simulation_runs():
             """DELETE FROM sync_simulation_runs
                WHERE status = 'SUBMITTED'
                AND created_at < (NOW() - INTERVAL '30 minutes')::text"""
+        )
+        # Clean up stale analysis_simulations links pointing to deleted placeholders
+        await db.execute(
+            """DELETE FROM analysis_simulations a
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM sync_simulation_runs r WHERE r.run_id = a.run_id
+               )"""
         )
     except Exception:
         logger.warning("Failed to clean up SUBMITTED placeholders", exc_info=True)

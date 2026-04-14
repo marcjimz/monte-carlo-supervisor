@@ -143,6 +143,17 @@ export interface SimulationTriggeredEvent {
   updated_at: string;
 }
 
+export interface MatrixCreatedEvent {
+  id: string;
+  name: string;
+  simulation_type: string;
+  row_parameter: string;
+  col_parameter: string;
+  rows: number;
+  cols: number;
+  total_cells: number;
+}
+
 export interface DistributionSpec {
   simulation_type: string;
   distribution_name: string;

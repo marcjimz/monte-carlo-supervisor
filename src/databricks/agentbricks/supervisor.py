@@ -20,8 +20,9 @@ SUPERVISOR_DESCRIPTION = (
 _ROUTING_INSTRUCTIONS = """Route queries as follows:
 1. Historical data questions (costs, trends, volumes, demographics, 'show me', 'what was') → encounter_analytics (Genie)
 2. Previously-run simulation results ('show me past simulations', 'what were the results of') → encounter_analytics (Genie queries simulation_results table)
-3. NEW simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability', 'ROI', 'cost comparison') → simulation workflow below
+3. NEW single simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability', 'ROI', 'cost comparison') → simulation workflow below
 4. Questions about fitted distributions ('what distributions', 'fitted parameters', 'distribution quality', 'what specs') → distribution_catalog
+5. Parameter sweep / sensitivity analysis / matrix ('matrix', 'sensitivity', 'sweep', 'compare across', 'grid of', 'vary X and Y', 'range of values') → matrix_builder
 
 Common women's health topics routed to Genie: OB/GYN encounters, cost by condition, menopause/endometriosis/fibroids prevalence, payer mix, diagnosis trends.
 Common simulation topics: virtual care cost comparison (H2), system cost ROI (H5), patient volume forecasting, revenue projection.
@@ -38,7 +39,15 @@ Step 3: If status is "running" → call simulation_checker again with the EXACT 
 Step 4: If status is "not_found" AND you have NOT yet triggered → call simulation_trigger with the EXACT SAME parameters to start a new Spark job.
 Step 5: After simulation_trigger returns "triggered" → call simulation_checker with the SAME parameters to poll. Repeat until "completed".
 IMPORTANT: After triggering, check_simulation may return "not_found" for 1-2 minutes while the distributed Spark cluster starts. This is NORMAL — do NOT call trigger_simulation again. Keep calling check_simulation until you see "running" or "completed".
-IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow."""
+IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
+
+MATRIX WORKFLOW (for parameter sweeps):
+When the user wants to compare results across multiple parameter values (sensitivity analysis, parameter sweep, grid search):
+Step 1: Call matrix_builder with the simulation type, two parameters to sweep, and their value arrays.
+Step 2: The system will automatically create the matrix and trigger all cell simulations.
+Step 3: Tell the user the matrix has been created and they can view it on the Matrices tab.
+IMPORTANT: Use JSON arrays for p_row_values and p_col_values (e.g. '[0.05, 0.08, 0.10, 0.15]').
+IMPORTANT: Only override p_base_parameters for non-swept parameters the user explicitly mentions."""
 
 
 def _get_parameter_reference() -> str:
@@ -66,6 +75,13 @@ def _get_parameter_reference() -> str:
         "\nOnly override parameters the user explicitly mentions. "
         "Use defaults for everything else by passing '{}'."
     )
+
+    # Matrix-specific guidance: valid sweep parameter names per type
+    lines.append("\nFor matrix_builder, use these parameter names as p_row_parameter / p_col_parameter:")
+    for sim_type in config_loader.get_valid_types():
+        param_names = list(config_loader.get_default_params(sim_type).keys())
+        lines.append(f"- {sim_type}: {', '.join(param_names)}")
+
     return "\n".join(lines)
 
 
@@ -149,6 +165,24 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
                     "catalog": catalog,
                     "schema": schema,
                     "name": "list_distributions",
+                }
+            },
+        },
+        {
+            "name": "matrix_builder",
+            "description": (
+                "Creates a parameter sweep matrix that runs multiple simulations varying "
+                "two parameters across a grid of values. Use this for sensitivity analysis, "
+                "parameter sweeps, or comparing outcomes across ranges. The system creates "
+                "the matrix and automatically triggers all cell simulations. "
+                f"Supports: {types_str}."
+            ),
+            "agent_type": "unity_catalog_function",
+            "unity_catalog_function": {
+                "uc_path": {
+                    "catalog": catalog,
+                    "schema": schema,
+                    "name": "create_matrix",
                 }
             },
         },

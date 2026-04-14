@@ -8,7 +8,7 @@ import logging
 from uuid import UUID
 
 from server import db
-from server.services import simulation_service
+from server.services import analysis_service, simulation_service
 
 logger = logging.getLogger(__name__)
 
@@ -141,11 +141,41 @@ async def _build_cell_params(matrix: dict, row_value: float, col_value: float) -
     return params
 
 
+async def _link_run_to_analysis(matrix: dict, run_id: str | None) -> None:
+    """Link a simulation run_id to the matrix's parent analysis (idempotent)."""
+    if not run_id:
+        return
+    try:
+        await analysis_service.link_simulation(
+            matrix["analysis_id"], run_id, "system:matrix",
+        )
+    except Exception:
+        logger.debug("Could not link run %s to analysis (may already exist)", run_id)
+
+
+async def _cleanup_stale_placeholder(old_run_id: str | None, new_run_id: str | None, matrix: dict) -> None:
+    """Remove stale placeholder row and analysis link when the real run_id arrives."""
+    if not old_run_id or not new_run_id or old_run_id == new_run_id:
+        return
+    try:
+        await db.execute(
+            "DELETE FROM sync_simulation_runs WHERE run_id = $1 AND status = 'SUBMITTED'",
+            old_run_id,
+        )
+        await db.execute(
+            "DELETE FROM analysis_simulations WHERE analysis_id = $1 AND run_id = $2",
+            matrix["analysis_id"], old_run_id,
+        )
+    except Exception:
+        logger.debug("Placeholder cleanup for %s failed (non-critical)", old_run_id)
+
+
 async def _process_cell(matrix: dict, cell: dict) -> dict:
     """Check or trigger a single cell simulation."""
     params = await _build_cell_params(matrix, cell["row_value"], cell["col_value"])
+    old_run_id = cell.get("run_id")
 
-    # First check if simulation exists
+    # First check if simulation exists (queries Delta — source of truth)
     result = await simulation_service.check_simulation(
         matrix["simulation_type"], params, matrix["num_simulations"], matrix["seed"],
     )
@@ -153,6 +183,7 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
     status = result.get("status", "not_found")
 
     if status == "completed":
+        run_id = result.get("run_id")
         # Extract the target metric from results
         mean_val, p05_val, p50_val, p95_val = _extract_metric(
             result.get("results", []),
@@ -166,20 +197,26 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
                    result_mean = $2, result_p05 = $3, result_p50 = $4, result_p95 = $5,
                    updated_at = NOW()
                WHERE id = $6""",
-            result.get("run_id"), mean_val, p05_val, p50_val, p95_val, cell["id"],
+            run_id, mean_val, p05_val, p50_val, p95_val, cell["id"],
         )
+        await _link_run_to_analysis(matrix, run_id)
+        await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "completed", "cell_id": str(cell["id"])}
 
     elif status == "running":
+        run_id = result.get("run_id")
         await db.execute(
             "UPDATE matrix_cells SET status = 'running', run_id = $1, updated_at = NOW() WHERE id = $2",
-            result.get("run_id"), cell["id"],
+            run_id, cell["id"],
         )
+        # Link real run_id from Delta (not a placeholder)
+        await _link_run_to_analysis(matrix, run_id)
+        await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "running", "cell_id": str(cell["id"])}
 
     elif status == "not_found":
-        # Trigger a new simulation
-        trigger_result = await simulation_service.trigger_simulation(
+        # Trigger a new simulation — don't link the placeholder, it's temporary
+        await simulation_service.trigger_simulation(
             matrix["simulation_type"], params, matrix["num_simulations"], matrix["seed"],
         )
         await db.execute(

@@ -5,7 +5,6 @@ import { MessageSquare, Pencil, Check, X } from "lucide-react";
 import { api } from "../lib/api";
 import { useUser } from "../lib/user-context";
 import type { AnalysisDetail, Matrix, SimulationTypeConfig } from "../lib/types";
-import { cn } from "../lib/utils";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -13,6 +12,7 @@ import { Spinner } from "../components/ui/spinner";
 import { MatrixBuilder } from "../components/matrices/MatrixBuilder";
 import { MatrixView } from "../components/matrices/MatrixView";
 import { SimulationBrowser } from "../components/simulations/SimulationBrowser";
+import { SimulationBuilder } from "../components/simulations/SimulationBuilder";
 import { ThreadDrawer } from "../components/threads/ThreadDrawer";
 import { DistributionsPanel } from "../components/distributions/DistributionsPanel";
 
@@ -25,6 +25,8 @@ export function AnalysisDetailPage() {
   const [dashboardUrl, setDashboardUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerWidth, setDrawerWidth] = useState(768); // default double-wide
+  const [simRefreshKey, setSimRefreshKey] = useState(0);
 
   // Inline editing state
   const [editingName, setEditingName] = useState(false);
@@ -101,7 +103,10 @@ export function AnalysisDetailPage() {
 
   return (
     <div className="flex h-full">
-      <div className={cn("flex-1 overflow-y-auto", drawerOpen && "mr-96")}>
+      <div
+        className="flex-1 overflow-y-auto transition-[margin] duration-100"
+        style={{ marginRight: drawerOpen ? drawerWidth : 0 }}
+      >
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div className="flex-1 min-w-0">
@@ -250,13 +255,24 @@ export function AnalysisDetailPage() {
               </p>
             ) : (
               matrices.map((m) => (
-                <MatrixView key={m.id} matrixId={m.id} readOnly={!isOwner} />
+                <MatrixView
+                  key={m.id}
+                  matrixId={m.id}
+                  readOnly={!isOwner}
+                  onDelete={() => setMatrices((prev) => prev.filter((x) => x.id !== m.id))}
+                />
               ))
             )}
           </Tabs.Content>
 
           <Tabs.Content value="simulations">
+            {isOwner && (
+              <SimulationBuilder
+                onTriggered={() => setSimRefreshKey((k) => k + 1)}
+              />
+            )}
             <SimulationBrowser
+              key={simRefreshKey}
               analysisId={id!}
               linkedRunIds={analysis.simulations.map((s) => s.run_id)}
               onLink={fetchAnalysis}
@@ -271,6 +287,8 @@ export function AnalysisDetailPage() {
         <ThreadDrawer
           analysisId={id!}
           onClose={() => setDrawerOpen(false)}
+          width={drawerWidth}
+          onWidthChange={setDrawerWidth}
         />
       )}
     </div>
