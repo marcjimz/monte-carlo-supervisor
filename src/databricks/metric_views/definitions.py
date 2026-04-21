@@ -66,9 +66,12 @@ WITH METRICS
 LANGUAGE YAML
 AS $$
   version: 1.1
-  comment: "Women's health cost KPIs by ICD-10 condition, encounter type, and payer. Use for cost analysis, denial tracking, and condition-level financial reporting."
+  comment: "Women's health cost KPIs by department, ICD-10 condition, encounter type, and payer. Use for cost analysis, denial tracking, and condition-level financial reporting."
   source: {catalog}.{schema}.v_wh_billing_encounters
   dimensions:
+    - name: Department
+      expr: department
+      comment: "Clinical department (OB/GYN, Internal Medicine, etc.)"
     - name: ICD-10 Code
       expr: primary_icd10_code
       comment: "Primary ICD-10 diagnosis code for the encounter"

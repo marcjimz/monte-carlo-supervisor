@@ -10,7 +10,7 @@ digraph TeamWorkstreams {
     edge [color="#555555", penwidth=1.5, fontname="Helvetica", fontsize=10, fontcolor="#333333"];
 
     // ===================================================================
-    // PHASE LABELS
+    // PHASE 1 — Foundation (Parallel Workstreams)
     // ===================================================================
     subgraph cluster_phase1 {
         label="PHASE 1  —  Foundation (Parallel Workstreams)";
@@ -24,10 +24,10 @@ digraph TeamWorkstreams {
         penwidth=2;
 
         // ---------------------------------------------------------------
-        // GROUP 1: DATA ENGINEERING
+        // WORKSTREAM 1: DATA MODELING
         // ---------------------------------------------------------------
-        subgraph cluster_g1 {
-            label="Group 1: Data Engineering";
+        subgraph cluster_w1 {
+            label="Data Modeling";
             labeljust=l;
             fontname="Helvetica";
             fontsize=13;
@@ -37,53 +37,25 @@ digraph TeamWorkstreams {
             color="#1B6ACB";
             penwidth=2;
 
-            g1_header [label="Owns: Raw Data Foundation", shape=box, style="filled,rounded", fillcolor="#1B6ACB", fontcolor="white", fontname="Helvetica", fontsize=11, color="#14508F", penwidth=1.5, width=3];
+            w1_header [label="Data Tables + Semantics", shape=box, style="filled,rounded", fillcolor="#1B6ACB", fontcolor="white", fontname="Helvetica", fontsize=11, color="#14508F", penwidth=1.5, width=3];
 
-            g1_t1 [label="Synthetic data\ngeneration + loading", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
-            g1_t2 [label="Delta Lake table\ndesign (12 tables)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
-            g1_t3 [label="Data quality\nand governance", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
+            w1_t1 [label="12 Hospital Tables\n(Delta Lake)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
+            w1_t2 [label="6 UC Metric Views\n(Semantic Layer)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
+            w1_t3 [label="Data Quality,\nGovernance + RLS/CLM", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#1B6ACB", penwidth=1];
 
-            g1_skills [label="Skills: PySpark, Delta Lake,\nUnity Catalog, NumPy", shape=box, style="filled,rounded", fillcolor="#D6EAFF", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#1B6ACB", penwidth=1];
+            w1_skills [label="Skills: PySpark, Delta Lake,\nUnity Catalog, SQL", shape=box, style="filled,rounded", fillcolor="#D6EAFF", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#1B6ACB", penwidth=1];
 
-            g1_header -> g1_t1 [style=invis];
-            g1_header -> g1_t2 [style=invis];
-            g1_header -> g1_t3 [style=invis];
-            g1_t1 -> g1_skills [style=invis];
+            w1_header -> w1_t1 [style=invis];
+            w1_header -> w1_t2 [style=invis];
+            w1_header -> w1_t3 [style=invis];
+            w1_t1 -> w1_skills [style=invis];
         }
 
         // ---------------------------------------------------------------
-        // GROUP 2: ANALYTICS ENGINEERING
+        // WORKSTREAM 2: MONTE CARLO / SIMULATION ENGINE
         // ---------------------------------------------------------------
-        subgraph cluster_g2 {
-            label="Group 2: Analytics Engineering";
-            labeljust=l;
-            fontname="Helvetica";
-            fontsize=13;
-            fontcolor="#333333";
-            style="filled,rounded";
-            fillcolor="#FFF0EB";
-            color="#FF3621";
-            penwidth=2;
-
-            g2_header [label="Owns: Semantic Layer + Genie", shape=box, style="filled,rounded", fillcolor="#FF3621", fontcolor="white", fontname="Helvetica", fontsize=11, color="#CC2A1A", penwidth=1.5, width=3];
-
-            g2_t1 [label="UC Metric Views\n(6 semantic views)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1];
-            g2_t2 [label="Genie Space\nconfiguration", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1];
-            g2_t3 [label="Sample questions\nand instructions", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1];
-
-            g2_skills [label="Skills: SQL, UC Metric Views,\nGenie API", shape=box, style="filled,rounded", fillcolor="#FFE0D9", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#FF3621", penwidth=1];
-
-            g2_header -> g2_t1 [style=invis];
-            g2_header -> g2_t2 [style=invis];
-            g2_header -> g2_t3 [style=invis];
-            g2_t1 -> g2_skills [style=invis];
-        }
-
-        // ---------------------------------------------------------------
-        // GROUP 3: SIMULATION ENGINEERING
-        // ---------------------------------------------------------------
-        subgraph cluster_g3 {
-            label="Group 3: Simulation Engineering";
+        subgraph cluster_w2 {
+            label="Monte Carlo Engine";
             labeljust=l;
             fontname="Helvetica";
             fontsize=13;
@@ -93,26 +65,54 @@ digraph TeamWorkstreams {
             color="#E8820C";
             penwidth=2;
 
-            g3_header [label="Owns: MC Engine + Models", shape=box, style="filled,rounded", fillcolor="#E8820C", fontcolor="white", fontname="Helvetica", fontsize=11, color="#B86709", penwidth=1.5, width=3];
+            w2_header [label="Simulation Engine + UC Functions", shape=box, style="filled,rounded", fillcolor="#E8820C", fontcolor="white", fontname="Helvetica", fontsize=11, color="#B86709", penwidth=1.5, width=3];
 
-            g3_t1 [label="Monte Carlo engine\n(applyInPandas)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#E8820C", penwidth=1];
-            g3_t2 [label="5 simulation models\n(volume, revenue, LOS...)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#E8820C", penwidth=1];
-            g3_t3 [label="Bronze-to-Gold\naggregation pipeline", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#E8820C", penwidth=1];
+            w2_t1 [label="5 Simulation Models\n(applyInPandas)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#E8820C", penwidth=1];
+            w2_t2 [label="Distribution Fitting\n(scipy + Delta)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#E8820C", penwidth=1];
+            w2_t3 [label="UC Functions\n(trigger, check, list_dists)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#E8820C", penwidth=1];
 
-            g3_skills [label="Skills: Python, NumPy,\nPySpark, Statistics", shape=box, style="filled,rounded", fillcolor="#FFF0D6", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#E8820C", penwidth=1];
+            w2_skills [label="Skills: Python, NumPy, SciPy,\nPySpark, UC Functions", shape=box, style="filled,rounded", fillcolor="#FFF0D6", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#E8820C", penwidth=1];
 
-            g3_header -> g3_t1 [style=invis];
-            g3_header -> g3_t2 [style=invis];
-            g3_header -> g3_t3 [style=invis];
-            g3_t1 -> g3_skills [style=invis];
+            w2_header -> w2_t1 [style=invis];
+            w2_header -> w2_t2 [style=invis];
+            w2_header -> w2_t3 [style=invis];
+            w2_t1 -> w2_skills [style=invis];
+        }
+
+        // ---------------------------------------------------------------
+        // WORKSTREAM 3: GENIE SPACE
+        // ---------------------------------------------------------------
+        subgraph cluster_w3 {
+            label="Genie Space";
+            labeljust=l;
+            fontname="Helvetica";
+            fontsize=13;
+            fontcolor="#333333";
+            style="filled,rounded";
+            fillcolor="#FFF0EB";
+            color="#FF3621";
+            penwidth=2;
+
+            w3_header [label="QnA on Women's Health Data", shape=box, style="filled,rounded", fillcolor="#FF3621", fontcolor="white", fontname="Helvetica", fontsize=11, color="#CC2A1A", penwidth=1.5, width=3];
+
+            w3_t1 [label="Genie Space\nConfiguration", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1];
+            w3_t2 [label="Sample Questions\n+ Instructions", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1];
+            w3_t3 [label="AI/BI Dashboard\n(Lakeview)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#FF3621", penwidth=1];
+
+            w3_skills [label="Skills: SQL, Genie API,\nLakeview Dashboards", shape=box, style="filled,rounded", fillcolor="#FFE0D9", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#FF3621", penwidth=1];
+
+            w3_header -> w3_t1 [style=invis];
+            w3_header -> w3_t2 [style=invis];
+            w3_header -> w3_t3 [style=invis];
+            w3_t1 -> w3_skills [style=invis];
         }
     }
 
     // ===================================================================
-    // PHASE 2
+    // PHASE 2 — Agent Supervisor (Orchestration)
     // ===================================================================
     subgraph cluster_phase2 {
-        label="PHASE 2  —  Integration (Depends on Phase 1)";
+        label="PHASE 2  —  Agent Supervisor (Orchestration + Tools)";
         labeljust=l;
         fontname="Helvetica";
         fontsize=16;
@@ -122,11 +122,8 @@ digraph TeamWorkstreams {
         color="#1E6128";
         penwidth=2;
 
-        // ---------------------------------------------------------------
-        // GROUP 4: PLATFORM / INTEGRATION
-        // ---------------------------------------------------------------
-        subgraph cluster_g4 {
-            label="Group 4: Platform / Integration Engineering";
+        subgraph cluster_w4 {
+            label="Multi-Agent Supervisor";
             labeljust=l;
             fontname="Helvetica";
             fontsize=13;
@@ -136,28 +133,28 @@ digraph TeamWorkstreams {
             color="#2D8C3C";
             penwidth=2;
 
-            g4_header [label="Owns: Glue Layer — Functions, Auth, Supervisor", shape=box, style="filled,rounded", fillcolor="#2D8C3C", fontcolor="white", fontname="Helvetica", fontsize=11, color="#1E6128", penwidth=1.5, width=5.5];
+            w4_header [label="AgentBricks MAS  —  Orchestrate Phase 1 Components", shape=box, style="filled,rounded", fillcolor="#2D8C3C", fontcolor="white", fontname="Helvetica", fontsize=11, color="#1E6128", penwidth=1.5, width=5.5];
 
-            g4_t1 [label="UC Functions\n(check + trigger)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
-            g4_t2 [label="UC HTTP Connection\n+ Secrets", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
-            g4_t3 [label="Agent Bricks\nMAS Config", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
-            g4_t4 [label="Model Serving\nEndpoint", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
+            w4_t1 [label="Supervisor Router\n(Intent Classification)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
+            w4_t2 [label="4 Sub-Agents\n(Genie, Checker, Trigger,\nDistribution Catalog)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
+            w4_t3 [label="Model Serving\nEndpoint", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
+            w4_t4 [label="UC HTTP Connection\n+ Secrets", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
 
-            g4_skills [label="Skills: SQL UDFs, http_request, Agent Bricks,\nUC Connections, REST APIs, Databricks Jobs", shape=box, style="filled,rounded", fillcolor="#DFF0D8", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#2D8C3C", penwidth=1, width=5.5];
+            w4_skills [label="Skills: Agent Bricks, UC Functions,\nUC Connections, REST APIs, Databricks Jobs", shape=box, style="filled,rounded", fillcolor="#DFF0D8", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#2D8C3C", penwidth=1, width=5.5];
 
-            g4_header -> g4_t1 [style=invis];
-            g4_header -> g4_t2 [style=invis];
-            g4_header -> g4_t3 [style=invis];
-            g4_header -> g4_t4 [style=invis];
-            g4_t1 -> g4_skills [style=invis];
+            w4_header -> w4_t1 [style=invis];
+            w4_header -> w4_t2 [style=invis];
+            w4_header -> w4_t3 [style=invis];
+            w4_header -> w4_t4 [style=invis];
+            w4_t1 -> w4_skills [style=invis];
         }
     }
 
     // ===================================================================
-    // PHASE 3
+    // PHASE 3 — Unified Experience
     // ===================================================================
     subgraph cluster_phase3 {
-        label="PHASE 3  —  Experience (Depends on Phase 2)";
+        label="PHASE 3  —  Unified Experience (Application Layer)";
         labeljust=l;
         fontname="Helvetica";
         fontsize=16;
@@ -167,11 +164,8 @@ digraph TeamWorkstreams {
         color="#5C2D80";
         penwidth=2;
 
-        // ---------------------------------------------------------------
-        // GROUP 5: APP / FRONTEND
-        // ---------------------------------------------------------------
-        subgraph cluster_g5 {
-            label="Group 5: App / Frontend Development";
+        subgraph cluster_w5 {
+            label="Databricks App";
             labeljust=l;
             fontname="Helvetica";
             fontsize=13;
@@ -181,29 +175,75 @@ digraph TeamWorkstreams {
             color="#7B3FA0";
             penwidth=2;
 
-            g5_header [label="Owns: End-User Experiences", shape=box, style="filled,rounded", fillcolor="#7B3FA0", fontcolor="white", fontname="Helvetica", fontsize=11, color="#5C2D80", penwidth=1.5, width=4.5];
+            w5_header [label="Unified Experience  —  Workflows, Collaboration, Analysis", shape=box, style="filled,rounded", fillcolor="#7B3FA0", fontcolor="white", fontname="Helvetica", fontsize=11, color="#5C2D80", penwidth=1.5, width=5.5];
 
-            g5_t1 [label="AI Playground\ntesting + validation", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
-            g5_t2 [label="Custom Web App\n(React / Streamlit)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
-            g5_t3 [label="Slack Bot\nIntegration", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
-            g5_t4 [label="REST API\nConsumers", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
+            w5_t1 [label="React SPA\n(FastAPI Backend)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
+            w5_t2 [label="Agent Chat\n(SSE Streaming to MAS)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
+            w5_t3 [label="Embedded Dashboards\n+ Genie Space", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
+            w5_t4 [label="Analysis Workflows\n(Share, Matrices, Simulations)", shape=box, style="filled,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#7B3FA0", penwidth=1];
 
-            g5_skills [label="Skills: React, Python, Slack API,\nDatabricks Apps SDK", shape=box, style="filled,rounded", fillcolor="#E8D5F5", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#7B3FA0", penwidth=1, width=4.5];
+            w5_skills [label="Skills: React, TypeScript, FastAPI,\nLakebase (Postgres), Databricks Apps SDK", shape=box, style="filled,rounded", fillcolor="#E8D5F5", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#7B3FA0", penwidth=1, width=5.5];
 
-            g5_header -> g5_t1 [style=invis];
-            g5_header -> g5_t2 [style=invis];
-            g5_header -> g5_t3 [style=invis];
-            g5_header -> g5_t4 [style=invis];
-            g5_t1 -> g5_skills [style=invis];
+            w5_header -> w5_t1 [style=invis];
+            w5_header -> w5_t2 [style=invis];
+            w5_header -> w5_t3 [style=invis];
+            w5_header -> w5_t4 [style=invis];
+            w5_t1 -> w5_skills [style=invis];
+        }
+    }
+
+    // ===================================================================
+    // PHASE 4 — Agentic Capabilities (Future)
+    // ===================================================================
+    subgraph cluster_phase4 {
+        label="PHASE 4  —  Agentic Capabilities (Future)";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=16;
+        fontcolor="#555555";
+        style="dashed,rounded";
+        fillcolor="#E0F2F1";
+        color="#00796B";
+        penwidth=2;
+
+        subgraph cluster_w6 {
+            label="Agent Supervisor  —  Autonomous Model Building";
+            labeljust=l;
+            fontname="Helvetica";
+            fontsize=13;
+            fontcolor="#333333";
+            style="dashed,rounded";
+            fillcolor="#F0FAF9";
+            color="#00796B";
+            penwidth=2;
+
+            w6_header [label="Extend MAS with Tools to Build + Contribute Models", shape=box, style="filled,dashed,rounded", fillcolor="#00796B", fontcolor="white", fontname="Helvetica", fontsize=11, color="#004D40", penwidth=1.5, width=5.5];
+
+            w6_t1 [label="Python Execution\n(Serverless Compute)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+            w6_t2 [label="MCP Tools\n(Data Reading + APIs)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+            w6_t3 [label="Model + Distribution\nBuilder (Fit + Register)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+            w6_t4 [label="Feature Store /\nModel Registry (UC)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+
+            w6_skills [label="Skills: MCP Servers, Python UC Functions,\nFeature Store, MLflow Model Registry, Serverless Compute", shape=box, style="filled,dashed,rounded", fillcolor="#B2DFDB", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#00796B", penwidth=1, width=5.5];
+
+            w6_header -> w6_t1 [style=invis];
+            w6_header -> w6_t2 [style=invis];
+            w6_header -> w6_t3 [style=invis];
+            w6_header -> w6_t4 [style=invis];
+            w6_t1 -> w6_skills [style=invis];
         }
     }
 
     // ===================================================================
     // DEPENDENCY EDGES between phases
     // ===================================================================
-    g1_skills -> g4_header [color="#1B6ACB", penwidth=2.5, label="  tables ready  ", lhead=cluster_g4, ltail=cluster_g1, style=bold];
-    g2_skills -> g4_header [color="#FF3621", penwidth=2.5, label="  Genie + views ready  ", lhead=cluster_g4, ltail=cluster_g2, style=bold];
-    g3_skills -> g4_header [color="#E8820C", penwidth=2.5, label="  engine + models ready  ", lhead=cluster_g4, ltail=cluster_g3, style=bold];
+    w1_skills -> w4_header [color="#1B6ACB", penwidth=2.5, label="  tables + semantics ready  ", lhead=cluster_w4, ltail=cluster_w1, style=bold];
+    w2_skills -> w4_header [color="#E8820C", penwidth=2.5, label="  engine + UC functions ready  ", lhead=cluster_w4, ltail=cluster_w2, style=bold];
+    w3_skills -> w4_header [color="#FF3621", penwidth=2.5, label="  Genie Space ready  ", lhead=cluster_w4, ltail=cluster_w3, style=bold];
 
-    g4_skills -> g5_header [color="#2D8C3C", penwidth=2.5, label="  MAS endpoint live  ", lhead=cluster_g5, ltail=cluster_g4, style=bold];
+    w4_skills -> w5_header [color="#2D8C3C", penwidth=2.5, label="  MAS endpoint live  ", lhead=cluster_w5, ltail=cluster_w4, style=bold];
+
+    // Phase 4 extends Phase 2 (Agent Supervisor evolves)
+    w4_skills -> w6_header [color="#00796B", penwidth=2.5, label="  supervisor + new agent tools  ", lhead=cluster_w6, ltail=cluster_w4, style="bold,dashed"];
+    w5_skills -> w6_header [color="#00796B", penwidth=2, label="  app integration  ", lhead=cluster_w6, ltail=cluster_w5, style="bold,dashed"];
 }

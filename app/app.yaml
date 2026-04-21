@@ -1,0 +1,30 @@
+command:
+  - uvicorn
+  - app:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+env:
+  - name: UC_CATALOG
+    value: lakebase_hls_workshop_catalog
+  - name: UC_SCHEMA
+    value: hospital_data
+  - name: MAS_ENDPOINT_NAME
+    value: "mas-821637da-endpoint"
+  - name: SQL_WAREHOUSE_ID
+    value: 6857cb4070fb662c
+  - name: DASHBOARD_ID
+    value: ""
+  - name: GENIE_SPACE_ID
+    value: "01f13cfc78561e9b8aeeb7c5e5f59a9f"
+  - name: PGHOST
+    value: "ep-silent-mountain-d1qyendu.database.us-west-2.cloud.databricks.com"
+  - name: PGPORT
+    value: "5432"
+  - name: PGDATABASE
+    value: "mcapp"
+  - name: PGUSER
+    value: "e9de8ec6-6907-4a96-8f57-064c9103f968"
+  - name: SEED_DEMO_DATA
+    value: "true"

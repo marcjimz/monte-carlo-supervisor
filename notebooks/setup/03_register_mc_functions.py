@@ -18,7 +18,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "monte_carlo_sim", "UC Catalog")
+dbutils.widgets.text("catalog", "lakebase_hls_workshop_catalog", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
 dbutils.widgets.text("principal", "account users", "Grant Execute To")
 

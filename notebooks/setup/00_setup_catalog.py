@@ -7,7 +7,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "monte_carlo_sim", "UC Catalog")
+dbutils.widgets.text("catalog", "lakebase_hls_workshop_catalog", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
 
 catalog = dbutils.widgets.get("catalog")
@@ -30,6 +30,9 @@ except Exception as e:
     err_msg = str(e).lower()
     if "already exists" in err_msg:
         print(f"Catalog '{catalog}' already exists — using it as-is.")
+    elif "permission_denied" in err_msg or "unauthorized" in err_msg or "create catalog" in err_msg:
+        # No CREATE CATALOG permission — catalog must already exist
+        print(f"No CREATE CATALOG permission. Assuming '{catalog}' already exists.")
     elif "metastore storage root" in err_msg or "default storage" in err_msg:
         # Azure: Default Storage enabled but no metastore root — use external location
         print(f"Metastore has no storage root. Trying with MANAGED LOCATION...")

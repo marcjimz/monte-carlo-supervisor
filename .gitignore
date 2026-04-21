@@ -41,6 +41,11 @@ htmlcov/
 *.whl
 *.tar.gz
 
+# Frontend
+node_modules/
+app/frontend/dist/
+app/frontend/.vite/
+
 # Temporary / local-only files
 temp/
 SCRIPT.md

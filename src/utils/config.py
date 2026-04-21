@@ -15,7 +15,7 @@ def get_config() -> dict:
     return {
         "databricks_host": os.getenv("DATABRICKS_HOST", ""),
         "databricks_token": os.getenv("DATABRICKS_TOKEN", ""),
-        "catalog": os.getenv("UC_CATALOG", "monte_carlo_sim"),
+        "catalog": os.getenv("UC_CATALOG", "lakebase_hls_workshop_catalog"),
         "schema": os.getenv("UC_SCHEMA", "hospital_data"),
         "mc_job_id": os.getenv("MC_JOB_ID", ""),
         "genie_space_id": os.getenv("GENIE_SPACE_ID", ""),
