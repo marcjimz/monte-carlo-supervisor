@@ -16,7 +16,7 @@ dbutils.widgets.text("simulation_type", "", "Simulation Type")
 dbutils.widgets.text("parameters", "{}", "Parameters JSON")
 dbutils.widgets.text("num_simulations", "10000", "Number of Simulations")
 dbutils.widgets.text("seed", "42", "Random Seed")
-dbutils.widgets.text("catalog", "monte_carlo_sim", "Unity Catalog Name")
+dbutils.widgets.text("catalog", "lakebase_hls_workshop_catalog", "Unity Catalog Name")
 dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------

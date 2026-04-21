@@ -17,9 +17,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Databricks
     databricks_host: str = ""
-    uc_catalog: str = "monte_carlo_sim"
+    uc_catalog: str = "lakebase_hls_workshop_catalog"
     uc_schema: str = "hospital_data"
-    mas_endpoint_name: str = "mas-97e7e569-endpoint"
+    mas_endpoint_name: str = ""
     sql_warehouse_id: str = ""
 
     # Lakebase (auto-populated by resource binding in Databricks Apps)
@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     seed_demo_data: bool = True
 
     # Auth
-    databricks_profile: str = "hls-lakebase-workshop"
+    databricks_profile: str = "fe-vm-lakebase-hls-workshop"
 
     # Config path — bundled copy in server/ dir, fallback to parent repo
     config_yaml_path: str = str(

@@ -109,10 +109,10 @@ digraph TeamWorkstreams {
     }
 
     // ===================================================================
-    // PHASE 2 — AgentBricks Supervisor
+    // PHASE 2 — Agent Supervisor (Orchestration)
     // ===================================================================
     subgraph cluster_phase2 {
-        label="PHASE 2  —  Orchestration (AgentBricks Supervisor)";
+        label="PHASE 2  —  Agent Supervisor (Orchestration + Tools)";
         labeljust=l;
         fontname="Helvetica";
         fontsize=16;
@@ -193,6 +193,48 @@ digraph TeamWorkstreams {
     }
 
     // ===================================================================
+    // PHASE 4 — Agentic Capabilities (Future)
+    // ===================================================================
+    subgraph cluster_phase4 {
+        label="PHASE 4  —  Agentic Capabilities (Future)";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=16;
+        fontcolor="#555555";
+        style="dashed,rounded";
+        fillcolor="#E0F2F1";
+        color="#00796B";
+        penwidth=2;
+
+        subgraph cluster_w6 {
+            label="Agent Supervisor  —  Autonomous Model Building";
+            labeljust=l;
+            fontname="Helvetica";
+            fontsize=13;
+            fontcolor="#333333";
+            style="dashed,rounded";
+            fillcolor="#F0FAF9";
+            color="#00796B";
+            penwidth=2;
+
+            w6_header [label="Extend MAS with Tools to Build + Contribute Models", shape=box, style="filled,dashed,rounded", fillcolor="#00796B", fontcolor="white", fontname="Helvetica", fontsize=11, color="#004D40", penwidth=1.5, width=5.5];
+
+            w6_t1 [label="Python Execution\n(Serverless Compute)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+            w6_t2 [label="MCP Tools\n(Data Reading + APIs)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+            w6_t3 [label="Model + Distribution\nBuilder (Fit + Register)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+            w6_t4 [label="Feature Store /\nModel Registry (UC)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1];
+
+            w6_skills [label="Skills: MCP Servers, Python UC Functions,\nFeature Store, MLflow Model Registry, Serverless Compute", shape=box, style="filled,dashed,rounded", fillcolor="#B2DFDB", fontname="Helvetica", fontsize=9, fontcolor="#555555", color="#00796B", penwidth=1, width=5.5];
+
+            w6_header -> w6_t1 [style=invis];
+            w6_header -> w6_t2 [style=invis];
+            w6_header -> w6_t3 [style=invis];
+            w6_header -> w6_t4 [style=invis];
+            w6_t1 -> w6_skills [style=invis];
+        }
+    }
+
+    // ===================================================================
     // DEPENDENCY EDGES between phases
     // ===================================================================
     w1_skills -> w4_header [color="#1B6ACB", penwidth=2.5, label="  tables + semantics ready  ", lhead=cluster_w4, ltail=cluster_w1, style=bold];
@@ -200,4 +242,8 @@ digraph TeamWorkstreams {
     w3_skills -> w4_header [color="#FF3621", penwidth=2.5, label="  Genie Space ready  ", lhead=cluster_w4, ltail=cluster_w3, style=bold];
 
     w4_skills -> w5_header [color="#2D8C3C", penwidth=2.5, label="  MAS endpoint live  ", lhead=cluster_w5, ltail=cluster_w4, style=bold];
+
+    // Phase 4 extends Phase 2 (Agent Supervisor evolves)
+    w4_skills -> w6_header [color="#00796B", penwidth=2.5, label="  supervisor + new agent tools  ", lhead=cluster_w6, ltail=cluster_w4, style="bold,dashed"];
+    w5_skills -> w6_header [color="#00796B", penwidth=2, label="  app integration  ", lhead=cluster_w6, ltail=cluster_w5, style="bold,dashed"];
 }

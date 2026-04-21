@@ -2,7 +2,7 @@
 
 Usage from a Databricks notebook:
     from src.databricks.synthetic_data.loader import load_all_tables
-    load_all_tables(spark, catalog="monte_carlo_sim", schema="hospital_data")
+    load_all_tables(spark, catalog="lakebase_hls_workshop_catalog", schema="hospital_data")
 """
 
 from __future__ import annotations

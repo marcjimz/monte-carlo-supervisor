@@ -8,7 +8,7 @@
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "monte_carlo_sim", "Unity Catalog Name")
+dbutils.widgets.text("catalog", "lakebase_hls_workshop_catalog", "Unity Catalog Name")
 dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------

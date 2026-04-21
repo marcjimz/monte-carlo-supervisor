@@ -66,6 +66,25 @@ digraph HospitalMCArchitecture {
     }
 
     // ===================================================================
+    // AGENTIC LAYER (Phase 4 — Future)
+    // ===================================================================
+    subgraph cluster_agentic {
+        label="Agentic Layer  —  Autonomous Model Building  (Future)";
+        labeljust=l;
+        fontname="Helvetica";
+        fontsize=14;
+        fontcolor="#555555";
+        style="dashed,rounded";
+        fillcolor="#E0F2F1";
+        color="#00796B";
+        penwidth=2;
+
+        python_exec [label="Python Execution\n(Serverless Compute)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1.5];
+        mcp_tools [label="MCP Tools\n(Data Reading + APIs)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1.5];
+        model_builder [label="Model Builder\n(Fit + Register New\nModels & Distributions)", shape=box, style="filled,dashed,rounded", fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1.5];
+    }
+
+    // ===================================================================
     // ANALYTICS LAYER (Phase 1)
     // ===================================================================
     subgraph cluster_analytics {
@@ -151,6 +170,8 @@ digraph HospitalMCArchitecture {
         sim_runs [label="simulation_runs\n(Metadata + Cache)", shape=cylinder, style=filled, fillcolor="#FFFFFF", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#2D8C3C", penwidth=1];
         sim_trials [label="simulation_trials\n(Bronze)", shape=cylinder, style=filled, fillcolor="#FFF2CC", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#CD7F32", penwidth=1.5];
         sim_results [label="simulation_results\n(Gold)", shape=cylinder, style=filled, fillcolor="#FFD700", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#B8860B", penwidth=1.5];
+
+        feature_store [label="Feature Store /\nModel Registry\n(UC Models + Distributions)", shape=cylinder, style="filled,dashed", fillcolor="#E0F2F1", fontname="Helvetica", fontsize=10, fontcolor="#333333", color="#00796B", penwidth=1.5];
     }
 
     // ===================================================================
@@ -197,4 +218,20 @@ digraph HospitalMCArchitecture {
 
     // Genie reads Gold results
     genie -> sim_results [color="#B8860B", penwidth=1, style=dashed, label=" prior sim results "];
+
+    // ===================================================================
+    // AGENTIC LAYER EDGES (Future — dashed)
+    // ===================================================================
+
+    // Agentic layer tools feed from orchestration
+    router -> python_exec [color="#00796B", penwidth=1.5, style=dashed, label=" execute code ", lhead=cluster_agentic];
+
+    // Agentic tools read data via MCP
+    mcp_tools -> hospital_tables [color="#00796B", penwidth=1, style=dashed, label=" read data "];
+    mcp_tools -> sim_results [color="#00796B", penwidth=1, style=dashed];
+
+    // Model builder contributes to simulation layer
+    model_builder -> feature_store [color="#00796B", penwidth=2, style=dashed, label=" register models\n + distributions "];
+    // Feature store feeds pipeline
+    feature_store -> task1 [color="#00796B", penwidth=1, style=dashed, label=" load models "];
 }
