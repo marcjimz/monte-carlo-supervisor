@@ -7,24 +7,24 @@ command:
   - "8000"
 env:
   - name: UC_CATALOG
-    value: lakebase_hls_workshop_catalog
+    value: monte_carlo
   - name: UC_SCHEMA
-    value: hospital_data
+    value: default
   - name: MAS_ENDPOINT_NAME
-    value: "mas-821637da-endpoint"
+    value: "mas-68a64419-endpoint"
   - name: SQL_WAREHOUSE_ID
-    value: 6857cb4070fb662c
+    value: 67db57985bbae271
   - name: DASHBOARD_ID
     value: ""
   - name: GENIE_SPACE_ID
-    value: "01f13cfc78561e9b8aeeb7c5e5f59a9f"
+    value: "01f13d9a78861c7d9c14d64177190df4"
   - name: PGHOST
-    value: "ep-silent-mountain-d1qyendu.database.us-west-2.cloud.databricks.com"
+    value: "ep-bold-moon-eeqxk0mi.database.westus2.azuredatabricks.net"
   - name: PGPORT
     value: "5432"
   - name: PGDATABASE
     value: "mcapp"
   - name: PGUSER
-    value: "e9de8ec6-6907-4a96-8f57-064c9103f968"
+    value: "14a18532-3252-4967-81ae-455e04528e2f"
   - name: SEED_DEMO_DATA
     value: "true"

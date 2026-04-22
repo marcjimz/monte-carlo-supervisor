@@ -81,6 +81,7 @@ print(f"Using warehouse: {warehouse_id}")
 # COMMAND ----------
 
 existing = manager.genie_find_by_name(config["display_name"])
+existing = None
 if existing:
     print(f"Found existing Genie Space: {existing}")
     print("Updating existing space...")

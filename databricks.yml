@@ -4,10 +4,10 @@ bundle:
 variables:
   catalog:
     description: "Unity Catalog catalog name"
-    default: "lakebase_hls_workshop_catalog"
+    default: "monte_carlo"
   schema:
     description: "Unity Catalog schema name"
-    default: "hospital_data"
+    default: "default"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
@@ -31,6 +31,3 @@ targets:
     mode: production
     workspace:
       root_path: /Workspace/Users/marcin.jimenez@databricks.com/.bundle/${bundle.name}/${bundle.target}
-    variables:
-      catalog: lakebase_hls_workshop_catalog
-      schema: hospital_data

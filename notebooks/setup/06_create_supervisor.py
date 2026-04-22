@@ -43,23 +43,23 @@ if _root not in sys.path:
 # MAGIC ## Get Genie Space ID from Previous Task
 
 # COMMAND ----------
-
-try:
-    genie_space_id = dbutils.jobs.taskValues.get(
-        taskKey="configure_genie", key="genie_space_id"
-    )
-    print(f"Genie Space ID: {genie_space_id}")
-except Exception as e:
-    print(f"Could not get task value: {e}")
-    print("Attempting to find Genie Space by name...")
-    from databricks_tools_core.agent_bricks import AgentBricksManager as _mgr
-    _m = _mgr()
-    existing = _m.genie_find_by_name("Women's Health Analytics")
-    if existing:
-        genie_space_id = existing.space_id
-        print(f"Found Genie Space: {genie_space_id}")
-    else:
-        raise RuntimeError("Genie Space not found. Run notebook 05 first.")
+genie_space_id = "01f13d9a78861c7d9c14d64177190df4"
+# try:
+#     genie_space_id = dbutils.jobs.taskValues.get(
+#         taskKey="configure_genie", key="genie_space_id"
+#     )
+#     print(f"Genie Space ID: {genie_space_id}")
+# except Exception as e:
+#     print(f"Could not get task value: {e}")
+#     print("Attempting to find Genie Space by name...")
+#     from databricks_tools_core.agent_bricks import AgentBricksManager as _mgr
+#     _m = _mgr()
+#     existing = _m.genie_find_by_name("Women's Health Analytics")
+#     if existing:
+#         genie_space_id = existing.space_id
+#         print(f"Found Genie Space: {genie_space_id}")
+#     else:
+#         raise RuntimeError("Genie Space not found. Run notebook 05 first.")
 
 # COMMAND ----------
 
@@ -137,15 +137,15 @@ def _extract_tile_id(response: dict) -> str:
 existing = manager.mas_find_by_name(SUPERVISOR_NAME)
 if existing:
     print(f"Found existing MAS: {existing}")
-    tile_id = existing.tile_id
-    manager.mas_update(
-        tile_id=tile_id,
-        name=SUPERVISOR_NAME,
-        description=SUPERVISOR_DESCRIPTION,
-        instructions=supervisor_instructions,
-        agents=agents,
-    )
-    print(f"MAS updated: {tile_id}")
+    # tile_id = existing.tile_id
+    # manager.mas_update(
+    #     tile_id=tile_id,
+    #     name=SUPERVISOR_NAME,
+    #     description=SUPERVISOR_DESCRIPTION,
+    #     instructions=supervisor_instructions,
+    #     agents=agents,
+    # )
+    # print(f"MAS updated: {tile_id}")
 else:
     print("Creating new MAS...")
     mas = manager.mas_create(
