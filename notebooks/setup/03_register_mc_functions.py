@@ -31,12 +31,11 @@ print(f"Principal : {principal}")
 
 # COMMAND ----------
 
-# Add bundle root to sys.path so `src` package is importable
-import sys
+# Install project package from bundled wheel
+import subprocess, sys
 _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 _root = "/Workspace" + "/".join(_nb.split("/")[:-3])
-if _root not in sys.path:
-    sys.path.insert(0, _root)
+subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
 
 # COMMAND ----------
 
@@ -120,7 +119,7 @@ print(f"SP authenticated as: {sp_me.display_name}")
 
 # COMMAND ----------
 
-from src.databricks.sql.connections.workspace import WorkspaceConnection
+from mc_supervisor.sql.connections.workspace import WorkspaceConnection
 
 # Drop existing connection for clean state
 drop_sql = WorkspaceConnection.get_drop_sql(connection_name=CONNECTION_NAME)
@@ -219,7 +218,7 @@ else:
 
 # COMMAND ----------
 
-from src.databricks.sql.functions.monte_carlo.registry import MonteCarloRegistry
+from mc_supervisor.sql.functions.monte_carlo.registry import MonteCarloRegistry
 
 registry = MonteCarloRegistry(
     catalog=catalog,

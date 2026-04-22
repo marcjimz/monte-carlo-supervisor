@@ -1,4 +1,4 @@
-.PHONY: help setup install generate-data deploy test lint clean
+.PHONY: help setup install generate-data build deploy deploy-app deploy-dev deploy-prod test lint format clean
 
 help: ## Show all targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -12,14 +12,21 @@ install: ## Install Python dependencies
 generate-data: ## Generate synthetic data CSVs to /data
 	python -m src.databricks.synthetic_data.generators
 
-deploy: ## Deploy Databricks Asset Bundle
-	databricks bundle deploy
+build: ## Build React frontend + Python wheel
+	npm run build --prefix app/frontend
+	rm -rf dist/*.whl build/ src/*.egg-info
+	pip wheel --no-build-isolation --no-deps --no-cache-dir -w dist/ .
 
-deploy-dev: ## Deploy to dev target
-	databricks bundle deploy --target dev
+BUNDLE_ARGS ?=
 
-deploy-prod: ## Deploy to prod target
-	databricks bundle deploy --target prod
+deploy: ## Full E2E deploy (build + bundle + setup)
+	$(MAKE) build
+	databricks bundle deploy $(BUNDLE_ARGS)
+	databricks bundle run setup_pipeline $(BUNDLE_ARGS)
+
+deploy-app: ## Redeploy app code only (no setup)
+	$(MAKE) build
+	databricks bundle deploy $(BUNDLE_ARGS)
 
 test: ## Run tests
 	pytest tests/ -v

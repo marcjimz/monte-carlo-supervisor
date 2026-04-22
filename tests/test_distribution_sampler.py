@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.databricks.monte_carlo.distribution_sampler import (
+from src.mc_supervisor.monte_carlo.distribution_sampler import (
     SUPPORTED_TYPES,
     sample_from_spec,
     validate_spec,

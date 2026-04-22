@@ -55,7 +55,7 @@ _COMPOUND_EXAMPLE = {
 
 def _generate_simulation_examples() -> list[dict]:
     """Generate one simulation example per type from config.yaml."""
-    from src.databricks.monte_carlo import config_loader
+    from mc_supervisor.monte_carlo import config_loader
 
     examples = []
     for sim_type in config_loader.get_valid_types():

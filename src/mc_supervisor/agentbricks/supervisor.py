@@ -45,15 +45,15 @@ MATRIX WORKFLOW (for parameter sweeps):
 When the user wants to compare results across multiple parameter values (sensitivity analysis, parameter sweep, grid search):
 Step 1: Call matrix_builder with the simulation type, two parameters to sweep, and their value arrays.
 Step 2: The system will create the matrix with all cells in "pending" state.
-Step 3: Tell the user: "Your matrix has been created on the Matrices tab. Click **Run All** there to trigger the simulations, then results will populate as cells complete."
-IMPORTANT: The matrix is created but simulations are NOT automatically triggered. The user must click Run All on the Matrices tab.
+Step 3: Tell the user: "Your matrix has been created and all cell simulations are now running automatically. Results will appear in this chat when complete (typically 5-10 minutes)."
+IMPORTANT: Simulations are automatically triggered after matrix creation. Do NOT tell the user to click Run All.
 IMPORTANT: Use JSON arrays for p_row_values and p_col_values (e.g. '[0.05, 0.08, 0.10, 0.15]').
 IMPORTANT: Only override p_base_parameters for non-swept parameters the user explicitly mentions."""
 
 
 def _get_parameter_reference() -> str:
     """Generate the parameter reference block from config.yaml."""
-    from src.databricks.monte_carlo import config_loader
+    from mc_supervisor.monte_carlo import config_loader
 
     lines = [
         "\n\nWhen calling simulations, construct the parameters JSON using these parameter names:"
@@ -93,7 +93,7 @@ def get_supervisor_instructions() -> str:
 
 def _get_supported_types_str() -> str:
     """Return comma-separated sorted list of simulation types from config."""
-    from src.databricks.monte_carlo import config_loader
+    from mc_supervisor.monte_carlo import config_loader
     return ", ".join(config_loader.get_valid_types())
 
 
@@ -175,7 +175,7 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
                 "Creates a parameter sweep matrix for comparing outcomes across a grid of "
                 "two parameters. Use this for sensitivity analysis, parameter sweeps, or "
                 "comparing outcomes across ranges. The matrix is created with pending cells; "
-                "the user then clicks Run All on the Matrices tab to trigger simulations. "
+                "cell simulations are automatically triggered and results are delivered back in this chat. "
                 f"Supports: {types_str}."
             ),
             "agent_type": "unity_catalog_function",

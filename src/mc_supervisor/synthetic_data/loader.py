@@ -1,14 +1,16 @@
 """Load pre-generated CSV files into Unity Catalog tables via Spark.
 
 Usage from a Databricks notebook:
-    from src.databricks.synthetic_data.loader import load_all_tables
-    load_all_tables(spark, catalog="lakebase_hls_workshop_catalog", schema="hospital_data")
+    from mc_supervisor.synthetic_data.loader import load_all_tables
+    load_all_tables(spark, catalog="my_catalog", schema="hospital_data", data_dir="/Users/me/project/data")
 """
 
 from __future__ import annotations
 
-import pathlib
+import io
 
+import pandas as pd
+from databricks.sdk import WorkspaceClient
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
     DateType,
@@ -18,12 +20,6 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-
-# Root of the repo — CSVs live in <repo>/data/
-# loader.py is at src/databricks/synthetic_data/loader.py → parents[3] = project root
-# Note: avoid .resolve() — workspace filesystem paths (/Workspace/...) are not
-# real POSIX paths and resolve() can break on serverless compute.
-_DEFAULT_DATA_DIR = pathlib.Path(__file__).parents[3] / "data"
 
 # ---------------------------------------------------------------------------
 # Schema definitions for each CSV (ensures correct types on load)
@@ -168,15 +164,27 @@ _LOAD_ORDER = [
 ]
 
 
+def _workspace_path(data_dir: str) -> str:
+    """Normalise a workspace path for the SDK (strip /Workspace prefix)."""
+    s = str(data_dir)
+    if s.startswith("/Workspace"):
+        s = s[len("/Workspace"):]
+    return s
+
+
 def load_csv_to_table(
     spark: SparkSession,
     table_name: str,
     catalog: str,
     schema: str,
-    data_dir: str | pathlib.Path | None = None,
+    data_dir: str,
     mode: str = "overwrite",
 ) -> int:
     """Load a single CSV file into a Unity Catalog Delta table.
+
+    Downloads the CSV via the Workspace REST API (no FUSE dependency),
+    parses it with pandas, converts to a Spark DataFrame, and writes
+    to a Delta table.
 
     Parameters
     ----------
@@ -189,8 +197,9 @@ def load_csv_to_table(
         Unity Catalog catalog name.
     schema : str
         Unity Catalog schema name.
-    data_dir : str or Path, optional
-        Directory containing the CSV files.  Defaults to ``<repo>/data/``.
+    data_dir : str
+        Workspace path to the directory containing CSV files,
+        e.g. ``/Workspace/Users/me/project/data`` or ``/Users/me/project/data``.
     mode : str
         Spark write mode (default ``"overwrite"``).
 
@@ -199,24 +208,20 @@ def load_csv_to_table(
     int
         Number of rows loaded.
     """
-    import pandas as pd
-
-    data_dir = pathlib.Path(data_dir) if data_dir else _DEFAULT_DATA_DIR
-    csv_path = data_dir / f"{table_name}.csv"
-
-    if not csv_path.exists():
-        raise FileNotFoundError(f"CSV not found: {csv_path}")
-
-    # Read via pandas to avoid Spark file-URI issues on serverless compute
-    # (@ in workspace email paths breaks Spark's file: URI parser).
-    # Create DataFrame without schema first (natural Arrow mapping), then
-    # cast columns to the target types using Spark's cast() which handles
-    # string-to-date, int-to-string, etc. gracefully.
     from pyspark.sql.functions import col
 
-    pdf = pd.read_csv(str(csv_path))
-    df = spark.createDataFrame(pdf)
+    ws_dir = _workspace_path(data_dir)
+    csv_ws_path = f"{ws_dir}/{table_name}.csv"
 
+    # Download CSV bytes via REST API — works reliably on serverless
+    w = WorkspaceClient()
+    with w.workspace.download(csv_ws_path) as f:
+        raw = f.read()
+
+    pdf = pd.read_csv(io.BytesIO(raw))
+
+    # Create Spark DataFrame, then cast columns to match the target schema
+    df = spark.createDataFrame(pdf)
     table_schema = _SCHEMAS.get(table_name)
     if table_schema:
         for field in table_schema:
@@ -235,20 +240,27 @@ def load_all_tables(
     spark: SparkSession,
     catalog: str,
     schema: str,
-    data_dir: str | pathlib.Path | None = None,
+    data_dir: str,
     mode: str = "overwrite",
 ) -> dict[str, int]:
     """Load all CSV files into Unity Catalog tables.
 
     Returns a dict mapping table names to row counts.
     """
-    data_dir = pathlib.Path(data_dir) if data_dir else _DEFAULT_DATA_DIR
     print(f"Loading CSVs from {data_dir} -> {catalog}.{schema}\n")
+
+    # List files in the workspace directory to know which CSVs exist
+    ws_dir = _workspace_path(data_dir)
+    w = WorkspaceClient()
+    try:
+        available = {obj.path.rsplit("/", 1)[-1] for obj in w.workspace.list(ws_dir)}
+    except Exception:
+        available = set()
 
     results: dict[str, int] = {}
     for table_name in _LOAD_ORDER:
-        csv_path = data_dir / f"{table_name}.csv"
-        if csv_path.exists():
+        csv_name = f"{table_name}.csv"
+        if csv_name in available:
             results[table_name] = load_csv_to_table(
                 spark, table_name, catalog, schema, data_dir, mode
             )

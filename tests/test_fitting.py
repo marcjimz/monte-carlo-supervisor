@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.databricks.monte_carlo.fitting import (
+from src.mc_supervisor.monte_carlo.fitting import (
     auto_fit,
     fit_beta,
     fit_distribution,

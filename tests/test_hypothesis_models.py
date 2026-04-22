@@ -10,7 +10,7 @@ All tests pass distribution specs via params["distributions"].
 import pandas as pd
 import pytest
 
-from src.databricks.monte_carlo import config_loader, model_templates
+from src.mc_supervisor.monte_carlo import config_loader, model_templates
 
 
 def _make_batch_df(batch_id: int = 0, seed: int = 42) -> pd.DataFrame:

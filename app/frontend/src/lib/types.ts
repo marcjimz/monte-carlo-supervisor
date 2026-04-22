@@ -152,6 +152,7 @@ export interface MatrixCreatedEvent {
   rows: number;
   cols: number;
   total_cells: number;
+  auto_running?: boolean;
 }
 
 export interface DistributionSpec {

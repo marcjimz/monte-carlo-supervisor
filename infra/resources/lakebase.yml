@@ -1,0 +1,8 @@
+resources:
+  postgres_projects:
+    monte_carlo_db:
+      project_id: "monte-carlo-app"
+      display_name: "Monte Carlo App"
+      pg_version: 17
+      # A default 'production' branch with a read-write 'primary' endpoint
+      # is auto-provisioned when the project is created.

@@ -30,12 +30,11 @@ print(f"Schema  : {schema}")
 
 # COMMAND ----------
 
-# Add bundle root to sys.path so `src` package is importable
-import sys
+# Install project package from bundled wheel
+import subprocess, sys
 _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 _root = "/Workspace" + "/".join(_nb.split("/")[:-3])
-if _root not in sys.path:
-    sys.path.insert(0, _root)
+subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
 
 # COMMAND ----------
 
@@ -68,13 +67,13 @@ except Exception as e:
 
 # COMMAND ----------
 
-from src.databricks.agentbricks.supervisor import (
+from mc_supervisor.agentbricks.supervisor import (
     SUPERVISOR_NAME,
     SUPERVISOR_DESCRIPTION,
     get_supervisor_instructions,
     get_supervisor_agents,
 )
-from src.databricks.agentbricks.examples import get_supervisor_examples
+from mc_supervisor.agentbricks.examples import get_supervisor_examples
 
 agents = get_supervisor_agents(genie_space_id, catalog, schema)
 supervisor_instructions = get_supervisor_instructions()
@@ -211,6 +210,10 @@ while elapsed < timeout_s:
         # Only trust ONLINE if we either saw it go through a non-ONLINE state
         # (confirming a reprovision cycle) or enough time has passed.
         print(f"\nEndpoint is ONLINE after {elapsed}s.")
+        # Output endpoint name for downstream tasks (08_configure_app)
+        endpoint_name = f"mas-{tile_id}-endpoint"
+        dbutils.jobs.taskValues.set(key="mas_endpoint_name", value=endpoint_name)
+        print(f"  Endpoint name: {endpoint_name}")
         break
 
     time.sleep(poll_interval_s)
@@ -219,6 +222,10 @@ else:
     print(f"\nWARNING: Endpoint did not reach ONLINE within {timeout_s}s.")
     print(f"Last status: {status}")
     print("The endpoint may still be provisioning. Check the workspace UI.")
+    # Still output the endpoint name so downstream tasks can reference it
+    endpoint_name = f"mas-{tile_id}-endpoint"
+    dbutils.jobs.taskValues.set(key="mas_endpoint_name", value=endpoint_name)
+    print(f"  Endpoint name (may not be ready): {endpoint_name}")
 
 # COMMAND ----------
 

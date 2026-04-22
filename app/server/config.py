@@ -11,6 +11,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -27,6 +28,18 @@ class Settings(BaseSettings):
     pgport: int = 5432
     pgdatabase: str = "mcapp"
     pguser: str = ""
+
+    @model_validator(mode="after")
+    def _resolve_pguser(self) -> "Settings":
+        """Fall back to DATABRICKS_CLIENT_ID if PGUSER is not set.
+
+        In Databricks Apps, the platform injects the app's service principal
+        UUID as DATABRICKS_CLIENT_ID. This is the same value needed for PGUSER
+        when connecting to Lakebase.
+        """
+        if not self.pguser:
+            self.pguser = os.environ.get("DATABRICKS_CLIENT_ID", "")
+        return self
 
     # Lakebase Autoscaling (for credential generation)
     lakebase_project: str = "monte-carlo-app"

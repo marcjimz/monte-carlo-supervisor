@@ -13,12 +13,11 @@ dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------
 
-# Add bundle root to sys.path so `src` package is importable
-import sys
+# Install project package from bundled wheel
+import subprocess, sys
 _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 _root = "/Workspace" + "/".join(_nb.split("/")[:-3])
-if _root not in sys.path:
-    sys.path.insert(0, _root)
+subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
 
 # COMMAND ----------
 
@@ -27,9 +26,9 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from src.databricks.monte_carlo import config_loader
-from src.databricks.monte_carlo.fitting import fit_distribution
-from src.databricks.monte_carlo.results import get_latest_distribution_version
+from mc_supervisor.monte_carlo import config_loader
+from mc_supervisor.monte_carlo.fitting import fit_distribution
+from mc_supervisor.monte_carlo.results import get_latest_distribution_version
 
 # COMMAND ----------
 

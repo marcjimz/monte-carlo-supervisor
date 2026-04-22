@@ -496,7 +496,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
                   {matrix.rows}x{matrix.cols} ({matrix.total_cells} cells)
                 </span>
                 <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
-                  Ready to run
+                  {matrix.auto_running ? "Running..." : "Ready to run"}
                 </Badge>
               </div>
             ))}

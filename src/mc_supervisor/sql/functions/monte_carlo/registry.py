@@ -13,7 +13,7 @@ def _load_valid_types() -> list[str]:
     """Load simulation type names from config.yaml (single source of truth)."""
     global _valid_types_cache
     if _valid_types_cache is None:
-        from src.databricks.monte_carlo import config_loader
+        from mc_supervisor.monte_carlo import config_loader
         _valid_types_cache = config_loader.get_valid_types()
     return _valid_types_cache
 

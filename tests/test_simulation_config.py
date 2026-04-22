@@ -6,7 +6,7 @@ aggregation columns match schemas, and config_loader functions return correct da
 
 import pytest
 
-from src.databricks.monte_carlo import config_loader, model_templates
+from src.mc_supervisor.monte_carlo import config_loader, model_templates
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +298,7 @@ class TestUCFunctionValidTypes:
     """Verify UC SQL functions accept and use valid_types from config."""
 
     def test_check_simulation_uses_custom_types(self):
-        from src.databricks.sql.functions.monte_carlo.check_simulation import CheckSimulationFunction
+        from src.mc_supervisor.sql.functions.monte_carlo.check_simulation import CheckSimulationFunction
 
         custom_types = ["alpha", "beta"]
         sql = CheckSimulationFunction.get_registration_sql(
@@ -308,7 +308,7 @@ class TestUCFunctionValidTypes:
         assert "'beta'" in sql
 
     def test_trigger_simulation_uses_custom_types(self):
-        from src.databricks.sql.functions.monte_carlo.trigger_simulation import TriggerSimulationFunction
+        from src.mc_supervisor.sql.functions.monte_carlo.trigger_simulation import TriggerSimulationFunction
 
         custom_types = ["gamma", "delta"]
         sql = TriggerSimulationFunction.get_registration_sql(
@@ -318,7 +318,7 @@ class TestUCFunctionValidTypes:
         assert "'gamma'" in sql
 
     def test_registry_passes_valid_types(self):
-        from src.databricks.sql.functions.monte_carlo.registry import MonteCarloRegistry
+        from src.mc_supervisor.sql.functions.monte_carlo.registry import MonteCarloRegistry
 
         custom_types = ["foo", "bar"]
         registry = MonteCarloRegistry("cat", "sch", "123", "conn", valid_types=custom_types)

@@ -1,0 +1,38 @@
+resources:
+  apps:
+    monte_carlo_ui:
+      name: "monte-carlo-ui"
+      description: "Monte Carlo Simulation UI with Agent Chat"
+      source_code_path: ../../app
+      config:
+        command:
+          - uvicorn
+          - app:app
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8000"
+        env:
+          - name: UC_CATALOG
+            value: ${var.catalog}
+          - name: UC_SCHEMA
+            value: ${var.schema}
+          - name: SEED_DEMO_DATA
+            value: "true"
+          # Dynamic IDs — populated by setup task 08_configure_app
+          - name: MAS_ENDPOINT_NAME
+            value: ""
+          - name: GENIE_SPACE_ID
+            value: ""
+          - name: SQL_WAREHOUSE_ID
+            value: ""
+          - name: DASHBOARD_ID
+            value: ""
+          - name: PGHOST
+            value: ""
+          - name: PGPORT
+            value: "5432"
+          - name: PGDATABASE
+            value: "mcapp"
+          - name: PGUSER
+            value: ""

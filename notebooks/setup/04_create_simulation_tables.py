@@ -24,12 +24,11 @@ print(f"Target: {catalog}.{schema}")
 
 # COMMAND ----------
 
-# Add bundle root to sys.path so `src` package is importable
-import sys
+# Install project package from bundled wheel
+import subprocess, sys
 _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 _root = "/Workspace" + "/".join(_nb.split("/")[:-3])
-if _root not in sys.path:
-    sys.path.insert(0, _root)
+subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
 
 # COMMAND ----------
 
@@ -38,7 +37,7 @@ if _root not in sys.path:
 
 # COMMAND ----------
 
-from src.databricks.monte_carlo.results import get_simulation_tables_ddl
+from mc_supervisor.monte_carlo.results import get_simulation_tables_ddl
 
 ddl_statements = get_simulation_tables_ddl(catalog, schema)
 

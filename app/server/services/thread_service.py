@@ -465,8 +465,8 @@ async def _handle_matrix_builder(
             seed=seed,
         )
 
-        # Matrix created — user runs simulations via the UI "Run All" button.
-        # (Auto-trigger removed for reliability; can be re-enabled later.)
+        # Auto-trigger matrix cell simulations in background
+        asyncio.create_task(_run_matrix_background(matrix["id"], thread_id))
 
         # Build SSE payload
         matrix_payload = {
@@ -478,6 +478,7 @@ async def _handle_matrix_builder(
             "rows": len(row_values),
             "cols": len(col_values),
             "total_cells": len(row_values) * len(col_values),
+            "auto_running": True,
         }
         return f"data: {json.dumps({'type': 'matrix_created', 'matrix': matrix_payload})}\n\n"
 
@@ -500,8 +501,12 @@ async def _run_matrix_background(matrix_id, thread_id=None):
     if not thread_id:
         return
 
-    # Poll until all cells complete (check every 30s, up to 10 minutes)
-    max_polls = 20
+    # Short initial delay to let run_matrix() finish triggering all cells
+    await asyncio.sleep(10)
+
+    # Poll until all cells complete (check every 30s, up to 15 minutes)
+    max_polls = 30
+    retried = False
     for attempt in range(max_polls):
         await asyncio.sleep(30)
         try:
@@ -509,10 +514,26 @@ async def _run_matrix_background(matrix_id, thread_id=None):
             if not matrix:
                 return
 
+            cells = matrix["cells"]
             incomplete = [
-                c for c in matrix["cells"]
+                c for c in cells
                 if c["status"] in ("running", "queued", "pending")
             ]
+            failed = [c for c in cells if c["status"] == "failed"]
+
+            # One-time retry: if some cells failed, re-trigger them
+            if failed and not retried:
+                retried = True
+                logger.info(
+                    "Matrix %s: %d failed cells — retrying via run_matrix()",
+                    matrix_id, len(failed),
+                )
+                try:
+                    await matrix_service.run_matrix(matrix_id)
+                except Exception:
+                    logger.warning("Matrix retry failed for %s", matrix_id, exc_info=True)
+                continue
+
             if not incomplete:
                 break
 
@@ -535,9 +556,10 @@ async def _run_matrix_background(matrix_id, thread_id=None):
         summary = _format_matrix_results(matrix)
         if summary:
             await db.execute(
-                """INSERT INTO thread_messages (thread_id, role, content)
-                   VALUES ($1, 'assistant', $2)""",
+                """INSERT INTO thread_messages (thread_id, role, content, metadata)
+                   VALUES ($1, 'assistant', $2, $3)""",
                 thread_id, summary,
+                json.dumps({"type": "matrix_results", "matrix_id": str(matrix_id)}),
             )
             await db.execute(
                 "UPDATE agent_threads SET updated_at = NOW() WHERE id = $1",

@@ -121,3 +121,17 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
+
+        - task_key: configure_app
+          depends_on:
+            - task_key: configure_genie
+            - task_key: create_supervisor
+            - task_key: fit_distributions
+            - task_key: register_functions
+          notebook_task:
+            notebook_path: ../../notebooks/setup/08_configure_app.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              app_name: ${resources.apps.monte_carlo_ui.name}
+              lakebase_project: ${resources.postgres_projects.monte_carlo_db.project_id}
