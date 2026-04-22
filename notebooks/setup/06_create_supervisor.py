@@ -43,7 +43,7 @@ if _root not in sys.path:
 # MAGIC ## Get Genie Space ID from Previous Task
 
 # COMMAND ----------
-genie_space_id = "01f13d9a78861c7d9c14d64177190df4"
+genie_space_id = "01f13dac2d1217238668238a3207523a" #"01f13d9a78861c7d9c14d64177190df4"
 # try:
 #     genie_space_id = dbutils.jobs.taskValues.get(
 #         taskKey="configure_genie", key="genie_space_id"

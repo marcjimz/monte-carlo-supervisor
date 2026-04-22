@@ -1,0 +1,20 @@
+resources:
+  postgres_projects:
+    monte_carlo_app:
+      project_id: 'mcapp'
+      display_name: 'Monte Carlo App'
+      pg_version: 17
+
+  postgres_branches:
+    main_branch:
+      parent: ${resources.postgres_projects.monte_carlo_app.id}
+      branch_id: 'main'
+      no_expiry: true
+
+  postgres_endpoints:
+    main_endpoint:
+      parent: ${resources.postgres_branches.main_branch.id}
+      endpoint_id: 'primary'
+      endpoint_type: 'ENDPOINT_TYPE_READ_WRITE'
+      autoscaling_limit_min_cu: 0.5
+      autoscaling_limit_max_cu: 2

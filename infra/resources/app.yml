@@ -1,5 +1,37 @@
-resources:
-  apps:
-    monte-carlo-app:
-      name: "monte-carlo-app"
-      source_code_path: ../..
+# resources:
+#   apps:
+#     monte-carlo-app:
+#       name: "monte-carlo-app"
+#       source_code_path: ../../app
+#     config:
+#       POSTGRES_URL: ${resources.postgres_branches.main_branch.connection_string}
+#       command:
+#         - uvicorn
+#         - app:app
+#         - --host
+#         - 0.0.0.0
+#         - --port
+#         - "8000"
+#       env:
+#         - name: UC_CATALOG
+#           value: monte_carlo
+#         - name: UC_SCHEMA
+#           value: default
+#         - name: MAS_ENDPOINT_NAME
+#           value: "mas-68a64419-endpoint"
+#         - name: SQL_WAREHOUSE_ID
+#           value: 67db57985bbae271
+#         - name: DASHBOARD_ID
+#           value: ""
+#         - name: GENIE_SPACE_ID
+#           value: "01f13dac2d1217238668238a3207523a" # "01f13d9a78861c7d9c14d64177190df4"
+#         - name: PGHOST
+#           value: ${resources.postgres_endpoints.main_endpoint.id}
+#         - name: PGPORT
+#           value: "5432"
+#         - name: PGDATABASE
+#           value: ${resources.postgres_projects.monte_carlo_app.id} #"mcapp"
+#         - name: PGUSER
+#           value: "14a18532-3252-4967-81ae-455e04528e2f"
+#         - name: SEED_DEMO_DATA
+#           value: "true"
