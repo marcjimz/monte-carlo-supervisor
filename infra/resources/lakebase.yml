@@ -1,0 +1,38 @@
+
+resources:
+  apps:
+    monte-carlo-app:
+      name: "monte-carlo-app"
+      source_code_path: ../../app
+      description: "Monte Carlo App"
+      config:
+        command:
+          - uvicorn
+          - app:app
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8000"
+        env:
+          - name: UC_CATALOG
+            value: monte_carlo
+          - name: UC_SCHEMA
+            value: default
+          - name: MAS_ENDPOINT_NAME
+            value: "mas-68a64419-endpoint"
+          - name: SQL_WAREHOUSE_ID
+            value: 67db57985bbae271
+          - name: DASHBOARD_ID
+            value: ""
+          - name: GENIE_SPACE_ID
+            value: "01f13dac2d1217238668238a3207523a"
+          - name: PGHOST
+            value: "ep-jolly-salad-eeeur5jl.database.westus2.azuredatabricks.net"
+          - name: PGPORT
+            value: "5432"
+          - name: PGDATABASE
+            value: "mcapp"
+          - name: PGUSER
+            value: "fcbecb36-fb31-4323-b902-3e036b91033b"
+          - name: SEED_DEMO_DATA
+            value: "true"

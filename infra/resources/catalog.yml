@@ -1,4 +1,0 @@
-# Schema creation is handled by notebooks/setup/00_setup_catalog.py
-# (runs as part of the setup_pipeline job).
-# No terraform-managed schema resources needed.
-resources: {}
