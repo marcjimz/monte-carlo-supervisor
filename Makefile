@@ -12,11 +12,15 @@ install: ## Install Python dependencies
 generate-data: ## Generate synthetic data CSVs to /data
 	python -m src.databricks.synthetic_data.generators
 
-build: ## Build React frontend + Python wheel
+build: ## Build React frontend + Python wheel + dashboard
 	npm run build --prefix app/frontend
 	rm -rf dist/*.whl build/ src/*.egg-info
 	pip wheel --no-build-isolation --no-deps --no-cache-dir -w dist/ .
+	sed 's/__CATALOG__/$(CATALOG)/g; s/__SCHEMA__/$(SCHEMA)/g' \
+		dashboards/wh_analytics.lvdash.json.tmpl > dashboards/wh_analytics.lvdash.json
 
+CATALOG ?= monte_carlo_supervisor_catalog
+SCHEMA  ?= hospital_data
 BUNDLE_ARGS ?=
 
 deploy: ## Full E2E deploy (build + bundle + setup)

@@ -8,6 +8,10 @@ variables:
   schema:
     description: "Unity Catalog schema name"
     default: "hospital_data"
+  warehouse_id:
+    description: "SQL Warehouse ID for the dashboard"
+    lookup:
+      warehouse: "Serverless Starter Warehouse"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
@@ -23,6 +27,7 @@ sync:
     - data/**/*.csv
     - dist/*.whl
     - app/**
+    - dashboards/**
   exclude:
     - app/frontend/node_modules/**
     - app/frontend/src/**

@@ -1,0 +1,1075 @@
+{
+  "datasets": [
+    {
+      "displayName": "Billing & Encounters",
+      "name": "ds_billing",
+      "query": "SELECT\n  encounter_id,\n  patient_id,\n  paid_amount,\n  total_charges,\n  claim_status,\n  encounter_type,\n  department,\n  admission_date,\n  COALESCE(primary_icd10_code, 'N/A') AS icd10_code\nFROM __CATALOG__.__SCHEMA__.v_wh_billing_encounters"
+    },
+    {
+      "displayName": "Diagnoses",
+      "name": "ds_diagnoses",
+      "query": "SELECT\n  encounter_id,\n  patient_id,\n  department,\n  admission_date,\n  icd10_code,\n  diagnosis_description,\n  COALESCE(diagnosis_category, 'Other') AS diagnosis_category\nFROM __CATALOG__.__SCHEMA__.v_wh_encounter_diagnoses"
+    },
+    {
+      "displayName": "Patient Demographics",
+      "name": "ds_patients",
+      "query": "SELECT\n  encounter_id,\n  patient_id,\n  department,\n  admission_date,\n  insurance_type,\n  CASE\n    WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 35 THEN '18-34'\n    WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 50 THEN '35-49'\n    WHEN FLOOR(DATEDIFF(admission_date, date_of_birth) / 365.25) < 65 THEN '50-64'\n    ELSE '65+'\n  END AS age_group,\n  CASE WHEN num_chronic > 0 THEN 'Chronic' ELSE 'Non-Chronic' END AS chronic_flag\nFROM __CATALOG__.__SCHEMA__.v_wh_encounter_patients"
+    },
+    {
+      "displayName": "Top 15 Diagnoses",
+      "name": "ds_diagnosis_top",
+      "query": "SELECT\n  icd10_code,\n  COALESCE(diagnosis_description, icd10_code) AS description,\n  COUNT(*) AS diagnosis_count,\n  COUNT(DISTINCT patient_id) AS patient_count\nFROM __CATALOG__.__SCHEMA__.v_wh_encounter_diagnoses\nGROUP BY icd10_code, diagnosis_description\nORDER BY diagnosis_count DESC\nLIMIT 15"
+    },
+    {
+      "displayName": "Simulation Runs",
+      "name": "ds_sim_runs",
+      "query": "SELECT\n  run_id,\n  simulation_type,\n  status,\n  num_simulations,\n  seed,\n  created_at,\n  updated_at\nFROM __CATALOG__.__SCHEMA__.simulation_runs\nORDER BY created_at DESC\nLIMIT 20"
+    },
+    {
+      "displayName": "Simulation Results",
+      "name": "ds_sim_results",
+      "query": "SELECT\n  r.metric_name,\n  r.group_value,\n  r.mean_value,\n  r.p05,\n  r.p25,\n  r.p50,\n  r.p75,\n  r.p95,\n  r.num_trials,\n  s.simulation_type\nFROM __CATALOG__.__SCHEMA__.simulation_results r\nJOIN __CATALOG__.__SCHEMA__.simulation_runs s\n  ON r.run_id = s.run_id\nWHERE s.status = 'COMPLETED'\nORDER BY s.created_at DESC, r.metric_name\nLIMIT 100"
+    },
+    {
+      "displayName": "Cost Detail",
+      "name": "ds_cost_detail",
+      "query": "SELECT\n  department,\n  encounter_type,\n  COALESCE(primary_icd10_code, 'N/A') AS icd10_code,\n  COUNT(*) AS encounters,\n  ROUND(SUM(paid_amount), 2) AS total_paid,\n  ROUND(AVG(paid_amount), 2) AS avg_paid,\n  ROUND(SUM(total_charges), 2) AS total_charges,\n  ROUND(SUM(CASE WHEN claim_status = 'Denied' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) AS denial_pct\nFROM __CATALOG__.__SCHEMA__.v_wh_billing_encounters\nGROUP BY department, encounter_type, primary_icd10_code\nORDER BY total_paid DESC"
+    }
+  ],
+  "pages": [
+    {
+      "displayName": "Overview",
+      "name": "page_overview",
+      "layout": [
+        {
+          "position": { "x": 0, "y": 0, "width": 1, "height": 2 },
+          "widget": {
+            "name": "kpi_total_encounters",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "COUNT(`*`)", "name": "total_encounters" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "counter",
+              "version": 2,
+              "encodings": {
+                "value": {
+                  "fieldName": "total_encounters",
+                  "displayName": "Total Encounters"
+                }
+              },
+              "frame": { "showTitle": true, "title": "Total Encounters" }
+            }
+          }
+        },
+        {
+          "position": { "x": 1, "y": 0, "width": 1, "height": 2 },
+          "widget": {
+            "name": "kpi_unique_patients",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "COUNT(DISTINCT `patient_id`)", "name": "unique_patients" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "counter",
+              "version": 2,
+              "encodings": {
+                "value": {
+                  "fieldName": "unique_patients",
+                  "displayName": "Unique Patients"
+                }
+              },
+              "frame": { "showTitle": true, "title": "Unique Patients" }
+            }
+          }
+        },
+        {
+          "position": { "x": 2, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "kpi_total_cost",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "SUM(`paid_amount`)", "name": "total_cost" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "counter",
+              "version": 2,
+              "encodings": {
+                "value": {
+                  "fieldName": "total_cost",
+                  "displayName": "Total Cost"
+                }
+              },
+              "frame": { "showTitle": true, "title": "Total Cost ($)" }
+            }
+          }
+        },
+        {
+          "position": { "x": 4, "y": 0, "width": 1, "height": 2 },
+          "widget": {
+            "name": "kpi_avg_cost",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "ROUND(AVG(`paid_amount`), 2)", "name": "avg_cost" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "counter",
+              "version": 2,
+              "encodings": {
+                "value": {
+                  "fieldName": "avg_cost",
+                  "displayName": "Avg Cost/Encounter"
+                }
+              },
+              "frame": { "showTitle": true, "title": "Avg Cost/Enc ($)" }
+            }
+          }
+        },
+        {
+          "position": { "x": 5, "y": 0, "width": 1, "height": 2 },
+          "widget": {
+            "name": "kpi_denial_rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    {
+                      "expression": "ROUND(SUM(CASE WHEN `claim_status` = 'Denied' THEN 1 ELSE 0 END) * 100.0 / COUNT(`*`), 1)",
+                      "name": "denial_rate"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "counter",
+              "version": 2,
+              "encodings": {
+                "value": {
+                  "fieldName": "denial_rate",
+                  "displayName": "Denial Rate (%)"
+                }
+              },
+              "frame": { "showTitle": true, "title": "Denial Rate (%)" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 2, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_department_p1",
+            "queries": [
+              {
+                "name": "ds_billing_department",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "department_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-multi-select",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Department",
+                    "fieldName": "department",
+                    "queryName": "ds_billing_department"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Department" }
+            }
+          }
+        },
+        {
+          "position": { "x": 2, "y": 2, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_encounter_type_p1",
+            "queries": [
+              {
+                "name": "ds_billing_encounter_type",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`encounter_type`", "name": "encounter_type" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "encounter_type_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-multi-select",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Encounter Type",
+                    "fieldName": "encounter_type",
+                    "queryName": "ds_billing_encounter_type"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Encounter Type" }
+            }
+          }
+        },
+        {
+          "position": { "x": 4, "y": 2, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_date_range_p1",
+            "queries": [
+              {
+                "name": "ds_billing_date",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`admission_date`", "name": "admission_date" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "admission_date_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-date-range-picker",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Date Range",
+                    "fieldName": "admission_date",
+                    "queryName": "ds_billing_date"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Date Range" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 4, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_cost_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "DATE_TRUNC(\"MONTH\", `admission_date`)", "name": "month" },
+                    { "expression": "SUM(`paid_amount`)", "name": "total_cost" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "displayName": "Month",
+                  "scale": { "type": "temporal" }
+                },
+                "y": {
+                  "fieldName": "total_cost",
+                  "displayName": "Total Cost ($)",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Monthly Cost Trend" }
+            }
+          }
+        },
+        {
+          "position": { "x": 3, "y": 4, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_encounters_by_type",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`encounter_type`", "name": "encounter_type" },
+                    { "expression": "COUNT(`*`)", "name": "encounter_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "encounter_type",
+                  "displayName": "Encounter Type",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "encounter_count",
+                  "displayName": "Count",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Encounters by Type" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 9, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_cost_by_dept",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "SUM(`paid_amount`)", "name": "total_cost" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "department",
+                  "displayName": "Department",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "total_cost",
+                  "displayName": "Total Cost ($)",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Cost by Department" }
+            }
+          }
+        },
+        {
+          "position": { "x": 3, "y": 9, "width": 3, "height": 5 },
+          "widget": {
+            "name": "table_sim_results",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_sim_results",
+                  "disaggregated": true,
+                  "fields": [
+                    { "expression": "`simulation_type`", "name": "simulation_type" },
+                    { "expression": "`metric_name`", "name": "metric_name" },
+                    { "expression": "`group_value`", "name": "group_value" },
+                    { "expression": "`mean_value`", "name": "mean_value" },
+                    { "expression": "`p05`", "name": "p05" },
+                    { "expression": "`p50`", "name": "p50" },
+                    { "expression": "`p95`", "name": "p95" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "table",
+              "version": 1,
+              "itemsPerPage": 10,
+              "condensed": true,
+              "withRowNumber": false,
+              "encodings": {
+                "columns": [
+                  { "fieldName": "simulation_type", "displayName": "Sim Type", "type": "string", "visible": true, "order": 100000 },
+                  { "fieldName": "metric_name", "displayName": "Metric", "type": "string", "visible": true, "order": 100001 },
+                  { "fieldName": "group_value", "displayName": "Group", "type": "string", "visible": true, "order": 100002 },
+                  { "fieldName": "mean_value", "displayName": "Mean", "type": "float", "displayAs": "number", "visible": true, "order": 100003 },
+                  { "fieldName": "p05", "displayName": "P5", "type": "float", "displayAs": "number", "visible": true, "order": 100004 },
+                  { "fieldName": "p50", "displayName": "Median", "type": "float", "displayAs": "number", "visible": true, "order": 100005 },
+                  { "fieldName": "p95", "displayName": "P95", "type": "float", "displayAs": "number", "visible": true, "order": 100006 }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Simulation Results" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 14, "width": 6, "height": 5 },
+          "widget": {
+            "name": "table_sim_runs",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_sim_runs",
+                  "disaggregated": true,
+                  "fields": [
+                    { "expression": "`simulation_type`", "name": "simulation_type" },
+                    { "expression": "`status`", "name": "status" },
+                    { "expression": "`num_simulations`", "name": "num_simulations" },
+                    { "expression": "`seed`", "name": "seed" },
+                    { "expression": "`created_at`", "name": "created_at" },
+                    { "expression": "`updated_at`", "name": "updated_at" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "table",
+              "version": 1,
+              "itemsPerPage": 10,
+              "condensed": true,
+              "withRowNumber": false,
+              "encodings": {
+                "columns": [
+                  { "fieldName": "simulation_type", "displayName": "Type", "type": "string", "visible": true, "order": 100000 },
+                  { "fieldName": "status", "displayName": "Status", "type": "string", "visible": true, "order": 100001 },
+                  { "fieldName": "num_simulations", "displayName": "Trials", "type": "integer", "visible": true, "order": 100002 },
+                  { "fieldName": "seed", "displayName": "Seed", "type": "integer", "visible": true, "order": 100003 },
+                  { "fieldName": "created_at", "displayName": "Created", "type": "string", "visible": true, "order": 100004 },
+                  { "fieldName": "updated_at", "displayName": "Updated", "type": "string", "visible": true, "order": 100005 }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Recent Simulation Runs" }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "displayName": "Cost & Operations",
+      "name": "page_cost",
+      "layout": [
+        {
+          "position": { "x": 0, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_department_p2",
+            "queries": [
+              {
+                "name": "ds_billing_department",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "department_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-multi-select",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Department",
+                    "fieldName": "department",
+                    "queryName": "ds_billing_department"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Department" }
+            }
+          }
+        },
+        {
+          "position": { "x": 2, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_encounter_type_p2",
+            "queries": [
+              {
+                "name": "ds_billing_encounter_type",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`encounter_type`", "name": "encounter_type" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "encounter_type_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-multi-select",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Encounter Type",
+                    "fieldName": "encounter_type",
+                    "queryName": "ds_billing_encounter_type"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Encounter Type" }
+            }
+          }
+        },
+        {
+          "position": { "x": 4, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_date_range_p2",
+            "queries": [
+              {
+                "name": "ds_billing_date",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`admission_date`", "name": "admission_date" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "admission_date_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-date-range-picker",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Date Range",
+                    "fieldName": "admission_date",
+                    "queryName": "ds_billing_date"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Date Range" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 2, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_cost_by_dept_p2",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "SUM(`paid_amount`)", "name": "total_cost" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "department",
+                  "displayName": "Department",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "total_cost",
+                  "displayName": "Total Cost ($)",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Cost by Department" }
+            }
+          }
+        },
+        {
+          "position": { "x": 3, "y": 2, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_cost_trend_p2",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "DATE_TRUNC(\"MONTH\", `admission_date`)", "name": "month" },
+                    { "expression": "SUM(`paid_amount`)", "name": "total_cost" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "displayName": "Month",
+                  "scale": { "type": "temporal" }
+                },
+                "y": {
+                  "fieldName": "total_cost",
+                  "displayName": "Total Cost ($)",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Monthly Cost Trend" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 7, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_encounter_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "DATE_TRUNC(\"MONTH\", `admission_date`)", "name": "month" },
+                    { "expression": "`encounter_type`", "name": "encounter_type" },
+                    { "expression": "COUNT(`*`)", "name": "encounter_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "displayName": "Month",
+                  "scale": { "type": "temporal" }
+                },
+                "y": {
+                  "fieldName": "encounter_count",
+                  "displayName": "Encounters",
+                  "scale": { "type": "quantitative" }
+                },
+                "color": {
+                  "fieldName": "encounter_type",
+                  "displayName": "Type",
+                  "scale": { "type": "categorical" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Monthly Encounter Trend by Type" }
+            }
+          }
+        },
+        {
+          "position": { "x": 3, "y": 7, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_encounters_type_dept",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_billing",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`encounter_type`", "name": "encounter_type" },
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "COUNT(`*`)", "name": "encounter_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "encounter_type",
+                  "displayName": "Encounter Type",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "encounter_count",
+                  "displayName": "Count",
+                  "scale": { "type": "quantitative" }
+                },
+                "color": {
+                  "fieldName": "department",
+                  "displayName": "Department",
+                  "scale": { "type": "categorical" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Encounters by Type & Department" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 12, "width": 6, "height": 5 },
+          "widget": {
+            "name": "table_cost_detail",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_cost_detail",
+                  "disaggregated": true,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "`encounter_type`", "name": "encounter_type" },
+                    { "expression": "`icd10_code`", "name": "icd10_code" },
+                    { "expression": "`encounters`", "name": "encounters" },
+                    { "expression": "`total_paid`", "name": "total_paid" },
+                    { "expression": "`avg_paid`", "name": "avg_paid" },
+                    { "expression": "`total_charges`", "name": "total_charges" },
+                    { "expression": "`denial_pct`", "name": "denial_pct" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "table",
+              "version": 1,
+              "itemsPerPage": 25,
+              "condensed": true,
+              "withRowNumber": false,
+              "encodings": {
+                "columns": [
+                  { "fieldName": "department", "displayName": "Department", "type": "string", "visible": true, "order": 100000 },
+                  { "fieldName": "encounter_type", "displayName": "Type", "type": "string", "visible": true, "order": 100001 },
+                  { "fieldName": "icd10_code", "displayName": "ICD-10", "type": "string", "visible": true, "order": 100002 },
+                  { "fieldName": "encounters", "displayName": "Encounters", "type": "integer", "visible": true, "order": 100003 },
+                  { "fieldName": "total_paid", "displayName": "Total Paid ($)", "type": "float", "displayAs": "number", "visible": true, "order": 100004 },
+                  { "fieldName": "avg_paid", "displayName": "Avg Paid ($)", "type": "float", "displayAs": "number", "visible": true, "order": 100005 },
+                  { "fieldName": "total_charges", "displayName": "Total Charges ($)", "type": "float", "displayAs": "number", "visible": true, "order": 100006 },
+                  { "fieldName": "denial_pct", "displayName": "Denial %", "type": "float", "displayAs": "number", "visible": true, "order": 100007 }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Cost Detail by Department, Type & ICD-10" }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "displayName": "Population Health",
+      "name": "page_population",
+      "layout": [
+        {
+          "position": { "x": 0, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_department_p3",
+            "queries": [
+              {
+                "name": "ds_patients_department",
+                "query": {
+                  "datasetName": "ds_patients",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "department_associativity" }
+                  ]
+                }
+              },
+              {
+                "name": "ds_diagnoses_department",
+                "query": {
+                  "datasetName": "ds_diagnoses",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`department`", "name": "department" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "department_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-multi-select",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Department",
+                    "fieldName": "department",
+                    "queryName": "ds_patients_department"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Department" }
+            }
+          }
+        },
+        {
+          "position": { "x": 2, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_insurance_p3",
+            "queries": [
+              {
+                "name": "ds_patients_insurance",
+                "query": {
+                  "datasetName": "ds_patients",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`insurance_type`", "name": "insurance_type" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "insurance_type_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-multi-select",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Insurance Type",
+                    "fieldName": "insurance_type",
+                    "queryName": "ds_patients_insurance"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Insurance Type" }
+            }
+          }
+        },
+        {
+          "position": { "x": 4, "y": 0, "width": 2, "height": 2 },
+          "widget": {
+            "name": "filter_date_range_p3",
+            "queries": [
+              {
+                "name": "ds_patients_date",
+                "query": {
+                  "datasetName": "ds_patients",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`admission_date`", "name": "admission_date" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "admission_date_associativity" }
+                  ]
+                }
+              },
+              {
+                "name": "ds_diagnoses_date",
+                "query": {
+                  "datasetName": "ds_diagnoses",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`admission_date`", "name": "admission_date" },
+                    { "expression": "COUNT_IF(`associative_filter_predicate_group`)", "name": "admission_date_associativity" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "filter-date-range-picker",
+              "version": 2,
+              "encodings": {
+                "fields": [
+                  {
+                    "displayName": "Date Range",
+                    "fieldName": "admission_date",
+                    "queryName": "ds_patients_date"
+                  }
+                ]
+              },
+              "frame": { "showTitle": true, "title": "Date Range" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 2, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_age_group",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_patients",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`age_group`", "name": "age_group" },
+                    { "expression": "COUNT(DISTINCT `patient_id`)", "name": "patient_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "age_group",
+                  "displayName": "Age Group",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "patient_count",
+                  "displayName": "Patients",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Patients by Age Group" }
+            }
+          }
+        },
+        {
+          "position": { "x": 3, "y": 2, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_chronic",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_patients",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "`chronic_flag`", "name": "chronic_flag" },
+                    { "expression": "`insurance_type`", "name": "insurance_type" },
+                    { "expression": "COUNT(DISTINCT `patient_id`)", "name": "patient_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "chronic_flag",
+                  "displayName": "Condition Status",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "patient_count",
+                  "displayName": "Patients",
+                  "scale": { "type": "quantitative" }
+                },
+                "color": {
+                  "fieldName": "insurance_type",
+                  "displayName": "Insurance",
+                  "scale": { "type": "categorical" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Chronic vs Non-Chronic by Insurance" }
+            }
+          }
+        },
+        {
+          "position": { "x": 0, "y": 7, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_top_diagnoses",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_diagnosis_top",
+                  "disaggregated": true,
+                  "fields": [
+                    { "expression": "`description`", "name": "description" },
+                    { "expression": "`diagnosis_count`", "name": "diagnosis_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "bar",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "description",
+                  "displayName": "Diagnosis",
+                  "scale": { "type": "categorical" }
+                },
+                "y": {
+                  "fieldName": "diagnosis_count",
+                  "displayName": "Count",
+                  "scale": { "type": "quantitative" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Top 15 Diagnoses" }
+            }
+          }
+        },
+        {
+          "position": { "x": 3, "y": 7, "width": 3, "height": 5 },
+          "widget": {
+            "name": "chart_diagnosis_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ds_diagnoses",
+                  "disaggregated": false,
+                  "fields": [
+                    { "expression": "DATE_TRUNC(\"MONTH\", `admission_date`)", "name": "month" },
+                    { "expression": "`diagnosis_category`", "name": "diagnosis_category" },
+                    { "expression": "COUNT(`*`)", "name": "diagnosis_count" }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "widgetType": "line",
+              "version": 3,
+              "encodings": {
+                "x": {
+                  "fieldName": "month",
+                  "displayName": "Month",
+                  "scale": { "type": "temporal" }
+                },
+                "y": {
+                  "fieldName": "diagnosis_count",
+                  "displayName": "Diagnoses",
+                  "scale": { "type": "quantitative" }
+                },
+                "color": {
+                  "fieldName": "diagnosis_category",
+                  "displayName": "Category",
+                  "scale": { "type": "categorical" }
+                }
+              },
+              "frame": { "showTitle": true, "title": "Diagnosis Trend by Category" }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

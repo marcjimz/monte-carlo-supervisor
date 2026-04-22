@@ -31,6 +31,7 @@ MEMORY.md
 
 # Databricks
 .databricks/
+dashboards/*.lvdash.json
 
 # Testing
 .pytest_cache/

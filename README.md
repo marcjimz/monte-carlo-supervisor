@@ -31,6 +31,11 @@ All backed by synthetic data (10K patients, 50K encounters, 12 tables) and a Rea
 
 ### Steps
 
+Run the package installs:
+```bash
+npm install --prefix app/frontend
+```
+
 ```bash
 git clone <repo-url> && cd monte-carlo-supervisor
 

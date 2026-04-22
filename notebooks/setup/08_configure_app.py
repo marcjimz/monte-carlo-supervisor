@@ -294,6 +294,79 @@ print("Lakebase setup complete.\n")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Look Up Dashboard & Enable Embedding
+
+# COMMAND ----------
+
+dashboard_display_name = "Women's Health Analytics"
+dashboard_id = ""
+
+# Paginate through dashboards to find ours (DAB may append " [dev <user>]" suffix)
+print(f"Looking up dashboard: {dashboard_display_name}")
+page_token = ""
+while True:
+    params = {"page_size": 100}
+    if page_token:
+        params["page_token"] = page_token
+    dash_resp = requests.get(f"{host}/api/2.0/lakeview/dashboards", headers=headers, params=params)
+    if not dash_resp.ok:
+        print(f"  WARNING: Dashboard list API returned {dash_resp.status_code}: {dash_resp.text}")
+        break
+    dash_data = dash_resp.json()
+    for d in dash_data.get("dashboards", []):
+        name = d.get("display_name", "")
+        if name == dashboard_display_name or name.startswith(f"{dashboard_display_name} ["):
+            dashboard_id = d.get("dashboard_id", "")
+            print(f"  Found dashboard: {name} (ID: {dashboard_id})")
+            break
+    if dashboard_id:
+        break
+    page_token = dash_data.get("next_page_token", "")
+    if not page_token:
+        break
+
+if not dashboard_id:
+    print("  WARNING: Dashboard not found. DASHBOARD_ID will be empty.")
+    print("  The dashboard may not have been deployed yet. Re-run after 'databricks bundle deploy'.")
+else:
+    # Enable dashboard embedding (workspace setting — idempotent)
+    print("Enabling dashboard embedding for workspace...")
+    embed_resp = requests.patch(
+        f"{host}/api/2.0/settings/types/aibi_dash_embed_ws_acc_policy/names/default",
+        headers=headers,
+        json={
+            "allow_missing": True,
+            "field_mask": "aibi_dashboard_embedding_access_policy.access_policy_type",
+            "setting": {
+                "setting_name": "default",
+                "aibi_dashboard_embedding_access_policy": {
+                    "access_policy_type": "ALLOW_ALL_DOMAINS"
+                }
+            }
+        },
+    )
+    if embed_resp.ok:
+        print("  Dashboard embedding enabled (ALLOW_ALL_DOMAINS).")
+    else:
+        print(f"  WARNING: Embed setting returned {embed_resp.status_code}: {embed_resp.text}")
+
+    # Publish dashboard for embedding
+    print(f"Publishing dashboard {dashboard_id}...")
+    pub_resp = requests.post(
+        f"{host}/api/2.0/lakeview/dashboards/{dashboard_id}/published",
+        headers=headers,
+        json={"embed_credentials": True, "warehouse_id": warehouse_id},
+    )
+    if pub_resp.ok:
+        print("  Dashboard published successfully.")
+    else:
+        print(f"  WARNING: Publish returned {pub_resp.status_code}: {pub_resp.text}")
+
+print(f"\nDashboard ID: {dashboard_id}")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Update App Environment Variables
 
 # COMMAND ----------
@@ -310,7 +383,7 @@ env_vars = [
     {"name": "MAS_ENDPOINT_NAME", "value": mas_endpoint_name},
     {"name": "GENIE_SPACE_ID", "value": genie_space_id},
     {"name": "SQL_WAREHOUSE_ID", "value": warehouse_id},
-    {"name": "DASHBOARD_ID", "value": ""},
+    {"name": "DASHBOARD_ID", "value": dashboard_id},
     {"name": "PGHOST", "value": pg_host},
     {"name": "PGPORT", "value": "5432"},
     {"name": "PGDATABASE", "value": "mcapp"},
@@ -466,6 +539,7 @@ print(f"  App URL          : {app_url}")
 print(f"  App SP           : {sp_client_id}")
 print(f"  Genie Space      : {genie_space_id}")
 print(f"  MAS Endpoint     : {mas_endpoint_name}")
+print(f"  Dashboard        : {dashboard_id}")
 print(f"  SQL Warehouse    : {warehouse_id}")
 print(f"  Lakebase Host    : {pg_host}")
 print(f"  Catalog          : {catalog}")
