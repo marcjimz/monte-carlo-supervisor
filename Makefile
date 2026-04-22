@@ -12,6 +12,11 @@ install: ## Install Python dependencies
 generate-data: ## Generate synthetic data CSVs to /data
 	python -m src.databricks.synthetic_data.generators
 
+CATALOG ?= monte_carlo_supervisor_catalog
+SCHEMA  ?= hospital_data
+BUNDLE_ARGS ?=
+FORCE_BUILD ?=
+
 build: ## Build React frontend + Python wheel + dashboard
 	npm run build --prefix app/frontend
 	rm -rf dist/*.whl build/ src/*.egg-info
@@ -19,17 +24,25 @@ build: ## Build React frontend + Python wheel + dashboard
 	sed 's/__CATALOG__/$(CATALOG)/g; s/__SCHEMA__/$(SCHEMA)/g' \
 		dashboards/wh_analytics.lvdash.json.tmpl > dashboards/wh_analytics.lvdash.json
 
-CATALOG ?= monte_carlo_supervisor_catalog
-SCHEMA  ?= hospital_data
-BUNDLE_ARGS ?=
-
-deploy: ## Full E2E deploy (build + bundle + setup)
+_maybe-build:
+ifneq ($(FORCE_BUILD),)
 	$(MAKE) build
+else
+	@if [ ! -f dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl ] || [ ! -f app/frontend/dist/index.html ]; then \
+		echo "Pre-built artifacts not found — running build..."; \
+		$(MAKE) build; \
+	else \
+		echo "Using pre-built artifacts (use FORCE_BUILD=1 to rebuild)"; \
+		sed 's/__CATALOG__/$(CATALOG)/g; s/__SCHEMA__/$(SCHEMA)/g' \
+			dashboards/wh_analytics.lvdash.json.tmpl > dashboards/wh_analytics.lvdash.json; \
+	fi
+endif
+
+deploy: _maybe-build ## Full E2E deploy (build + bundle + setup)
 	databricks bundle deploy $(BUNDLE_ARGS)
 	databricks bundle run setup_pipeline $(BUNDLE_ARGS)
 
-deploy-app: ## Redeploy app code only (no setup)
-	$(MAKE) build
+deploy-app: _maybe-build ## Redeploy app code only (no setup)
 	databricks bundle deploy $(BUNDLE_ARGS)
 
 test: ## Run tests
