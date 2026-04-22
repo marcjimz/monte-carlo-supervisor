@@ -26,44 +26,42 @@ All backed by synthetic data (10K patients, 50K encounters, 12 tables) and a Rea
 
 - Databricks workspace with Unity Catalog
 - [Databricks CLI](https://docs.databricks.com/dev-tools/cli/install.html) v0.287+
-- Node.js 18+ and npm
 - Python 3.10+
 
-### Steps
+> **Note:** The repo includes pre-built artifacts (Python wheel + React frontend), so Node.js/npm are **not required** to deploy. Only needed if you modify frontend code.
 
-Run the package installs:
-```bash
-npm install --prefix app/frontend
-```
+### Steps
 
 ```bash
 git clone <repo-url> && cd monte-carlo-supervisor
 
-# --- Config (edit these) ---
-export CATALOG=my_catalog
-export DATABRICKS_HOST=https://my-workspace.cloud.databricks.com
-export PROFILE=my-workspace
-
 # --- Auth ---
-databricks auth login --host $DATABRICKS_HOST --profile $PROFILE
+databricks auth login --host https://my-workspace.cloud.databricks.com --profile my-workspace
 
 # --- Set your catalog in databricks.yml ---
-# Edit databricks.yml and set variables.catalog.default to your catalog name
-sed -i '' "s/default: \"monte_carlo_supervisor_catalog\"/default: \"$CATALOG\"/" databricks.yml
+# Edit databricks.yml → variables.catalog.default to your catalog name
 
 # --- Deploy ---
-DATABRICKS_CONFIG_PROFILE=$PROFILE make deploy
+DATABRICKS_CONFIG_PROFILE=my-workspace make deploy
 ```
 
 This will:
-1. Build the React frontend
-2. Create jobs, app, and Lakebase database on your workspace
-3. Run 9 setup tasks: load data, create views, fit distributions, configure Genie/MAS, and wire the app
+1. Create jobs, app, Lakebase database, and dashboard on your workspace
+2. Run 9 setup tasks: load data, create views, fit distributions, configure Genie/MAS, and wire the app
 
 ### Redeploy app only (no setup)
 
 ```bash
-DATABRICKS_CONFIG_PROFILE=$PROFILE make deploy-app
+DATABRICKS_CONFIG_PROFILE=my-workspace make deploy-app
+```
+
+### Rebuild from source
+
+If you modify the frontend or Python package, rebuild before deploying:
+
+```bash
+npm install --prefix app/frontend   # first time only
+make deploy FORCE_BUILD=1
 ```
 
 ---
@@ -74,12 +72,13 @@ DATABRICKS_CONFIG_PROFILE=$PROFILE make deploy-app
 |----------|------|------------|
 | Lakebase (Postgres) | `monte-carlo-app` | `bundle deploy` |
 | Databricks App | `monte-carlo-ui` | `bundle deploy` |
+| AI/BI Dashboard | Women's Health Analytics | `bundle deploy` |
 | Setup Job | `monte-carlo-setup-pipeline` (9 tasks) | `bundle deploy` |
 | Simulation Job | `monte-carlo-simulation-pipeline` (3 tasks) | `bundle deploy` |
-| Genie Space | Women's Health Analytics | setup task 07 |
-| MAS Endpoint | `mas-{tile_id}-endpoint` | setup task 08 |
-| UC Functions | `check_simulation`, `trigger_simulation`, `list_distributions` | setup task 06 |
-| Delta Tables | 12 data + 4 simulation tables | setup tasks 01-05 |
+| Genie Space | Women's Health Analytics | setup task 05 |
+| MAS Endpoint | `mas-{tile_id}-endpoint` | setup task 06 |
+| UC Functions | `check_simulation`, `trigger_simulation`, `list_distributions` | setup task 03 |
+| Delta Tables | 12 data + 4 simulation tables | setup tasks 00-04, 07 |
 
 ---
 
