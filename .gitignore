@@ -3,7 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-dist/
 build/
 *.egg
 .eggs/
@@ -39,12 +38,10 @@ dashboards/*.lvdash.json
 htmlcov/
 
 # Distribution
-*.whl
 *.tar.gz
 
 # Frontend
 node_modules/
-app/frontend/dist/
 app/frontend/.vite/
 
 # Temporary / local-only files
