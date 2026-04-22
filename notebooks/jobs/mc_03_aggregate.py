@@ -19,11 +19,17 @@ dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------
 
-# Install project package from bundled wheel
+# Install project package from bundled wheel and restart Python
+# so that Spark workers pick up the package for any distributed ops
 import subprocess, sys
 _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 _root = "/Workspace" + "/".join(_nb.split("/")[:-3])
 subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
+
+# COMMAND ----------
+
+# Restart Python REPL to propagate installed package to Spark executors
+dbutils.library.restartPython()
 
 # COMMAND ----------
 

@@ -27,9 +27,14 @@ subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/mo
 
 # COMMAND ----------
 
+# Restart Python so that the freshly installed package is importable
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 import json
 
-from mc_supervisor.monte_carlo.engine import run_distributed_simulation
+from mc_supervisor.monte_carlo.engine import run_local_simulation
 from mc_supervisor.monte_carlo.results import update_run_status, write_bronze_trials
 
 # COMMAND ----------
@@ -79,19 +84,21 @@ if "distributions" in params_dict:
 # ---------- Step 3: Run distributed simulation ----------
 
 try:
-    print(f"Starting distributed simulation: {simulation_type}")
+    print(f"Starting local simulation: {simulation_type}")
     print(f"  Trials  : {num_simulations}")
     print(f"  Seed    : {seed}")
 
-    trials_df = run_distributed_simulation(
-        spark=spark,
+    # Run on driver (avoids cloudpickle serialisation issues on serverless
+    # where workers cannot import custom packages via applyInPandas).
+    trials_pdf = run_local_simulation(
         simulation_type=simulation_type,
         params=params_dict,
         num_simulations=num_simulations,
         seed=seed,
     )
+    trials_df = spark.createDataFrame(trials_pdf)
 
-    print("Simulation DataFrame built. Writing to Bronze table...")
+    print(f"Simulation complete — {len(trials_pdf)} trial rows. Writing to Bronze table...")
 
 except Exception as exc:
     print(f"[ERROR] Simulation failed: {exc}")

@@ -141,3 +141,46 @@ def run_distributed_simulation(
     trials_df = seed_df.groupBy("id").applyInPandas(_apply_fn, schema=output_schema)
 
     return trials_df
+
+
+def run_local_simulation(
+    simulation_type: str,
+    params: dict,
+    num_simulations: int = 10_000,
+    seed: int = 42,
+    num_batches: int = 50,
+) -> pd.DataFrame:
+    """Run a Monte Carlo simulation locally on the driver (no Spark workers).
+
+    Produces the same results as :func:`run_distributed_simulation` but
+    executes entirely in the driver process using pandas. This avoids
+    cloudpickle serialisation issues on serverless compute where workers
+    cannot import custom packages.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Raw trial-level results.
+    """
+    model_fn, _output_schema = get_simulation_model(simulation_type)
+
+    default_params = config_loader.get_default_params(simulation_type)
+    merged_params = {**default_params, **params}
+
+    required_dists = config_loader.get_required_distributions(simulation_type)
+    if required_dists and "distributions" not in merged_params:
+        raise ValueError(
+            f"Simulation type '{simulation_type}' requires distribution specs "
+            f"({', '.join(required_dists.keys())}). Pass them via params['distributions']."
+        )
+
+    trials_per_batch = max(1, num_simulations // num_batches)
+    merged_params["trials_per_batch"] = trials_per_batch
+
+    all_dfs: list[pd.DataFrame] = []
+    for i in range(num_batches):
+        batch_pdf = pd.DataFrame({"id": [i], "batch_seed": [i + seed]})
+        result = model_fn(batch_pdf, merged_params)
+        all_dfs.append(result)
+
+    return pd.concat(all_dfs, ignore_index=True)

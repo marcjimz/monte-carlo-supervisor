@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # Genie Space
     genie_space_id: str = ""
 
+    # Simulation pipeline job (for direct SDK trigger)
+    simulation_job_id: str = ""
+
     # Feature flags
     seed_demo_data: bool = True
 

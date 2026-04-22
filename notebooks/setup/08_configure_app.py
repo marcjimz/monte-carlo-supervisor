@@ -80,6 +80,21 @@ if not genie_space_id or not mas_endpoint_name:
         "tasks completed successfully before running this task."
     )
 
+# --- Look up simulation pipeline job ID ---
+from databricks.sdk import WorkspaceClient as _WC
+_w = _WC()
+simulation_job_id = ""
+for _job in _w.jobs.list(name="monte-carlo-simulation-pipeline"):
+    simulation_job_id = str(_job.job_id)
+    break
+if not simulation_job_id:
+    # DAB dev mode may prefix the name
+    for _job in _w.jobs.list():
+        if "monte-carlo-simulation-pipeline" in (_job.settings.name or ""):
+            simulation_job_id = str(_job.job_id)
+            break
+print(f"Simulation Job ID : {simulation_job_id}")
+
 # COMMAND ----------
 
 # MAGIC %md
@@ -294,6 +309,34 @@ print("Lakebase setup complete.\n")
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Grant App SP Permissions on Simulation Job
+
+# COMMAND ----------
+
+if simulation_job_id and sp_client_id:
+    print(f"Granting CAN_MANAGE_RUN on job {simulation_job_id} to app SP {sp_client_id}...")
+    job_perm_resp = requests.patch(
+        f"{host}/api/2.0/permissions/jobs/{simulation_job_id}",
+        headers=headers,
+        json={
+            "access_control_list": [
+                {
+                    "service_principal_name": sp_client_id,
+                    "permission_level": "CAN_MANAGE_RUN",
+                }
+            ]
+        },
+    )
+    if job_perm_resp.ok:
+        print("  Job permission granted.")
+    else:
+        print(f"  WARNING: Job permission grant returned {job_perm_resp.status_code}: {job_perm_resp.text}")
+else:
+    print("Skipping job permission grant — missing job ID or SP client ID.")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Look Up Dashboard & Enable Embedding
 
 # COMMAND ----------
@@ -384,6 +427,7 @@ env_vars = [
     {"name": "GENIE_SPACE_ID", "value": genie_space_id},
     {"name": "SQL_WAREHOUSE_ID", "value": warehouse_id},
     {"name": "DASHBOARD_ID", "value": dashboard_id},
+    {"name": "SIMULATION_JOB_ID", "value": simulation_job_id},
     {"name": "PGHOST", "value": pg_host},
     {"name": "PGPORT", "value": "5432"},
     {"name": "PGDATABASE", "value": "mcapp"},
@@ -540,6 +584,7 @@ print(f"  App SP           : {sp_client_id}")
 print(f"  Genie Space      : {genie_space_id}")
 print(f"  MAS Endpoint     : {mas_endpoint_name}")
 print(f"  Dashboard        : {dashboard_id}")
+print(f"  Simulation Job   : {simulation_job_id}")
 print(f"  SQL Warehouse    : {warehouse_id}")
 print(f"  Lakebase Host    : {pg_host}")
 print(f"  Catalog          : {catalog}")
