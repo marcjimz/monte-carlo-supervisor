@@ -166,6 +166,134 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Create Lakebase Database & Postgres Role for App SP
+# MAGIC
+# MAGIC The workspace permission grant (`CAN_MANAGE`) lets the SP call the Lakebase API,
+# MAGIC but Postgres also needs an internal role for the SP to authenticate via OAuth.
+# MAGIC We use the REST API (`POST .../roles`) and psycopg2 for database creation.
+
+# COMMAND ----------
+
+# --- Step 1: Create Postgres role for the SP via REST API ---
+print(f"Creating Postgres role for SP {sp_client_id}...")
+
+role_resp = requests.post(
+    f"{host}/api/2.0/postgres/projects/{lakebase_project}/branches/production/roles",
+    headers=headers,
+    json={
+        "spec": {
+            "identity_type": "SERVICE_PRINCIPAL",
+            "postgres_role": sp_client_id,
+        }
+    },
+)
+
+if role_resp.ok:
+    # This returns a long-running operation — poll until done
+    op = role_resp.json()
+    op_name = op.get("name", "")
+    print(f"  Role creation started (operation: {op_name})")
+
+    # Poll the operation
+    for i in range(20):
+        time.sleep(5)
+        if op_name:
+            check = requests.get(f"{host}/api/2.0/postgres/{op_name}", headers=headers)
+            if check.ok and check.json().get("done"):
+                print("  Postgres role created successfully.")
+                break
+        else:
+            # No operation name means it completed synchronously
+            print("  Postgres role created (sync).")
+            break
+    else:
+        print("  WARNING: Role creation still in progress after 100s.")
+elif role_resp.status_code == 409:
+    print("  Postgres role already exists (OK).")
+else:
+    print(f"  WARNING: Role creation returned {role_resp.status_code}: {role_resp.text}")
+    print("  Will attempt to continue — the role may already exist.")
+
+# --- Step 2: Create the 'mcapp' database via psycopg2 ---
+# The default database is 'databricks_postgres'; we need 'mcapp' for the app.
+print("\nSetting up 'mcapp' database...")
+
+import subprocess
+subprocess.check_call(["pip", "install", "-q", "psycopg2-binary"])
+import psycopg2
+
+# Generate credential for the current user (notebook runner = project owner)
+cred_resp = requests.post(
+    f"{host}/api/2.0/postgres/credentials",
+    headers=headers,
+    json={"endpoint": f"projects/{lakebase_project}/branches/production/endpoints/primary"},
+)
+if not cred_resp.ok:
+    print(f"  Credential generation failed: {cred_resp.status_code} {cred_resp.text}")
+    print("  Trying SDK fallback...")
+    from databricks.sdk import WorkspaceClient
+    w = WorkspaceClient()
+    cred_token = w.postgres.generate_database_credential(
+        endpoint=f"projects/{lakebase_project}/branches/production/endpoints/primary"
+    ).token
+else:
+    cred_token = cred_resp.json().get("token", "")
+
+# Get current user identity for the Postgres connection
+_ctx2 = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
+current_user = _ctx2.userName().get()
+
+# Connect to default database
+print(f"  Connecting to {pg_host} as {current_user}...")
+conn = psycopg2.connect(
+    host=pg_host,
+    port=5432,
+    dbname="databricks_postgres",
+    user=current_user,
+    password=cred_token,
+    sslmode="require",
+)
+conn.autocommit = True
+cur = conn.cursor()
+
+# Create mcapp database if it doesn't exist
+cur.execute("SELECT 1 FROM pg_database WHERE datname = 'mcapp'")
+if not cur.fetchone():
+    cur.execute("CREATE DATABASE mcapp")
+    print("  Created database 'mcapp'.")
+else:
+    print("  Database 'mcapp' already exists.")
+
+# Grant privileges to the app SP
+cur.execute(f'GRANT ALL ON DATABASE mcapp TO "{sp_client_id}"')
+print(f"  Granted database privileges to SP.")
+
+cur.close()
+conn.close()
+
+# Now connect to mcapp and grant schema privileges
+conn = psycopg2.connect(
+    host=pg_host,
+    port=5432,
+    dbname="mcapp",
+    user=current_user,
+    password=cred_token,
+    sslmode="require",
+)
+conn.autocommit = True
+cur = conn.cursor()
+
+cur.execute(f'GRANT ALL ON SCHEMA public TO "{sp_client_id}"')
+cur.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO "{sp_client_id}"')
+print("  Granted schema privileges to SP.")
+
+cur.close()
+conn.close()
+print("Lakebase setup complete.\n")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Update App Environment Variables
 
 # COMMAND ----------
@@ -196,27 +324,16 @@ for ev in env_vars:
     display = val if len(val) < 40 else f"{val[:37]}..."
     print(f"  {ev['name']:25s} = {display}")
 
-update_resp = requests.patch(
-    f"{host}/api/2.0/apps/{app_name}",
-    headers=headers,
-    json={
-        "config": {
-            "command": current_command,
-            "env": env_vars,
-        }
-    },
-)
-update_resp.raise_for_status()
-print("\nApp config updated.")
-
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Trigger App Restart
+# MAGIC
+# MAGIC Pass `env_vars` and `command` directly in the deployment body.
+# MAGIC These override whatever is in `app.yaml` at the source path.
+# MAGIC (API field is `env_vars`, not `env` — per SDK docs.)
 
 # COMMAND ----------
-
-print("Creating new deployment to apply updated config...")
 
 # Get the source_code_path from the active deployment
 refresh_resp = requests.get(f"{host}/api/2.0/apps/{app_name}", headers=headers)
@@ -229,12 +346,11 @@ source_code_path = (
 )
 
 if not source_code_path:
-    # Fall back to the bundle's expected path
     _ctx2 = dbutils.notebook.entry_point.getDbutils().notebook().getContext()
     username = _ctx2.userName().get()
     source_code_path = f"/Workspace/Users/{username}/.bundle/monte-carlo-supervisor/dev/files/app"
 
-print(f"  Source code path: {source_code_path}")
+print(f"Source code path: {source_code_path}")
 
 # Check if the app compute is started — if not, start it first
 compute_state = refreshed.get("compute_status", {}).get("state", "UNKNOWN")
@@ -252,7 +368,14 @@ if compute_state != "ACTIVE":
     else:
         print(f"  WARNING: Start returned {start_resp.status_code}: {start_resp.text}")
 
-deploy_body = {"source_code_path": source_code_path}
+print("Creating new deployment with env_vars...")
+
+deploy_body = {
+    "source_code_path": source_code_path,
+    "mode": "SNAPSHOT",
+    "env_vars": env_vars,
+    "command": current_command,
+}
 
 deploy_resp = requests.post(
     f"{host}/api/2.0/apps/{app_name}/deployments",
@@ -261,16 +384,18 @@ deploy_resp = requests.post(
 )
 if not deploy_resp.ok:
     print(f"  Deployment API error {deploy_resp.status_code}: {deploy_resp.text}")
-    # If the app was already deployed with the right env vars, this is acceptable
-    if deploy_resp.status_code == 400:
-        print("  NOTE: 400 may mean the app needs to be started first, or is already deploying.")
-        print("  Continuing — the env var update (PATCH) was already applied.")
-    else:
-        deploy_resp.raise_for_status()
+    deploy_resp.raise_for_status()
 else:
     deployment = deploy_resp.json()
     deployment_id = deployment.get("deployment_id", "unknown")
+    # Verify env_vars were accepted
+    dep_env = deployment.get("env_vars", [])
     print(f"Deployment created: {deployment_id}")
+    print(f"  env_vars in response: {len(dep_env)} variables")
+    if not dep_env:
+        print("  WARNING: API returned no env_vars — they may not have been applied!")
+    for ev in dep_env:
+        print(f"    {ev.get('name', '?')}: {ev.get('value', '?')[:40]}")
 
 # COMMAND ----------
 
@@ -289,7 +414,7 @@ while elapsed < timeout_s:
         status_resp = requests.get(f"{host}/api/2.0/apps/{app_name}", headers=headers)
         status_resp.raise_for_status()
         status_data = status_resp.json()
-        app_status = status_data.get("status", {}).get("state", "UNKNOWN")
+        app_status = status_data.get("app_status", {}).get("state", "UNKNOWN")
     except Exception as e:
         app_status = f"ERROR: {e}"
 
