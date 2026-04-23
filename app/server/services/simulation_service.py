@@ -80,19 +80,16 @@ async def check_simulation(
 
     params_hash = compute_params_hash(simulation_type, parameters, num_simulations, seed)
 
-    # First: try exact hash match — prefer COMPLETED over other statuses
+    # Exact hash match — only look at COMPLETED or RUNNING runs.
+    # SUBMITTED may be stale; FAILED should allow re-triggering.
+    # If nothing useful found, return "not_found" so caller can trigger.
     run_sql = f"""
         SELECT run_id, simulation_type, parameters, status, seed, num_simulations
         FROM {catalog}.{schema}.simulation_runs
         WHERE params_hash = '{params_hash}'
-          AND status IN ('COMPLETED', 'RUNNING', 'SUBMITTED', 'FAILED')
+          AND status IN ('COMPLETED', 'RUNNING')
         ORDER BY
-          CASE status
-            WHEN 'COMPLETED' THEN 0
-            WHEN 'RUNNING' THEN 1
-            WHEN 'SUBMITTED' THEN 2
-            ELSE 3
-          END,
+          CASE status WHEN 'COMPLETED' THEN 0 ELSE 1 END,
           created_at DESC
         LIMIT 1
     """
@@ -110,7 +107,6 @@ async def check_simulation(
     run_status = run["status"]
 
     if run_status == "COMPLETED":
-        # Fetch aggregated results
         results_sql = f"""
             SELECT simulation_type, metric_name, group_key, group_value,
                    mean_value, std_value, p05, p10, p25, p50, p75, p90, p95
@@ -128,28 +124,12 @@ async def check_simulation(
             "results": result_rows,
         }
 
-    if run_status == "RUNNING":
-        return {
-            "status": "running",
-            "run_id": run_id,
-            "simulation_type": simulation_type,
-            "message": "Simulation is currently running. Check back in a few minutes.",
-        }
-
-    if run_status == "SUBMITTED":
-        return {
-            "status": "submitted",
-            "run_id": run_id,
-            "simulation_type": simulation_type,
-            "message": "Simulation is queued. Check back in a few minutes.",
-        }
-
-    # FAILED
+    # RUNNING
     return {
-        "status": "failed",
+        "status": "running",
         "run_id": run_id,
         "simulation_type": simulation_type,
-        "message": "Simulation failed. You can try again.",
+        "message": "Simulation is currently running.",
     }
 
 
@@ -178,7 +158,7 @@ async def check_simulations_batch(
     hashes = [c["params_hash"] for c in cells]
     hash_list = ", ".join(f"'{h}'" for h in hashes)
 
-    # Single query for all hashes — get best status per hash
+    # Single query for all hashes — only COMPLETED or RUNNING (same as check_simulation)
     run_sql = f"""
         WITH ranked AS (
             SELECT run_id, params_hash, simulation_type, parameters, status,
@@ -186,17 +166,12 @@ async def check_simulations_batch(
                    ROW_NUMBER() OVER (
                        PARTITION BY params_hash
                        ORDER BY
-                           CASE status
-                               WHEN 'COMPLETED' THEN 0
-                               WHEN 'RUNNING' THEN 1
-                               WHEN 'SUBMITTED' THEN 2
-                               ELSE 3
-                           END,
+                           CASE status WHEN 'COMPLETED' THEN 0 ELSE 1 END,
                            created_at DESC
                    ) AS rn
             FROM {catalog}.{schema}.simulation_runs
             WHERE params_hash IN ({hash_list})
-              AND status IN ('COMPLETED', 'RUNNING', 'SUBMITTED', 'FAILED')
+              AND status IN ('COMPLETED', 'RUNNING')
         )
         SELECT run_id, params_hash, simulation_type, parameters, status,
                seed, num_simulations
@@ -258,26 +233,12 @@ async def check_simulations_batch(
                 "seed": int(run.get("seed", 42)),
                 "results": results_by_run.get(run_id, []),
             }
-        elif run_status == "RUNNING":
+        else:  # RUNNING
             output[h] = {
                 "status": "running",
                 "run_id": run_id,
                 "simulation_type": sim_type,
                 "message": "Simulation is currently running.",
-            }
-        elif run_status == "SUBMITTED":
-            output[h] = {
-                "status": "submitted",
-                "run_id": run_id,
-                "simulation_type": sim_type,
-                "message": "Simulation is queued.",
-            }
-        else:
-            output[h] = {
-                "status": "failed",
-                "run_id": run_id,
-                "simulation_type": sim_type,
-                "message": "Simulation failed. You can try again.",
             }
 
     return output

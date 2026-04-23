@@ -228,7 +228,7 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
         await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "completed", "cell_id": str(cell["id"])}
 
-    elif status in ("running", "submitted"):
+    elif status == "running":
         run_id = result.get("run_id")
         await db.execute(
             "UPDATE matrix_cells SET status = 'running', run_id = $1, updated_at = NOW() WHERE id = $2",
@@ -238,8 +238,8 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
         await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "running", "cell_id": str(cell["id"])}
 
-    elif status == "not_found":
-        # Trigger a new simulation (writes to Delta + launches job)
+    else:
+        # not_found — trigger a new simulation (writes to Delta + launches job)
         await simulation_service.trigger_simulation(
             matrix["simulation_type"], params, matrix["num_simulations"], matrix["seed"],
         )
@@ -248,13 +248,6 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
             cell["id"],
         )
         return {"status": "triggered", "cell_id": str(cell["id"])}
-
-    else:
-        await db.execute(
-            "UPDATE matrix_cells SET status = 'failed', updated_at = NOW() WHERE id = $1",
-            cell["id"],
-        )
-        return {"status": "failed", "cell_id": str(cell["id"])}
 
 
 def _extract_metric(
