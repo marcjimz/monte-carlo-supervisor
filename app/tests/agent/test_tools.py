@@ -28,6 +28,13 @@ def _mock_simulation_service():
             yield mock_module
 
 
+@pytest.fixture(autouse=True)
+def _mock_custom_events():
+    """Mock adispatch_custom_event — requires LangGraph runtime context."""
+    with patch("server.agent.tools.adispatch_custom_event", new_callable=AsyncMock):
+        yield
+
+
 class TestGetAllTools:
     def test_returns_four_tools(self):
         tools = get_all_tools()

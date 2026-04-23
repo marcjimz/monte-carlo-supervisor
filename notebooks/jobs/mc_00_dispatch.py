@@ -1,8 +1,8 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # MC 00 — Dispatch
-# MAGIC Picks up SUBMITTED rows from simulation_runs (table-trigger mode)
-# MAGIC or reads from job parameters (manual mode).
+# MAGIC Reads job parameters first (from jobs.run_now). Falls back to picking
+# MAGIC up the matching SUBMITTED row from simulation_runs for status tracking.
 
 # COMMAND ----------
 
@@ -18,19 +18,65 @@ schema = dbutils.widgets.get("schema")
 
 # COMMAND ----------
 
+import hashlib
+import json
 from datetime import datetime, timezone
 
 table = f"{catalog}.{schema}.simulation_runs"
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
-submitted = spark.sql(f"""
-    SELECT * FROM {table}
-    WHERE status = 'SUBMITTED'
-    ORDER BY created_at ASC
-    LIMIT 1
-""").collect()
+sim_type = dbutils.widgets.get("simulation_type")
 
-if submitted:
+if sim_type:
+    # --- Job-parameter mode (from jobs.run_now with job_parameters) ---
+    parameters_json = dbutils.widgets.get("parameters")
+    seed = dbutils.widgets.get("seed")
+    num_sims = dbutils.widgets.get("num_simulations")
+
+    # Compute params_hash to find the matching SUBMITTED row
+    canonical = json.dumps(json.loads(parameters_json), sort_keys=True, separators=(",", ":"))
+    payload = f"{sim_type}|{canonical}|{seed}|{num_sims}|default"
+    params_hash = hashlib.sha256(payload.encode()).hexdigest()
+
+    # Try to find and claim the matching SUBMITTED row
+    submitted = spark.sql(f"""
+        SELECT run_id FROM {table}
+        WHERE params_hash = '{params_hash}' AND status = 'SUBMITTED'
+        ORDER BY created_at DESC LIMIT 1
+    """).collect()
+
+    if submitted:
+        run_id = submitted[0].run_id
+        spark.sql(f"""
+            UPDATE {table}
+            SET status = 'RUNNING', updated_at = '{now}'
+            WHERE run_id = '{run_id}'
+        """)
+        print(f"Job-parameter mode: claimed SUBMITTED run_id={run_id}")
+        dbutils.jobs.taskValues.set(key="dispatch_mode", value="table_trigger")
+        dbutils.jobs.taskValues.set(key="run_id", value=run_id)
+        dbutils.jobs.taskValues.set(key="params_hash", value=params_hash)
+    else:
+        print(f"Job-parameter mode: no matching SUBMITTED row (will create new run)")
+        dbutils.jobs.taskValues.set(key="dispatch_mode", value="manual")
+
+    dbutils.jobs.taskValues.set(key="simulation_type", value=sim_type)
+    dbutils.jobs.taskValues.set(key="parameters", value=parameters_json)
+    dbutils.jobs.taskValues.set(key="seed", value=seed)
+    dbutils.jobs.taskValues.set(key="num_simulations", value=num_sims)
+
+else:
+    # --- No job parameters — pick up oldest SUBMITTED row ---
+    submitted = spark.sql(f"""
+        SELECT * FROM {table}
+        WHERE status = 'SUBMITTED'
+        ORDER BY created_at ASC LIMIT 1
+    """).collect()
+
+    if not submitted:
+        print("No SUBMITTED rows and no job parameters — nothing to dispatch.")
+        dbutils.notebook.exit('{"dispatched": false, "reason": "no_work"}')
+
     row = submitted[0]
     print(f"Table-trigger mode: dispatching run_id={row.run_id}")
     spark.sql(f"""
@@ -45,17 +91,6 @@ if submitted:
     dbutils.jobs.taskValues.set(key="seed", value=str(row.seed))
     dbutils.jobs.taskValues.set(key="num_simulations", value=str(row.num_simulations))
     dbutils.jobs.taskValues.set(key="params_hash", value=row.params_hash)
-else:
-    sim_type = dbutils.widgets.get("simulation_type")
-    if not sim_type:
-        print("No SUBMITTED rows and no job parameters — nothing to dispatch.")
-        dbutils.notebook.exit('{"dispatched": false, "reason": "no_work"}')
-    print(f"Manual mode: dispatching simulation_type={sim_type}")
-    dbutils.jobs.taskValues.set(key="dispatch_mode", value="manual")
-    dbutils.jobs.taskValues.set(key="simulation_type", value=sim_type)
-    dbutils.jobs.taskValues.set(key="parameters", value=dbutils.widgets.get("parameters"))
-    dbutils.jobs.taskValues.set(key="seed", value=dbutils.widgets.get("seed"))
-    dbutils.jobs.taskValues.set(key="num_simulations", value=dbutils.widgets.get("num_simulations"))
 
 # COMMAND ----------
 

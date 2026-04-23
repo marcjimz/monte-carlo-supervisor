@@ -344,18 +344,17 @@ async def trigger_simulation(
 ) -> dict:
     """Trigger a simulation by writing to Delta and launching the job.
 
-    Includes a cache guard: if a matching run already exists (completed,
-    running, or submitted), returns it instead of launching a duplicate job.
+    Cache guard: if a COMPLETED or RUNNING run exists, return it.
+    SUBMITTED rows are ignored (may be stale) — a new job is always launched.
     """
-    # Cache guard — avoid duplicate triggers for any existing run
     cached = await check_simulation(simulation_type, parameters, num_simulations, seed)
     cached_status = cached.get("status")
     if cached_status == "completed":
         logger.info("Cache guard: returning existing completed run %s", cached.get("run_id"))
         cached["message"] = "Simulation already completed (cache hit)."
         return cached
-    if cached_status in ("running", "submitted"):
-        logger.info("Cache guard: run %s already %s — not re-triggering", cached.get("run_id"), cached_status)
+    if cached_status == "running":
+        logger.info("Cache guard: run %s already running — not re-triggering", cached.get("run_id"))
         return cached
 
     import asyncio

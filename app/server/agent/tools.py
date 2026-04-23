@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 
+from langchain_core.callbacks import adispatch_custom_event
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,12 @@ async def run_simulation(
     if result.get("status") == "completed":
         return json.dumps(result)
 
+    # Emit progress event so the SSE stream shows feedback
+    await adispatch_custom_event(
+        "simulation_progress",
+        {"message": f"Simulation triggered — job is starting up. This typically takes 3-5 minutes.\n\n"},
+    )
+
     # Poll until completion
     logger.info("Simulation %s — polling for results (status: %s)", simulation_type, result.get("status"))
     for attempt in range(1, _MAX_POLL_ATTEMPTS + 1):
@@ -64,13 +71,31 @@ async def run_simulation(
             simulation_type, params, num_simulations, seed,
         )
         status = check.get("status")
+        elapsed = attempt * _POLL_INTERVAL_SECONDS
+        elapsed_str = f"{elapsed // 60}m {elapsed % 60}s" if elapsed >= 60 else f"{elapsed}s"
         logger.info("Poll %d/%d for %s: status=%s", attempt, _MAX_POLL_ATTEMPTS, simulation_type, status)
 
         if status == "completed":
+            await adispatch_custom_event(
+                "simulation_progress",
+                {"message": f"Results ready ({elapsed_str}).\n\n"},
+            )
             return json.dumps(check)
 
         if status == "failed":
+            await adispatch_custom_event(
+                "simulation_progress",
+                {"message": f"Simulation failed after {elapsed_str}.\n\n"},
+            )
             return json.dumps(check)
+
+        # Emit periodic progress
+        if attempt % 2 == 0:  # Every 30 seconds
+            status_label = "running" if status == "running" else "queued"
+            await adispatch_custom_event(
+                "simulation_progress",
+                {"message": f"Still {status_label}... ({elapsed_str} elapsed)\n\n"},
+            )
 
     # Timeout — return last known status
     return json.dumps({

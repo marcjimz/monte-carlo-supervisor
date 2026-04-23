@@ -311,6 +311,15 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
                         full_content += text
                         yield f"data: {json.dumps({'type': 'delta', 'content': text})}\n\n"
 
+                # Stream progress events from long-running tools
+                elif event_kind == "on_custom_event":
+                    event_name = event.get("name", "")
+                    if event_name == "simulation_progress":
+                        msg = event.get("data", {}).get("message", "")
+                        if msg:
+                            full_content += msg
+                            yield f"data: {json.dumps({'type': 'delta', 'content': msg})}\n\n"
+
                 # Detect tool calls completing
                 elif event_kind == "on_tool_end":
                     tool_name = event.get("name", "")
