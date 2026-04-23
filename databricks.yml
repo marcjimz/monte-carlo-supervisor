@@ -27,6 +27,9 @@ variables:
   skip_views:
     description: "Skip base/metric view creation (true if customer has existing metric view)"
     default: "false"
+  dashboard_id:
+    description: "Dashboard ID (empty = use DAB-managed dashboard)"
+    default: ""
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

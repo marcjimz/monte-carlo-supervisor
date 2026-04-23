@@ -42,7 +42,7 @@ resources:
           - name: SIMULATION_JOB_ID
             value: ${resources.jobs.monte_carlo_pipeline.id}
           - name: DASHBOARD_ID
-            value: ${resources.dashboards.wh_analytics.id}
+            value: ${var.dashboard_id}
           # Lakebase — PGHOST and PGUSER auto-populated by lakebase-db resource binding
           - name: PGDATABASE
             value: "mcapp"
