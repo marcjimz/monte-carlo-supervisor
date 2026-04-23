@@ -35,7 +35,7 @@ from mc_supervisor.monte_carlo.results import get_latest_distribution_version
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
-metric_view = dbutils.widgets.get("metric_view").strip() or f"{metric_view}"
+metric_view = dbutils.widgets.get("metric_view").strip() or f"{catalog}.{schema}.mv_accelerate_encounters"
 
 print(f"Catalog/Schema: {catalog}.{schema}")
 print(f"Metric View:    {metric_view}")
