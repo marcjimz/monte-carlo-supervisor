@@ -43,6 +43,18 @@ def normalize_parameters(simulation_type: str, parameters: dict) -> dict:
     return merged
 
 
+def compute_params_hash(
+    simulation_type: str,
+    parameters: dict,
+    num_simulations: int = 10000,
+    seed: int = 42,
+) -> str:
+    """Compute the deterministic params_hash for a simulation config."""
+    params_json = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
+    payload = f"{simulation_type}|{params_json}|{seed}|{num_simulations}|default"
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 async def check_simulation(
     simulation_type: str,
     parameters: dict,
@@ -53,8 +65,7 @@ async def check_simulation(
 
     Strategy:
     1. Compute params_hash for exact match (same as submit_to_delta)
-    2. Query Delta for a matching run — exact hash first, then fall back
-       to most recent COMPLETED run of the same simulation_type
+    2. Query Delta for a matching run by exact hash
     3. If COMPLETED, fetch results from simulation_results table
     """
     import asyncio
@@ -67,10 +78,7 @@ async def check_simulation(
     catalog = settings.uc_catalog
     schema = settings.uc_schema
 
-    # Canonical compact JSON — must match results.py:compute_cache_key()
-    params_json = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
-    payload = f"{simulation_type}|{params_json}|{seed}|{num_simulations}|default"
-    params_hash = hashlib.sha256(payload.encode()).hexdigest()
+    params_hash = compute_params_hash(simulation_type, parameters, num_simulations, seed)
 
     # First: try exact hash match — prefer COMPLETED over other statuses
     run_sql = f"""
@@ -145,6 +153,136 @@ async def check_simulation(
     }
 
 
+async def check_simulations_batch(
+    cells: list[dict],
+) -> dict[str, dict]:
+    """Batch-check multiple simulation hashes in a single SQL query.
+
+    Args:
+        cells: List of dicts with keys: params_hash, simulation_type, num_simulations, seed
+
+    Returns:
+        Dict keyed by params_hash with check results (same shape as check_simulation).
+    """
+    import asyncio
+
+    from server.config import get_settings
+
+    if not cells:
+        return {}
+
+    settings = get_settings()
+    catalog = settings.uc_catalog
+    schema = settings.uc_schema
+
+    hashes = [c["params_hash"] for c in cells]
+    hash_list = ", ".join(f"'{h}'" for h in hashes)
+
+    # Single query for all hashes — get best status per hash
+    run_sql = f"""
+        WITH ranked AS (
+            SELECT run_id, params_hash, simulation_type, parameters, status,
+                   seed, num_simulations,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY params_hash
+                       ORDER BY
+                           CASE status
+                               WHEN 'COMPLETED' THEN 0
+                               WHEN 'RUNNING' THEN 1
+                               WHEN 'SUBMITTED' THEN 2
+                               ELSE 3
+                           END,
+                           created_at DESC
+                   ) AS rn
+            FROM {catalog}.{schema}.simulation_runs
+            WHERE params_hash IN ({hash_list})
+              AND status IN ('COMPLETED', 'RUNNING', 'SUBMITTED', 'FAILED')
+        )
+        SELECT run_id, params_hash, simulation_type, parameters, status,
+               seed, num_simulations
+        FROM ranked WHERE rn = 1
+    """
+    rows = await asyncio.to_thread(execute_query, run_sql)
+
+    # Index by params_hash
+    run_by_hash: dict[str, dict] = {}
+    for row in rows:
+        run_by_hash[row["params_hash"]] = row
+
+    # Collect completed run_ids for batch results fetch
+    completed_run_ids = [
+        row["run_id"] for row in rows if row["status"] == "COMPLETED"
+    ]
+
+    # Single query for ALL completed results
+    results_by_run: dict[str, list[dict]] = {}
+    if completed_run_ids:
+        run_id_list = ", ".join(f"'{rid}'" for rid in completed_run_ids)
+        results_sql = f"""
+            SELECT run_id, simulation_type, metric_name, group_key, group_value,
+                   mean_value, std_value, p05, p10, p25, p50, p75, p90, p95
+            FROM {catalog}.{schema}.simulation_results
+            WHERE run_id IN ({run_id_list})
+            ORDER BY run_id, metric_name, group_value
+        """
+        result_rows = await asyncio.to_thread(execute_query, results_sql)
+        for r in result_rows:
+            results_by_run.setdefault(r["run_id"], []).append(r)
+
+    # Build response keyed by params_hash
+    output: dict[str, dict] = {}
+    cell_lookup = {c["params_hash"]: c for c in cells}
+
+    for h in hashes:
+        cell_info = cell_lookup[h]
+        sim_type = cell_info["simulation_type"]
+
+        if h not in run_by_hash:
+            output[h] = {
+                "status": "not_found",
+                "simulation_type": sim_type,
+                "message": "No matching simulation found.",
+            }
+            continue
+
+        run = run_by_hash[h]
+        run_id = run["run_id"]
+        run_status = run["status"]
+
+        if run_status == "COMPLETED":
+            output[h] = {
+                "status": "completed",
+                "run_id": run_id,
+                "simulation_type": sim_type,
+                "num_simulations": int(run.get("num_simulations", 10000)),
+                "seed": int(run.get("seed", 42)),
+                "results": results_by_run.get(run_id, []),
+            }
+        elif run_status == "RUNNING":
+            output[h] = {
+                "status": "running",
+                "run_id": run_id,
+                "simulation_type": sim_type,
+                "message": "Simulation is currently running.",
+            }
+        elif run_status == "SUBMITTED":
+            output[h] = {
+                "status": "submitted",
+                "run_id": run_id,
+                "simulation_type": sim_type,
+                "message": "Simulation is queued.",
+            }
+        else:
+            output[h] = {
+                "status": "failed",
+                "run_id": run_id,
+                "simulation_type": sim_type,
+                "message": "Simulation failed. You can try again.",
+            }
+
+    return output
+
+
 async def submit_to_delta(
     simulation_type: str,
     parameters,
@@ -172,8 +310,7 @@ async def submit_to_delta(
     params_json = json.dumps(parameters, sort_keys=True, separators=(",", ":")) if isinstance(parameters, dict) else str(parameters)
     run_id = uuid4().hex
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    payload = f"{simulation_type}|{params_json}|{seed}|{num_simulations}|default"
-    params_hash = hashlib.sha256(payload.encode()).hexdigest()
+    params_hash = compute_params_hash(simulation_type, parameters if isinstance(parameters, dict) else json.loads(params_json), num_simulations, seed)
 
     sql = f"""INSERT INTO {catalog}.{schema}.simulation_runs
     (run_id, simulation_type, parameters, params_hash, seed, num_simulations, status, created_at, updated_at)
@@ -207,14 +344,18 @@ async def trigger_simulation(
 ) -> dict:
     """Trigger a simulation by writing to Delta and launching the job.
 
-    Includes a cache guard: if a COMPLETED run with the same params already
-    exists, returns the cached result instead of launching a duplicate job.
+    Includes a cache guard: if a matching run already exists (completed,
+    running, or submitted), returns it instead of launching a duplicate job.
     """
-    # Cache guard — avoid duplicate triggers
+    # Cache guard — avoid duplicate triggers for any existing run
     cached = await check_simulation(simulation_type, parameters, num_simulations, seed)
-    if cached.get("status") == "completed":
+    cached_status = cached.get("status")
+    if cached_status == "completed":
         logger.info("Cache guard: returning existing completed run %s", cached.get("run_id"))
         cached["message"] = "Simulation already completed (cache hit)."
+        return cached
+    if cached_status in ("running", "submitted"):
+        logger.info("Cache guard: run %s already %s — not re-triggering", cached.get("run_id"), cached_status)
         return cached
 
     import asyncio
@@ -266,8 +407,7 @@ async def insert_submitted_placeholder(
     canonical_params = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
     placeholder_run_id = uuid4().hex
     now = datetime.now(timezone.utc).isoformat()
-    payload = f"{simulation_type}|{canonical_params}|{seed}|{num_simulations}|default"
-    params_hash = hashlib.sha256(payload.encode()).hexdigest()
+    params_hash = compute_params_hash(simulation_type, parameters, num_simulations, seed)
 
     await db.execute(
         """INSERT INTO sync_simulation_runs

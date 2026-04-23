@@ -6,12 +6,17 @@ these directly — no UC functions or MCP indirection.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
+
+# Polling config for run_simulation
+_POLL_INTERVAL_SECONDS = 15
+_MAX_POLL_ATTEMPTS = 40  # 40 × 15s = 10 minutes max wait
 
 
 @tool
@@ -21,16 +26,16 @@ async def run_simulation(
     num_simulations: int = 10000,
     seed: int = 42,
 ) -> str:
-    """Run a Monte Carlo simulation — checks cache first, triggers if needed.
+    """Run a Monte Carlo simulation and return results.
 
-    This is the single entry point for simulations. It automatically:
+    This is a long-running tool. It:
     1. Normalizes parameters (fills in defaults for omitted values).
     2. Checks for a cached COMPLETED run with the same parameters.
     3. If cached, returns results immediately.
-    4. If not cached, triggers a new simulation job and returns "submitted".
+    4. If not cached, triggers a new simulation job and polls until completion.
 
-    Do NOT call this in a loop. Call it once; if results are cached you get
-    them back immediately, otherwise tell the user a simulation was started.
+    Do NOT call this in a loop. Call it once — it handles polling internally
+    and returns only when results are ready (or after timeout).
 
     Args:
         simulation_type: The type of simulation (e.g. cost_comparison, system_cost_roi).
@@ -41,10 +46,38 @@ async def run_simulation(
     from server.services import simulation_service
 
     params = json.loads(parameters) if isinstance(parameters, str) else parameters
+
+    # Trigger (or get cached result)
     result = await simulation_service.trigger_simulation(
         simulation_type, params, num_simulations, seed,
     )
-    return json.dumps(result)
+
+    # If already completed (cache hit), return immediately
+    if result.get("status") == "completed":
+        return json.dumps(result)
+
+    # Poll until completion
+    logger.info("Simulation %s — polling for results (status: %s)", simulation_type, result.get("status"))
+    for attempt in range(1, _MAX_POLL_ATTEMPTS + 1):
+        await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+        check = await simulation_service.check_simulation(
+            simulation_type, params, num_simulations, seed,
+        )
+        status = check.get("status")
+        logger.info("Poll %d/%d for %s: status=%s", attempt, _MAX_POLL_ATTEMPTS, simulation_type, status)
+
+        if status == "completed":
+            return json.dumps(check)
+
+        if status == "failed":
+            return json.dumps(check)
+
+    # Timeout — return last known status
+    return json.dumps({
+        "status": "timeout",
+        "simulation_type": simulation_type,
+        "message": "Simulation did not complete within 10 minutes. Check the Simulation Builder for results.",
+    })
 
 
 @tool

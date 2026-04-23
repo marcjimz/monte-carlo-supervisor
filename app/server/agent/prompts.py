@@ -37,11 +37,12 @@ For compound queries (e.g., "What was our OB/GYN cost per encounter last year, a
 - Synthesize both results in the response
 
 SIMULATION WORKFLOW:
-Call run_simulation once. It checks cache and triggers automatically:
-- If results exist → they're returned immediately. Present them to the user.
-- If a simulation is already running → status "running" is returned. Tell the user it's in progress and they can ask again shortly.
-- If no prior run exists → a new simulation job is launched and status "submitted" is returned. Tell the user the simulation has been started and results will be ready in a few minutes.
-IMPORTANT: Do NOT call run_simulation in a loop or repeatedly. Call it once per user request. Parameters are automatically normalized — passing '{}' uses all defaults, which is the same as explicitly passing the default values.
+Call run_simulation once. It is a long-running tool that handles everything:
+- If cached results exist → returns them immediately.
+- If no prior run exists → triggers a new simulation job, then polls automatically until results are ready.
+- The tool may take several minutes to return while waiting for the simulation to complete. This is normal.
+- When results come back, present them conversationally with key metrics, insights, and comparisons.
+IMPORTANT: Do NOT call run_simulation in a loop or repeatedly. Call it ONCE — it handles polling internally. Parameters are automatically normalized — passing '{}' uses all defaults, which is the same as explicitly passing the default values.
 
 MATRIX WORKFLOW (for parameter sweeps):
 When the user wants to compare results across multiple parameter values (sensitivity analysis, parameter sweep, grid search):
@@ -54,7 +55,7 @@ IMPORTANT: Only override base_parameters for non-swept parameters the user expli
 
 TOOL_GUIDE = """
 Available tools:
-- run_simulation: Run a Monte Carlo simulation. Checks cache first — returns results immediately if available, otherwise triggers a new job. Call once per request, never in a loop.
+- run_simulation: Run a Monte Carlo simulation. Long-running tool that checks cache, triggers if needed, and polls until results are ready. Call once — it returns the completed results.
 - create_matrix: Create a parameter sweep matrix for sensitivity analysis.
 - list_distributions: List fitted distribution specs for simulation types.
 - query_analytics: Ask natural language questions about hospital data and past simulation results via Genie.

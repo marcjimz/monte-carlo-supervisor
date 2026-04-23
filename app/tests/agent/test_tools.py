@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from server.agent.tools import (
+    _POLL_INTERVAL_SECONDS,
     create_matrix,
     get_all_tools,
     list_distributions,
@@ -20,6 +21,7 @@ def _mock_simulation_service():
     """Provide a mock simulation_service module for lazy imports."""
     mock_module = MagicMock()
     mock_module.trigger_simulation = AsyncMock(return_value={"status": "submitted", "run_id": "test"})
+    mock_module.check_simulation = AsyncMock(return_value={"status": "completed", "results": [{"mean": 42}]})
     with patch.dict(sys.modules, {"server.services.simulation_service": mock_module}):
         # Also patch the import path used by tools.py
         with patch.dict(sys.modules, {"server.services": MagicMock(simulation_service=mock_module)}):
@@ -48,7 +50,8 @@ class TestGetAllTools:
 
 class TestRunSimulation:
     @pytest.mark.asyncio
-    async def test_returns_json(self, _mock_simulation_service):
+    async def test_returns_cached_immediately(self, _mock_simulation_service):
+        """Cache hit — trigger returns completed, no polling needed."""
         _mock_simulation_service.trigger_simulation.return_value = {
             "status": "completed",
             "results": [{"mean": 100}],
@@ -59,22 +62,54 @@ class TestRunSimulation:
         })
         parsed = json.loads(result)
         assert parsed["status"] == "completed"
+        # Should NOT have called check_simulation (no polling needed)
+        _mock_simulation_service.check_simulation.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_returns_submitted(self, _mock_simulation_service):
+    async def test_polls_until_completed(self, _mock_simulation_service):
+        """Submitted → polls check_simulation → gets completed."""
         _mock_simulation_service.trigger_simulation.return_value = {
             "status": "submitted",
             "run_id": "abc123",
         }
-        result = await run_simulation.ainvoke({
-            "simulation_type": "cost_comparison",
-        })
+        # First poll: still running, second poll: completed
+        _mock_simulation_service.check_simulation = AsyncMock(side_effect=[
+            {"status": "running", "run_id": "abc123"},
+            {"status": "completed", "run_id": "abc123", "results": [{"mean": 42}]},
+        ])
+        with patch("server.agent.tools._POLL_INTERVAL_SECONDS", 0):
+            result = await run_simulation.ainvoke({
+                "simulation_type": "cost_comparison",
+            })
         parsed = json.loads(result)
-        assert parsed["status"] == "submitted"
-        assert parsed["run_id"] == "abc123"
+        assert parsed["status"] == "completed"
+        assert _mock_simulation_service.check_simulation.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_returns_failed_without_polling(self, _mock_simulation_service):
+        """If check returns failed during polling, stop immediately."""
+        _mock_simulation_service.trigger_simulation.return_value = {
+            "status": "submitted",
+            "run_id": "abc123",
+        }
+        _mock_simulation_service.check_simulation = AsyncMock(return_value={
+            "status": "failed",
+            "run_id": "abc123",
+            "message": "Simulation failed.",
+        })
+        with patch("server.agent.tools._POLL_INTERVAL_SECONDS", 0):
+            result = await run_simulation.ainvoke({
+                "simulation_type": "cost_comparison",
+            })
+        parsed = json.loads(result)
+        assert parsed["status"] == "failed"
 
     @pytest.mark.asyncio
     async def test_parses_parameters(self, _mock_simulation_service):
+        _mock_simulation_service.trigger_simulation.return_value = {
+            "status": "completed",
+            "results": [],
+        }
         await run_simulation.ainvoke({
             "simulation_type": "cost_comparison",
             "parameters": '{"member_count": 30000}',
