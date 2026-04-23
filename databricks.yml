@@ -43,7 +43,7 @@ sync:
     - app/.venv/**
     - app/.databricks/**
     - app/tests/**
-    - app/migrations/**
+    # app/migrations/** must NOT be excluded — needed for Lakebase schema setup
     - app/**/__pycache__/**
     - app/**/*.zip
     - app/pyproject.toml

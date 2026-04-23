@@ -354,17 +354,50 @@ else:
 
 # COMMAND ----------
 
-# PGHOST/PGUSER: injected here (resource binding removed due to deploy ordering)
-# GENIE_SPACE_ID: set dynamically if created by deploy_genie task
-env_vars = []
-if pg_host:
-    env_vars.append({"name": "PGHOST", "value": pg_host})
-if sp_client_id:
-    env_vars.append({"name": "PGUSER", "value": sp_client_id})
-if genie_space_id:
-    env_vars.append({"name": "GENIE_SPACE_ID", "value": genie_space_id})
+# Build the COMPLETE env var list — app.yaml env vars are not surfaced by the API,
+# so we must provide all of them here (DAB-static + pipeline-dynamic).
 
-print("Dynamic env vars to inject:")
+# Look up simulation job ID from app resources
+job_id = ""
+for r in app_data.get("resources", []):
+    if r.get("name") == "simulation-job" and "job" in r:
+        job_id = r["job"]["id"]
+        break
+
+# Look up dashboard ID (if dashboard was created by DAB)
+dashboard_id = ""
+try:
+    dash_resp = requests.get(
+        f"{host}/api/2.0/lakeview/dashboards",
+        headers=headers,
+        params={"page_size": 50},
+    )
+    if dash_resp.ok:
+        for d in dash_resp.json().get("dashboards", []):
+            if "Women" in d.get("display_name", "") or "wh_analytics" in d.get("display_name", ""):
+                dashboard_id = d["dashboard_id"]
+                break
+except Exception:
+    pass
+
+env_vars = [
+    # DAB-static vars
+    {"name": "UC_CATALOG", "value": catalog},
+    {"name": "UC_SCHEMA", "value": schema},
+    {"name": "SEED_DEMO_DATA", "value": "true"},
+    {"name": "SUPERVISOR_ENDPOINT", "value": "databricks-claude-opus-4-7"},
+    {"name": "EXECUTOR_ENDPOINT", "value": "databricks-claude-sonnet-4"},
+    {"name": "SQL_WAREHOUSE_ID", "value": warehouse_id},
+    {"name": "SIMULATION_JOB_ID", "value": job_id},
+    {"name": "PGDATABASE", "value": "mcapp"},
+    # Pipeline-dynamic vars
+    {"name": "PGHOST", "value": pg_host},
+    {"name": "PGUSER", "value": sp_client_id},
+    {"name": "GENIE_SPACE_ID", "value": genie_space_id},
+    {"name": "DASHBOARD_ID", "value": dashboard_id},
+]
+
+print("App env vars to deploy:")
 for ev in env_vars:
     print(f"  {ev['name']:25s} = {ev['value']}")
 
@@ -375,11 +408,6 @@ refresh_resp = requests.get(f"{host}/api/2.0/apps/{app_name}", headers=headers)
 refresh_resp.raise_for_status()
 refreshed = refresh_resp.json()
 
-current_config = refreshed.get("config", {})
-current_command = current_config.get("command", [
-    "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"
-])
-
 source_code_path = (
     refreshed.get("active_deployment", {}).get("source_code_path", "")
     or refreshed.get("default_source_code_path", "")
@@ -388,11 +416,7 @@ if not source_code_path:
     username = _ctx.userName().get()
     source_code_path = f"/Workspace/Users/{username}/.bundle/monte-carlo-supervisor/dev/files/app"
 
-# Merge: keep existing env vars from DAB, override dynamic ones
-existing_env = {e["name"]: e["value"] for e in current_config.get("env", [])}
-for ev in env_vars:
-    existing_env[ev["name"]] = ev["value"]
-merged_env_vars = [{"name": k, "value": v} for k, v in existing_env.items()]
+merged_env_vars = env_vars
 
 # Start compute if needed
 compute_state = refreshed.get("compute_status", {}).get("state", "UNKNOWN")
@@ -416,7 +440,7 @@ deploy_resp = requests.post(
         "source_code_path": source_code_path,
         "mode": "SNAPSHOT",
         "env_vars": merged_env_vars,
-        "command": current_command,
+        "command": ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"],
     },
 )
 if deploy_resp.ok:
