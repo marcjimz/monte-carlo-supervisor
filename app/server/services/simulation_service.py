@@ -36,17 +36,25 @@ async def check_simulation(
     catalog = settings.uc_catalog
     schema = settings.uc_schema
 
-    params_json = json.dumps(parameters, sort_keys=True)
+    # Canonical compact JSON — must match results.py:compute_cache_key()
+    params_json = json.dumps(parameters, sort_keys=True, separators=(",", ":"))
     payload = f"{simulation_type}|{params_json}|{seed}|{num_simulations}|default"
     params_hash = hashlib.sha256(payload.encode()).hexdigest()
 
-    # First: try exact hash match
+    # First: try exact hash match — prefer COMPLETED over other statuses
     run_sql = f"""
         SELECT run_id, simulation_type, parameters, status, seed, num_simulations
         FROM {catalog}.{schema}.simulation_runs
         WHERE params_hash = '{params_hash}'
           AND status IN ('COMPLETED', 'RUNNING', 'SUBMITTED', 'FAILED')
-        ORDER BY created_at DESC
+        ORDER BY
+          CASE status
+            WHEN 'COMPLETED' THEN 0
+            WHEN 'RUNNING' THEN 1
+            WHEN 'SUBMITTED' THEN 2
+            ELSE 3
+          END,
+          created_at DESC
         LIMIT 1
     """
     rows = await asyncio.to_thread(execute_query, run_sql)
@@ -138,7 +146,8 @@ async def submit_to_delta(
     catalog = settings.uc_catalog
     schema = settings.uc_schema
 
-    params_json = json.dumps(parameters, sort_keys=True) if isinstance(parameters, dict) else str(parameters)
+    # Canonical compact JSON — must match results.py:compute_cache_key()
+    params_json = json.dumps(parameters, sort_keys=True, separators=(",", ":")) if isinstance(parameters, dict) else str(parameters)
     run_id = uuid4().hex
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     payload = f"{simulation_type}|{params_json}|{seed}|{num_simulations}|default"
@@ -174,7 +183,18 @@ async def trigger_simulation(
     num_simulations: int = 10000,
     seed: int = 42,
 ) -> dict:
-    """Trigger a simulation by writing to Delta and launching the job."""
+    """Trigger a simulation by writing to Delta and launching the job.
+
+    Includes a cache guard: if a COMPLETED run with the same params already
+    exists, returns the cached result instead of launching a duplicate job.
+    """
+    # Cache guard — avoid duplicate triggers
+    cached = await check_simulation(simulation_type, parameters, num_simulations, seed)
+    if cached.get("status") == "completed":
+        logger.info("Cache guard: returning existing completed run %s", cached.get("run_id"))
+        cached["message"] = "Simulation already completed (cache hit)."
+        return cached
+
     import asyncio
 
     from server.config import get_settings

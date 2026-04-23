@@ -180,7 +180,7 @@ async def send_message(thread_id: UUID, content: str) -> dict:
         graph, configurable = _get_graph_and_config()
         result = await graph.ainvoke(
             {"messages": lc_messages},
-            config={"configurable": configurable, "recursion_limit": 50},
+            config={"configurable": configurable, "recursion_limit": 25},
         )
         last_msg = result["messages"][-1]
         assistant_content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
@@ -264,7 +264,7 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
                     {"messages": lc_messages},
                     config={
                         "configurable": configurable,
-                        "recursion_limit": 50,
+                        "recursion_limit": 25,
                     },
                     version="v2",
                 ):
