@@ -49,7 +49,7 @@ resources:
 
       parameters:
         - name: simulation_type
-          default: "patient_volume"
+          default: "encounter_margin"
         - name: parameters
           default: "{}"
         - name: num_simulations
@@ -70,6 +70,7 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
+              skip_synthetic: ${var.skip_synthetic}
 
         # Phase 2: Schema objects (SQL files)
         - task_key: create_sim_tables

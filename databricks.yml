@@ -15,6 +15,9 @@ variables:
   genie_space_id:
     description: "Genie Space ID for agent analytics queries (empty = create new)"
     default: ""
+  skip_synthetic:
+    description: "Skip synthetic data generation (true for customer deployments)"
+    default: "false"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
@@ -60,3 +63,4 @@ targets:
     variables:
       catalog: lakebase_hls_workshop_catalog
       schema: hospital_data
+      skip_synthetic: "true"

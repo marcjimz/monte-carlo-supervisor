@@ -4,24 +4,23 @@
 # MAGIC
 # MAGIC Reads pre-generated CSV files from the repository's `/data/` directory and loads
 # MAGIC them into Delta tables in the configured Unity Catalog schema.
+# MAGIC
+# MAGIC **Customer deployments**: Set `skip_synthetic=true` to skip synthetic data
+# MAGIC generation entirely. The customer provides their own `project_accelerate_encounters`
+# MAGIC table and this notebook only creates the schema.
 
 # COMMAND ----------
 
-dbutils.widgets.text("catalog", "lakebase_hls_workshop_catalog", "UC Catalog")
+dbutils.widgets.text("catalog", "monte_carlo_supervisor_catalog", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
+dbutils.widgets.text("skip_synthetic", "false", "Skip synthetic data generation")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
+skip_synthetic = dbutils.widgets.get("skip_synthetic").lower() in ("true", "1", "yes")
 
 print(f"Target: {catalog}.{schema}")
-
-# COMMAND ----------
-
-# Install project package from bundled wheel
-import subprocess, sys
-_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
-subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
+print(f"Skip synthetic data: {skip_synthetic}")
 
 # COMMAND ----------
 
@@ -32,6 +31,20 @@ subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/mo
 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 print(f"Schema {catalog}.{schema} ready.")
+
+# COMMAND ----------
+
+if skip_synthetic:
+    print("Skipping synthetic data generation — customer provides their own data.")
+    dbutils.notebook.exit("SKIPPED: skip_synthetic=true")
+
+# COMMAND ----------
+
+# Install project package from bundled wheel
+import subprocess, sys
+_nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_root = "/Workspace" + "/".join(_nb.split("/")[:-3])
+subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
 
 # COMMAND ----------
 
