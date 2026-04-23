@@ -116,6 +116,7 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
+              metric_view: ${var.metric_view}
 
         # Phase 4: Genie Space (import from versioned JSON export)
         - task_key: deploy_genie

@@ -10,6 +10,7 @@
 
 dbutils.widgets.text("catalog", "lakebase_hls_workshop_catalog", "Unity Catalog Name")
 dbutils.widgets.text("schema", "hospital_data", "Schema Name")
+dbutils.widgets.text("metric_view", "", "Metric View (fully qualified, or empty for default)")
 
 # COMMAND ----------
 
@@ -34,8 +35,10 @@ from mc_supervisor.monte_carlo.results import get_latest_distribution_version
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
+metric_view = dbutils.widgets.get("metric_view").strip() or f"{metric_view}"
 
 print(f"Catalog/Schema: {catalog}.{schema}")
+print(f"Metric View:    {metric_view}")
 
 # COMMAND ----------
 
@@ -68,7 +71,7 @@ FITTING_SOURCES = {
     ("encounter_margin", "monthly_margin"): {
         "query": f"""
             SELECT MEASURE(`Direct Margin`) AS monthly_margin
-            FROM {catalog}.{schema}.mv_accelerate_encounters
+            FROM {metric_view}
             GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
         "column": "monthly_margin",
@@ -77,7 +80,7 @@ FITTING_SOURCES = {
     ("encounter_margin", "encounter_volume"): {
         "query": f"""
             SELECT MEASURE(`Encounter Count`) AS enc_count
-            FROM {catalog}.{schema}.mv_accelerate_encounters
+            FROM {metric_view}
             GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
         "column": "enc_count",
@@ -86,7 +89,7 @@ FITTING_SOURCES = {
     ("encounter_margin", "cost_per_encounter"): {
         "query": f"""
             SELECT MEASURE(`Total Cost`) / MEASURE(`Encounter Count`) AS avg_cost
-            FROM {catalog}.{schema}.mv_accelerate_encounters
+            FROM {metric_view}
             GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
         "column": "avg_cost",
@@ -95,7 +98,7 @@ FITTING_SOURCES = {
     ("wh_margin_comparison", "wh_margin"): {
         "query": f"""
             SELECT MEASURE(`Direct Margin`) / MEASURE(`Encounter Count`) AS margin_per_enc
-            FROM {catalog}.{schema}.mv_accelerate_encounters
+            FROM {metric_view}
             WHERE is_custom_womens_health_population = 1
             GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
@@ -105,7 +108,7 @@ FITTING_SOURCES = {
     ("wh_margin_comparison", "non_wh_margin"): {
         "query": f"""
             SELECT MEASURE(`Direct Margin`) / MEASURE(`Encounter Count`) AS margin_per_enc
-            FROM {catalog}.{schema}.mv_accelerate_encounters
+            FROM {metric_view}
             WHERE is_custom_womens_health_population = 0
             GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,

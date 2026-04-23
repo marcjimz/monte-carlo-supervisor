@@ -18,6 +18,9 @@ variables:
   skip_synthetic:
     description: "Skip synthetic data generation (true for customer deployments)"
     default: "false"
+  metric_view:
+    description: "Fully qualified metric view name (e.g. gold_dev.core.project_accelerate_encounters_metrics)"
+    default: ""
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
