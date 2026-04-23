@@ -23,7 +23,7 @@
 dbutils.widgets.text("catalog", "monte_carlo_supervisor_catalog", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
 dbutils.widgets.text("app_name", "monte-carlo-ui", "App Name")
-dbutils.widgets.text("lakebase_project", "mc-supervisor-app", "Lakebase Project")
+dbutils.widgets.text("lakebase_project", "mc-supervisor-db", "Lakebase Project")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
@@ -245,6 +245,21 @@ print("Lakebase setup complete.\n")
 # MAGIC and CAN_MANAGE on the Genie Space (for agent analytics queries).
 
 # COMMAND ----------
+
+# --- Catalog / schema access ---
+for grant_stmt in [
+    f"GRANT USE CATALOG ON CATALOG {catalog} TO `{sp_client_id}`",
+    f"GRANT USE SCHEMA ON SCHEMA {catalog}.{schema} TO `{sp_client_id}`",
+    f"GRANT SELECT ON SCHEMA {catalog}.{schema} TO `{sp_client_id}`",
+]:
+    try:
+        spark.sql(grant_stmt)
+        print(f"  {grant_stmt.split('GRANT ')[1].split(' TO')[0]}: granted")
+    except Exception as e:
+        if "already has" in str(e).lower() or "ALREADY_EXISTS" in str(e):
+            print(f"  {grant_stmt.split('GRANT ')[1].split(' TO')[0]}: already granted")
+        else:
+            print(f"  WARNING: {e}")
 
 # --- Delta table grants ---
 sim_tables = ["simulation_runs", "simulation_results"]

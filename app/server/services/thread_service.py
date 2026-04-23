@@ -540,7 +540,7 @@ def _format_matrix_results(matrix: dict) -> str | None:
     def _fmt_param(param, val):
         if any(k in param for k in ("pct", "percent", "rate", "ratio", "fraction", "penetration")) and 0 < val <= 1:
             return f"{val * 100:.0f}%"
-        if any(k in param for k in ("cost", "savings", "revenue", "charge")):
+        if any(k in param for k in ("cost", "savings", "revenue", "charge", "margin")):
             if val >= 1e9:
                 return f"${val / 1e9:.1f}B"
             if val >= 1e6:

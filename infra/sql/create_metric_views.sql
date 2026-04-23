@@ -118,3 +118,83 @@ SET VAR qry_4 =
       expr: COUNT(1) * 1.0 / NULLIF(COUNT(DISTINCT patient_id), 0)
   $$";
 EXECUTE IMMEDIATE qry_4;
+
+-- 5. mv_accelerate_encounters (Project Accelerate)
+-- Customer customization: change source table name below if your encounters table differs.
+-- The metric view is the abstraction layer — downstream fitting and simulations use MEASURE()
+-- queries against this view, so column names in dimensions/measures must be preserved.
+DECLARE OR REPLACE qry_5 STRING;
+SET VAR qry_5 =
+  "CREATE OR REPLACE VIEW " || :catalog || "." || :schema || ".mv_accelerate_encounters
+   WITH METRICS LANGUAGE YAML AS $$
+  version: 1.1
+  comment: \"Encounter-level analytics with financial margins, SG2 taxonomy, and WH population segmentation.\"
+  source: " || :catalog || "." || :schema || ".project_accelerate_encounters
+  dimensions:
+    - name: Admit Month
+      expr: DATE_TRUNC('MONTH', admit_date)
+    - name: Admit Year
+      expr: YEAR(admit_date)
+    - name: Base Class
+      expr: base_class_config_name
+    - name: Patient Class
+      expr: patient_class_config_name
+    - name: Source System
+      expr: source_system_name
+    - name: HB PB
+      expr: hb_pb
+    - name: Region
+      expr: region_name
+    - name: Business Unit
+      expr: business_unit_name
+    - name: Financial Class
+      expr: fin_class
+    - name: WH Population
+      expr: CASE WHEN is_custom_womens_health_population = 1 THEN 'WH' ELSE 'Non-WH' END
+    - name: Patient Gender
+      expr: patient_gender
+    - name: Age Group
+      expr: CASE WHEN patient_age_years < 35 THEN '18-34' WHEN patient_age_years < 50 THEN '35-49' WHEN patient_age_years < 65 THEN '50-64' ELSE '65+' END
+    - name: Surgery Flag
+      expr: CASE WHEN surgery_flag = 1 THEN 'Yes' ELSE 'No' END
+    - name: Primary DX Service Line
+      expr: try_element_at(diagnoses, 1).sg2_service_line_group
+    - name: Primary DX Care Family
+      expr: try_element_at(diagnoses, 1).sg2_care_family_group
+    - name: Primary DX Disease Base
+      expr: try_element_at(diagnoses, 1).sg2_disease_base_group
+    - name: Primary DX Name
+      expr: try_element_at(diagnoses, 1).diagnosis_name
+    - name: Primary DX ICD Code
+      expr: try_element_at(diagnoses, 1).icd_code_value
+    - name: Hospital Final DX Service Line
+      expr: try_element_at(filter(diagnoses, x -> x.diagnosis_type = 'hosp_acct_final_dx'), 1).sg2_service_line_group
+    - name: Physician DX Service Line
+      expr: try_element_at(filter(diagnoses, x -> x.diagnosis_type = 'phys_billing_encounter_dx'), 1).sg2_service_line_group
+  measures:
+    - name: Encounter Count
+      expr: COUNT(*)
+    - name: Patient Count
+      expr: COUNT(DISTINCT cdm_patient_key)
+    - name: Total Charge
+      expr: SUM(total_charge)
+    - name: Expected Payment
+      expr: SUM(custom_expected_payment)
+    - name: Total Cost
+      expr: SUM(total_cost)
+    - name: Total Direct Cost
+      expr: SUM(total_direct_cost)
+    - name: Total Variable Cost
+      expr: SUM(total_variable_cost)
+    - name: Total Margin
+      expr: SUM(total_margin)
+    - name: Direct Margin
+      expr: SUM(direct_margin)
+    - name: Variable Margin
+      expr: SUM(variable_margin)
+    - name: Surgery Count
+      expr: SUM(surgery_flag)
+    - name: Billing Encounter Count
+      expr: COUNT(DISTINCT billing_encounter_id)
+  $$";
+EXECUTE IMMEDIATE qry_5;

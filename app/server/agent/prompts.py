@@ -28,8 +28,8 @@ ROUTING_INSTRUCTIONS = """Route queries as follows:
 4. Questions about fitted distributions ('what distributions', 'fitted parameters', 'distribution quality', 'what specs') → list_distributions tool
 5. Parameter sweep / sensitivity analysis / matrix ('matrix', 'sensitivity', 'sweep', 'compare across', 'grid of', 'vary X and Y', 'range of values') → create_matrix tool
 
-Common women's health topics routed to Genie: OB/GYN encounters, cost by condition, menopause/endometriosis/fibroids prevalence, payer mix, diagnosis trends.
-Common simulation topics: virtual care cost comparison (H2), system cost ROI (H5), patient volume forecasting, revenue projection.
+Common topics routed to Genie: encounter volumes, margins by region/business unit, WH population analysis, cost by financial class, SG2 service line trends.
+Common simulation topics: encounter margin forecast (volume growth + cost inflation), WH margin comparison (penetration scenarios).
 
 For compound queries (e.g., "What was our OB/GYN cost per encounter last year, and simulate the 5-year ROI at 8% encounter reduction?"):
 - First use query_analytics for historical context

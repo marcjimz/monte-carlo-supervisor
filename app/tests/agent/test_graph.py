@@ -67,11 +67,11 @@ class TestGraphEndToEnd:
                         "id": "tc1",
                         "name": "create_matrix",
                         "args": {
-                            "simulation_type": "cost_comparison",
-                            "row_parameter": "reduction_pct",
-                            "row_values": "[0.05, 0.10]",
-                            "col_parameter": "base_cost",
-                            "col_values": "[100]",
+                            "simulation_type": "encounter_margin",
+                            "row_parameter": "growth_rate",
+                            "row_values": "[0.01, 0.02]",
+                            "col_parameter": "cost_inflation",
+                            "col_values": "[0.035]",
                         },
                     }],
                 )

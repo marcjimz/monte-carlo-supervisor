@@ -94,7 +94,7 @@ class TestRunSimulation:
             "results": [{"mean": 100}],
         }
         result = await run_simulation.ainvoke({
-            "simulation_type": "cost_comparison",
+            "simulation_type": "encounter_margin",
             "parameters": "{}",
         })
         parsed = json.loads(result)
@@ -116,7 +116,7 @@ class TestRunSimulation:
         ]
         with patch("server.agent.tools._POLL_INTERVAL_SECONDS", 0):
             result = await run_simulation.ainvoke({
-                "simulation_type": "cost_comparison",
+                "simulation_type": "encounter_margin",
             })
         parsed = json.loads(result)
         assert parsed["status"] == "completed"
@@ -137,7 +137,7 @@ class TestRunSimulation:
         _mock_simulation_service.check_simulation.side_effect = None
         with patch("server.agent.tools._POLL_INTERVAL_SECONDS", 0):
             result = await run_simulation.ainvoke({
-                "simulation_type": "cost_comparison",
+                "simulation_type": "encounter_margin",
             })
         parsed = json.loads(result)
         assert parsed["status"] == "failed"
@@ -149,14 +149,14 @@ class TestRunSimulation:
             "results": [],
         }
         await run_simulation.ainvoke({
-            "simulation_type": "cost_comparison",
-            "parameters": '{"member_count": 30000}',
+            "simulation_type": "encounter_margin",
+            "parameters": '{"growth_rate": 0.03}',
             "num_simulations": 5000,
             "seed": 123,
         })
         _mock_simulation_service.trigger_simulation.assert_called_once_with(
-            "cost_comparison",
-            {"member_count": 30000},
+            "encounter_margin",
+            {"growth_rate": 0.03},
             5000,
             123,
         )
@@ -167,11 +167,11 @@ class TestCreateMatrix:
     async def test_creates_and_runs_matrix(self, _mock_matrix_service):
         """Tool creates matrix in Lakebase and triggers run."""
         result = await create_matrix.ainvoke({
-            "simulation_type": "cost_comparison",
-            "row_parameter": "virtual_penetration",
-            "row_values": "[0.2, 0.3, 0.4]",
-            "col_parameter": "member_count",
-            "col_values": "[25000, 50000]",
+            "simulation_type": "encounter_margin",
+            "row_parameter": "growth_rate",
+            "row_values": "[0.01, 0.02, 0.03]",
+            "col_parameter": "cost_inflation",
+            "col_values": "[0.02, 0.035]",
         })
         parsed = json.loads(result)
         assert parsed["status"] == "created"
@@ -184,22 +184,22 @@ class TestCreateMatrix:
     @pytest.mark.asyncio
     async def test_auto_generates_name(self, _mock_matrix_service):
         result = await create_matrix.ainvoke({
-            "simulation_type": "cost_comparison",
-            "row_parameter": "reduction_pct",
-            "row_values": "[0.05]",
-            "col_parameter": "base_cost",
-            "col_values": "[100]",
+            "simulation_type": "encounter_margin",
+            "row_parameter": "growth_rate",
+            "row_values": "[0.02]",
+            "col_parameter": "cost_inflation",
+            "col_values": "[0.035]",
         })
         parsed = json.loads(result)
-        assert "reduction_pct" in parsed["name"]
-        assert "base_cost" in parsed["name"]
+        assert "growth_rate" in parsed["name"]
+        assert "cost_inflation" in parsed["name"]
 
     @pytest.mark.asyncio
     async def test_returns_error_without_analysis_id(self, _mock_matrix_service):
         """Without analysis context, tool returns an error."""
         with patch("server.agent.tools.ensure_config", return_value={"configurable": {}}):
             result = await create_matrix.ainvoke({
-                "simulation_type": "cost_comparison",
+                "simulation_type": "encounter_margin",
                 "row_parameter": "x",
                 "row_values": "[1]",
                 "col_parameter": "y",

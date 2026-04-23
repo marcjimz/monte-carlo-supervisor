@@ -61,76 +61,55 @@ print(f"Current max version: {max_version}, fitting version: {next_version}")
 #   - dist_type: which distribution family to fit
 #   - column: which column in the query result contains the values
 
+# All fitting queries use MEASURE() against the metric view. This is the key
+# abstraction: customers create mv_accelerate_encounters pointing to their own
+# encounter table, and fitting works against their data without code changes.
 FITTING_SOURCES = {
-    ("patient_volume", "encounter_volume"): {
+    ("encounter_margin", "monthly_margin"): {
         "query": f"""
-            SELECT COUNT(*) AS monthly_encounters
-            FROM {catalog}.{schema}.encounters
-            GROUP BY YEAR(admission_date), MONTH(admission_date)
+            SELECT MEASURE(`Direct Margin`) AS monthly_margin
+            FROM {catalog}.{schema}.mv_accelerate_encounters
+            GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
-        "column": "monthly_encounters",
+        "column": "monthly_margin",
         "dist_type": "normal",
     },
-    ("revenue", "gross_charges"): {
+    ("encounter_margin", "encounter_volume"): {
         "query": f"""
-            SELECT SUM(b.total_charges) AS monthly_charges
-            FROM {catalog}.{schema}.encounters e
-            JOIN {catalog}.{schema}.billing b ON e.encounter_id = b.encounter_id
-            GROUP BY YEAR(e.admission_date), MONTH(e.admission_date)
+            SELECT MEASURE(`Encounter Count`) AS enc_count
+            FROM {catalog}.{schema}.mv_accelerate_encounters
+            GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
-        "column": "monthly_charges",
+        "column": "enc_count",
         "dist_type": "normal",
     },
-    ("revenue", "denial_rate"): {
+    ("encounter_margin", "cost_per_encounter"): {
         "query": f"""
-            SELECT
-                CASE WHEN p.payer_name LIKE '%Self%' THEN 0.15
-                     WHEN p.payer_name = 'Medicaid' THEN 0.12
-                     ELSE 0.06 END AS denial_rate
-            FROM {catalog}.{schema}.billing b
-            JOIN {catalog}.{schema}.payers p ON b.payer_id = p.payer_id
+            SELECT MEASURE(`Total Cost`) / MEASURE(`Encounter Count`) AS avg_cost
+            FROM {catalog}.{schema}.mv_accelerate_encounters
+            GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
-        "column": "denial_rate",
-        "dist_type": "beta",
-    },
-    ("cost_comparison", "inperson_cost"): {
-        # All synthetic encounters are in-person (100% baseline)
-        "query": f"""
-            SELECT b.total_charges AS cost
-            FROM {catalog}.{schema}.encounters e
-            JOIN {catalog}.{schema}.billing b ON e.encounter_id = b.encounter_id
-            WHERE b.total_charges > 0
-        """,
-        "column": "cost",
+        "column": "avg_cost",
         "dist_type": "lognormal",
     },
-    # virtual_cost is NOT fitted — no historical virtual encounters exist.
-    # Falls back to config.yaml default spec.
-    ("system_cost_roi", "baseline_cost"): {
+    ("wh_margin_comparison", "wh_margin"): {
         "query": f"""
-            SELECT SUM(b.total_charges) AS annual_cost
-            FROM {catalog}.{schema}.encounters e
-            JOIN {catalog}.{schema}.billing b ON e.encounter_id = b.encounter_id
-            GROUP BY YEAR(e.admission_date)
+            SELECT MEASURE(`Direct Margin`) / MEASURE(`Encounter Count`) AS margin_per_enc
+            FROM {catalog}.{schema}.mv_accelerate_encounters
+            WHERE is_custom_womens_health_population = 1
+            GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
-        "column": "annual_cost",
-        "dist_type": "lognormal",
+        "column": "margin_per_enc",
+        "dist_type": "normal",
     },
-    ("system_cost_roi", "reduction_noise"): {
-        # Reduction noise is synthetic — we use a standard normal fit
-        # from monthly encounter volume variation as a proxy
+    ("wh_margin_comparison", "non_wh_margin"): {
         "query": f"""
-            SELECT (cnt - avg_cnt) / NULLIF(std_cnt, 0) AS z_score
-            FROM (
-                SELECT COUNT(*) AS cnt,
-                       AVG(COUNT(*)) OVER () AS avg_cnt,
-                       STDDEV(COUNT(*)) OVER () AS std_cnt
-                FROM {catalog}.{schema}.encounters
-                GROUP BY YEAR(admission_date), MONTH(admission_date)
-            )
-            WHERE std_cnt > 0
+            SELECT MEASURE(`Direct Margin`) / MEASURE(`Encounter Count`) AS margin_per_enc
+            FROM {catalog}.{schema}.mv_accelerate_encounters
+            WHERE is_custom_womens_health_population = 0
+            GROUP BY DATE_TRUNC('MONTH', admit_date)
         """,
-        "column": "z_score",
+        "column": "margin_per_enc",
         "dist_type": "normal",
     },
 }

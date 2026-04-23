@@ -16,10 +16,8 @@ interface Props {
 }
 
 const SIM_TYPE_LABELS: Record<string, string> = {
-  patient_volume: "Patient Volume",
-  revenue: "Revenue Projection",
-  cost_comparison: "Cost Comparison",
-  system_cost_roi: "System Cost ROI",
+  encounter_margin: "Encounter Margin Forecast",
+  wh_margin_comparison: "WH Margin Comparison",
 };
 
 export function SimulationBrowser({
@@ -200,10 +198,8 @@ export function SimulationBrowser({
             onChange={(e) => setTypeFilter(e.target.value)}
           >
             <option value="">All types</option>
-            <option value="patient_volume">Patient Volume</option>
-            <option value="revenue">Revenue</option>
-            <option value="cost_comparison">Cost Comparison</option>
-            <option value="system_cost_roi">System Cost ROI</option>
+            <option value="encounter_margin">Encounter Margin</option>
+            <option value="wh_margin_comparison">WH Margin</option>
           </select>
           <select
             className="h-9 rounded-md border border-border bg-transparent px-3 text-sm"

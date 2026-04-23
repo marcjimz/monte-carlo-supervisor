@@ -14,34 +14,34 @@ import json
 
 _GENIE_EXAMPLES = [
     {
-        "question": "What is the average cost per encounter for OB/GYN patients?",
-        "guideline": "Route to encounter_analytics — this is a historical cost analysis by department.",
+        "question": "What is the average margin per encounter by region?",
+        "guideline": "Route to encounter_analytics — historical margin analysis by region.",
     },
     {
-        "question": "Show me diagnosis prevalence by month for chronic pelvic pain",
-        "guideline": "Route to encounter_analytics — historical diagnosis trending.",
+        "question": "Show encounter volume trends by business unit for the last 12 months",
+        "guideline": "Route to encounter_analytics — historical volume trending.",
     },
     {
-        "question": "Break down revenue by payer type for women's health encounters",
-        "guideline": "Route to encounter_analytics — historical financial analysis.",
+        "question": "What percentage of our encounters are the women's health population?",
+        "guideline": "Route to encounter_analytics — WH population segmentation.",
     },
     {
-        "question": "What were the results of the last cost comparison simulation?",
-        "guideline": "Route to encounter_analytics — query the simulation_results Gold table for past results.",
+        "question": "Break down total cost by financial class",
+        "guideline": "Route to encounter_analytics — historical cost analysis by payer.",
     },
 ]
 
 _DISTRIBUTION_EXAMPLE = {
-    "question": "What distributions have been fitted for cost comparison simulations?",
-    "guideline": "Route to distribution_catalog with simulation_type='cost_comparison'.",
+    "question": "What distributions have been fitted for encounter margin simulations?",
+    "guideline": "Route to distribution_catalog with simulation_type='encounter_margin'.",
 }
 
 _COMPOUND_EXAMPLE = {
-    "question": "What was our OB/GYN cost per encounter last year, and simulate the 5-year ROI at 8% encounter reduction?",
+    "question": "What was our average margin per encounter last quarter, and forecast the next 12 months at 3% growth?",
     "guideline": (
-        "Compound query: First route to encounter_analytics for historical OB/GYN cost per encounter, "
-        "then call simulation_checker with simulation_type='system_cost_roi' "
-        "and parameters='{\"encounter_reduction_pct\": 0.08, \"num_years\": 5}'. "
+        "Compound query: First route to encounter_analytics for historical margin per encounter, "
+        "then call simulation_checker with simulation_type='encounter_margin' "
+        "and parameters='{\"growth_rate\": 0.03, \"num_months\": 12}'. "
         "If 'not_found', call simulation_trigger_mcp, then poll simulation_checker. "
         "Synthesize both results."
     ),

@@ -66,4 +66,25 @@ print(f"{'TOTAL':<25} {sum(results.values()):>10,}")
 # COMMAND ----------
 
 display(spark.table(f"{catalog}.{schema}.encounters").limit(5))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Load Accelerate Encounters (nested struct — direct Spark generation)
+
+# COMMAND ----------
+
+from mc_supervisor.synthetic_data.loader import load_accelerate_encounters
+
+accel_count = load_accelerate_encounters(spark, catalog=catalog, schema=schema)
+print(f"Accelerate encounters: {accel_count:,} rows")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Verify — Sample from accelerate encounters
+
+# COMMAND ----------
+
+display(spark.table(f"{catalog}.{schema}.project_accelerate_encounters").limit(5))
 print("Synthetic data load complete.")

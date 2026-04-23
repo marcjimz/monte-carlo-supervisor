@@ -27,7 +27,7 @@ class TestSSEEventTypes:
     def test_simulation_triggered_format(self):
         sim = {
             "run_id": "abc123",
-            "simulation_type": "cost_comparison",
+            "simulation_type": "encounter_margin",
             "status": "SUBMITTED",
         }
         event = json.dumps({"type": "simulation_triggered", "simulation": sim})
@@ -40,9 +40,9 @@ class TestSSEEventTypes:
         matrix = {
             "id": "mat-1",
             "name": "test matrix",
-            "simulation_type": "cost_comparison",
-            "row_parameter": "reduction_pct",
-            "col_parameter": "base_cost",
+            "simulation_type": "encounter_margin",
+            "row_parameter": "growth_rate",
+            "col_parameter": "cost_inflation",
             "rows": 3,
             "cols": 2,
             "total_cells": 6,
@@ -77,8 +77,8 @@ class TestMatrixResultsFormatting:
 
         matrix = {
             "name": "Test Matrix",
-            "row_parameter": "reduction_pct",
-            "col_parameter": "base_cost",
+            "row_parameter": "growth_rate",
+            "col_parameter": "cost_inflation",
             "row_values": [0.05, 0.10],
             "col_values": [1000000, 2000000],
             "output_metric": "net_savings",

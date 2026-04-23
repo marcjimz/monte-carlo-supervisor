@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 def normalize_parameters(simulation_type: str, parameters: dict) -> dict:
     """Merge user-supplied parameters with defaults, strip unknown keys, cast types.
 
-    Ensures that ``{}`` and ``{"member_count": 50000, "virtual_penetration": 0.3}``
-    produce the exact same dict (and therefore the same hash) for ``cost_comparison``.
+    Ensures that ``{}`` and ``{"growth_rate": 0.02, "cost_inflation": 0.035}``
+    produce the exact same dict (and therefore the same hash) for ``encounter_margin``.
     """
     try:
         from mc_supervisor.monte_carlo import config_loader

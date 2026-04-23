@@ -13,6 +13,7 @@ import pandas as pd
 from databricks.sdk import WorkspaceClient
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
+    ArrayType,
     DateType,
     DoubleType,
     IntegerType,
@@ -270,3 +271,85 @@ def load_all_tables(
     total = sum(results.values())
     print(f"\nLoaded {len(results)} tables, {total:,} total rows.")
     return results
+
+
+# ---------------------------------------------------------------------------
+# Accelerate encounters — generated directly as Spark DataFrame (array<struct>)
+# ---------------------------------------------------------------------------
+
+_DIAGNOSIS_STRUCT = StructType([
+    StructField("diagnosis_type", StringType()),
+    StructField("diagnosis_name", StringType()),
+    StructField("icd_code_value", StringType()),
+    StructField("sg2_service_line_group", StringType()),
+    StructField("sg2_care_family_group", StringType()),
+    StructField("sg2_disease_base_group", StringType()),
+    StructField("is_custom_womens_health_population", IntegerType()),
+])
+
+_ACCELERATE_SCHEMA = StructType([
+    StructField("cdm_billing_encounter_key", StringType(), False),
+    StructField("billing_encounter_id", StringType()),
+    StructField("cdm_clinical_contact_key", StringType()),
+    StructField("clinical_contact_id", StringType()),
+    StructField("cdm_patient_key", StringType()),
+    StructField("patient_enterprise_id", StringType()),
+    StructField("patient_xmrn", StringType()),
+    StructField("patient_name", StringType()),
+    StructField("patient_gender", StringType()),
+    StructField("patient_age_years", IntegerType()),
+    StructField("source_system_name", StringType()),
+    StructField("hb_pb", StringType()),
+    StructField("admit_date", DateType()),
+    StructField("discharge_date", DateType()),
+    StructField("base_class_config_name", StringType()),
+    StructField("patient_class_config_name", StringType()),
+    StructField("surgery_flag", IntegerType()),
+    StructField("business_unit_id", StringType()),
+    StructField("business_unit_name", StringType()),
+    StructField("region_name", StringType()),
+    StructField("fin_class", StringType()),
+    StructField("is_custom_womens_health_population", IntegerType()),
+    StructField("total_charge", DoubleType()),
+    StructField("custom_expected_payment", DoubleType()),
+    StructField("total_cost", DoubleType()),
+    StructField("total_direct_cost", DoubleType()),
+    StructField("total_variable_cost", DoubleType()),
+    StructField("total_margin", DoubleType()),
+    StructField("direct_margin", DoubleType()),
+    StructField("variable_margin", DoubleType()),
+    StructField("diagnoses", ArrayType(_DIAGNOSIS_STRUCT)),
+])
+
+
+def load_accelerate_encounters(
+    spark: SparkSession,
+    catalog: str,
+    schema: str,
+    mode: str = "overwrite",
+) -> int:
+    """Generate and load Project Accelerate encounters into Delta.
+
+    Generates synthetic encounters in-memory (with nested diagnoses array)
+    and writes directly to Delta — no CSV intermediate step.
+
+    For customer deployments this function is skipped entirely; the customer
+    provides their own ``project_accelerate_encounters`` table.
+
+    Returns the number of rows written.
+    """
+    from mc_supervisor.synthetic_data.generators.accelerate_encounters import (
+        generate_accelerate_encounters,
+    )
+
+    print("Generating accelerate encounters (this may take a minute)...")
+    rows = generate_accelerate_encounters()
+    print(f"  Generated {len(rows):,} encounter records")
+
+    df = spark.createDataFrame(rows, schema=_ACCELERATE_SCHEMA)
+    table = f"{catalog}.{schema}.project_accelerate_encounters"
+    df.write.format("delta").mode(mode).saveAsTable(table)
+
+    count = df.count()
+    print(f"  Loaded {count:>8,} rows -> {table}")
+    return count

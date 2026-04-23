@@ -12,10 +12,8 @@ import { Spinner } from "../ui/spinner";
 import { MarkdownContent } from "../ui/markdown";
 
 const SIM_TYPE_LABELS: Record<string, string> = {
-  cost_comparison: "Cost Comparison",
-  system_cost_roi: "System Cost ROI",
-  patient_volume: "Patient Volume",
-  revenue_projection: "Revenue Projection",
+  encounter_margin: "Encounter Margin Forecast",
+  wh_margin_comparison: "WH Margin Comparison",
 };
 
 const THINKING_MESSAGES = [

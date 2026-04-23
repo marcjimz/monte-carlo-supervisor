@@ -101,3 +101,13 @@ PAYER_REIMBURSEMENT = {
 
 # Claim denial rate
 DENIAL_RATE = 0.08
+
+# ---------------------------------------------------------------------------
+# Accelerate encounters configuration (demo synthetic data)
+# Customer deployments skip synthetic data entirely — they bring their own
+# project_accelerate_encounters table and run distribution fitting against it.
+# ---------------------------------------------------------------------------
+ACCELERATE_NUM_ENCOUNTERS = 75_000
+ACCELERATE_NUM_PATIENTS = 8_000
+ACCELERATE_DATE_START = "2023-04-01"
+ACCELERATE_DATE_END = "2026-03-31"

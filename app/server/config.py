@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         return self
 
     # Lakebase Autoscaling (for credential generation)
-    lakebase_project: str = "mc-supervisor-app"
+    lakebase_project: str = "mc-supervisor-db"
     lakebase_branch: str = "production"
     lakebase_endpoint: str = "primary"
 

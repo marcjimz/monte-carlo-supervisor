@@ -41,7 +41,7 @@ async def run_simulation(
     and returns only when results are ready (or after timeout).
 
     Args:
-        simulation_type: The type of simulation (e.g. cost_comparison, system_cost_roi).
+        simulation_type: The type of simulation (e.g. encounter_margin, wh_margin_comparison).
         parameters: JSON string of simulation parameters. Use '{}' for defaults.
         num_simulations: Number of Monte Carlo trials (default 10000).
         seed: Random seed for reproducibility (default 42).
@@ -210,6 +210,13 @@ def _resolve_output_config(simulation_type: str) -> tuple[str, str | None, str |
         agg = sim_cfg.get("aggregation", {})
         output_metric = agg.get("value_column", "mean_value")
         output_group_key = agg.get("group_column")
+
+        # Default group_value: last month for time-series, expanded scenario for comparisons
+        if output_group_key == "month":
+            num_months = sim_cfg.get("parameters", {}).get("num_months", {}).get("default", 12)
+            output_group_value = f"M{num_months:02d}"
+        elif output_group_key == "scenario":
+            output_group_value = "wh_expanded"
     except Exception:
         logger.debug("Could not resolve agg config for %s", simulation_type)
     return output_metric, output_group_key, output_group_value
