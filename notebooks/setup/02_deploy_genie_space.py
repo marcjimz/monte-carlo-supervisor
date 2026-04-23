@@ -17,16 +17,27 @@ dbutils.widgets.text("catalog", "monte_carlo_supervisor_catalog")
 dbutils.widgets.text("schema", "hospital_data")
 dbutils.widgets.text("warehouse_id", "")
 dbutils.widgets.text("target_genie_space_id", "")
+dbutils.widgets.text("skip_genie", "false", "Skip Genie Space deployment (use existing)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 warehouse_id = dbutils.widgets.get("warehouse_id")
 target_genie_space_id = dbutils.widgets.get("target_genie_space_id")
+skip_genie = dbutils.widgets.get("skip_genie").lower() in ("true", "1", "yes")
 
 print(f"Catalog                : {catalog}")
 print(f"Schema                 : {schema}")
 print(f"Warehouse ID           : {warehouse_id}")
 print(f"Target Genie Space ID  : {target_genie_space_id or '(will create new)'}")
+print(f"Skip Genie deployment  : {skip_genie}")
+
+# COMMAND ----------
+
+if skip_genie:
+    print(f"Skipping Genie deployment — using existing space: {target_genie_space_id}")
+    dbutils.jobs.taskValues.set(key="genie_space_id", value=target_genie_space_id)
+    dbutils.jobs.taskValues.set(key="warehouse_id", value=warehouse_id)
+    dbutils.notebook.exit(f"SKIPPED: using existing Genie Space {target_genie_space_id}")
 
 # COMMAND ----------
 # MAGIC %md

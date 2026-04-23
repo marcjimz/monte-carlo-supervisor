@@ -130,6 +130,7 @@ resources:
               schema: ${var.schema}
               warehouse_id: ${var.warehouse_id}
               target_genie_space_id: ${var.genie_space_id}
+              skip_genie: ${var.skip_genie}
 
         # Phase 5: App wiring (runtime-only: Lakebase setup, permissions, dashboard)
         - task_key: configure_app
