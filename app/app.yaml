@@ -25,3 +25,5 @@ env:
     value: "mcapp"
   - name: GENIE_SPACE_ID
     value: "01f13defcdc91885b9acceca99aa8c09"
+  - name: DASHBOARD_ID
+    value: "01f13e7239ee16d58c216ca1bf0d7bb5"

@@ -285,7 +285,18 @@ async def submit_to_delta(
     (run_id, simulation_type, parameters, params_hash, seed, num_simulations, status, created_at, updated_at)
     VALUES ('{run_id}', '{simulation_type}', '{params_json}', '{params_hash}', {seed}, {num_simulations}, 'SUBMITTED', '{now}', '{now}')"""
 
-    await asyncio.to_thread(execute_query, sql)
+    # Retry on Delta concurrent append conflicts
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            await asyncio.to_thread(execute_query, sql)
+            break
+        except Exception as e:
+            if "DELTA_CONCURRENT_APPEND" in str(e) and attempt < max_retries - 1:
+                logger.warning("Delta concurrent append conflict (attempt %d/%d), retrying...", attempt + 1, max_retries)
+                await asyncio.sleep(1 + attempt)
+            else:
+                raise
 
     # Also insert Lakebase placeholder for UI
     try:
