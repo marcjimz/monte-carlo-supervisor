@@ -19,6 +19,14 @@ class TriggerRequest(BaseModel):
     seed: int = 42
 
 
+class SubmitRequest(BaseModel):
+    """Accepts both string and int types (UC function sends strings via to_json)."""
+    simulation_type: str
+    parameters: str | dict = "{}"
+    num_simulations: str | int = 10000
+    seed: str | int = 42
+
+
 class SimulationRun(BaseModel):
     run_id: str
     simulation_type: str

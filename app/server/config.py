@@ -18,10 +18,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Databricks
     databricks_host: str = ""
-    uc_catalog: str = "lakebase_hls_workshop_catalog"
+    uc_catalog: str = "monte_carlo_supervisor_catalog"
     uc_schema: str = "hospital_data"
-    mas_endpoint_name: str = ""
-    sql_warehouse_id: str = ""
+    supervisor_endpoint: str = "databricks-claude-opus-4-7"
+    executor_endpoint: str = "databricks-claude-sonnet-4"
+    sql_warehouse_id: str = "39aeb4605bfae41b"
 
     # Lakebase (auto-populated by resource binding in Databricks Apps)
     pghost: str = ""
@@ -52,21 +53,18 @@ class Settings(BaseSettings):
     # Genie Space
     genie_space_id: str = ""
 
-    # Simulation pipeline job (for direct SDK trigger)
-    simulation_job_id: str = ""
-
     # Feature flags
     seed_demo_data: bool = True
 
     # Auth
-    databricks_profile: str = "fe-vm-lakebase-hls-workshop"
+    databricks_profile: str = "mc-supervisor"
 
     # Config path — bundled copy in server/ dir, fallback to parent repo
     config_yaml_path: str = str(
         Path(__file__).resolve().parent / "config.yaml"
         if (Path(__file__).resolve().parent / "config.yaml").exists()
         else Path(__file__).resolve().parent.parent.parent
-        / "src" / "databricks" / "monte_carlo" / "config.yaml"
+        / "src" / "mc_supervisor" / "monte_carlo" / "config.yaml"
     )
 
     @property

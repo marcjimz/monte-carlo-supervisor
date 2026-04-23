@@ -9,9 +9,12 @@ variables:
     description: "Unity Catalog schema name"
     default: "hospital_data"
   warehouse_id:
-    description: "SQL Warehouse ID for the dashboard"
+    description: "SQL Warehouse ID for queries and Genie Space"
     lookup:
       warehouse: "Serverless Starter Warehouse"
+  genie_space_id:
+    description: "Genie Space ID for agent analytics queries"
+    default: "01f13defcdc91885b9acceca99aa8c09"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
@@ -28,13 +31,22 @@ sync:
     - dist/*.whl
     - app/**
     - dashboards/**
+    - infra/sql/**
+    - infra/genie/**
   exclude:
     - app/frontend/node_modules/**
     - app/frontend/src/**
     - app/frontend/public/**
+    - app/frontend/*.json
+    - app/frontend/*.ts
+    - app/frontend/*.html
     - app/.venv/**
+    - app/.databricks/**
+    - app/tests/**
+    - app/migrations/**
     - app/**/__pycache__/**
     - app/**/*.zip
+    - app/pyproject.toml
 
 targets:
   dev:

@@ -42,7 +42,7 @@ _COMPOUND_EXAMPLE = {
         "Compound query: First route to encounter_analytics for historical OB/GYN cost per encounter, "
         "then call simulation_checker with simulation_type='system_cost_roi' "
         "and parameters='{\"encounter_reduction_pct\": 0.08, \"num_years\": 5}'. "
-        "If 'not_found', call simulation_trigger, then poll simulation_checker. "
+        "If 'not_found', call simulation_trigger_mcp, then poll simulation_checker. "
         "Synthesize both results."
     ),
 }
@@ -90,7 +90,7 @@ def _generate_simulation_examples() -> list[dict]:
             f"Call simulation_checker with simulation_type='{sim_type}' "
             f"and parameters='{params_json}'. "
             "If 'completed', present results. "
-            "If 'not_found', call simulation_trigger, then poll simulation_checker."
+            "If 'not_found', call simulation_trigger_mcp, then poll simulation_checker."
         )
 
         examples.append({"question": question, "guideline": guideline})

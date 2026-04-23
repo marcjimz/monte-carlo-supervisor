@@ -36,119 +36,64 @@ async def check_simulation(
     return json.loads(result_str)
 
 
+async def submit_to_delta(
+    simulation_type: str,
+    parameters,
+    num_simulations: int = 10000,
+    seed: int = 42,
+) -> dict:
+    """Write a SUBMITTED row to Delta simulation_runs table.
+
+    Called by the internal endpoint (from UC function http_request)
+    and by trigger_simulation for direct App-side triggers.
+    """
+    import asyncio
+
+    from server.config import get_settings
+    from server.services.sql_client import execute_query
+
+    settings = get_settings()
+    catalog = settings.uc_catalog
+    schema = settings.uc_schema
+
+    params_json = json.dumps(parameters, sort_keys=True) if isinstance(parameters, dict) else str(parameters)
+    run_id = uuid4().hex
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    payload = f"{simulation_type}|{params_json}|{seed}|{num_simulations}|default"
+    params_hash = hashlib.sha256(payload.encode()).hexdigest()
+
+    sql = f"""INSERT INTO {catalog}.{schema}.simulation_runs
+    (run_id, simulation_type, parameters, params_hash, seed, num_simulations, status, created_at, updated_at)
+    VALUES ('{run_id}', '{simulation_type}', '{params_json}', '{params_hash}', {seed}, {num_simulations}, 'SUBMITTED', '{now}', '{now}')"""
+
+    await asyncio.to_thread(execute_query, sql)
+
+    # Also insert Lakebase placeholder for UI
+    try:
+        await insert_submitted_placeholder(
+            simulation_type,
+            json.loads(params_json) if isinstance(params_json, str) else params_json,
+            num_simulations, seed,
+        )
+    except Exception:
+        logger.warning("Failed to insert Lakebase placeholder", exc_info=True)
+
+    return {
+        "status": "submitted",
+        "run_id": run_id,
+        "simulation_type": simulation_type,
+        "message": "Simulation queued. Pipeline will start within ~2 minutes.",
+    }
+
+
 async def trigger_simulation(
     simulation_type: str,
     parameters: dict,
     num_simulations: int = 10000,
     seed: int = 42,
 ) -> dict:
-    """Trigger a simulation job.
-
-    Prefers direct SDK call (bypasses SQL warehouse network restrictions).
-    Falls back to UC function if simulation_job_id is not configured.
-    """
-    import asyncio
-
-    from server.config import get_settings
-
-    settings = get_settings()
-    result: dict = {}
-
-    if settings.simulation_job_id:
-        # Direct SDK trigger — avoids IP ACL issues with http_request() in UC functions
-        result = await asyncio.to_thread(
-            _trigger_via_sdk,
-            settings,
-            simulation_type,
-            parameters,
-            num_simulations,
-            seed,
-        )
-    else:
-        # Fallback: UC function trigger
-        try:
-            result_str = await asyncio.to_thread(
-                execute_uc_function,
-                "trigger_simulation",
-                {
-                    "p_simulation_type": simulation_type,
-                    "p_parameters": json.dumps(parameters, sort_keys=True),
-                    "p_num_simulations": num_simulations,
-                    "p_seed": seed,
-                },
-            )
-            result = json.loads(result_str)
-        except (json.JSONDecodeError, RuntimeError) as e:
-            logger.error("UC function trigger_simulation failed: %s", e)
-            result = {
-                "status": "error",
-                "error": f"Failed to trigger simulation: {e}",
-            }
-
-        # Extract job_run_id from nested job_response (Jobs API returns {"run_id": N})
-        job_resp = result.get("job_response")
-        if isinstance(job_resp, str):
-            try:
-                job_resp = json.loads(job_resp)
-            except (json.JSONDecodeError, TypeError):
-                job_resp = None
-        if isinstance(job_resp, dict) and "run_id" in job_resp:
-            result["job_run_id"] = job_resp["run_id"]
-
-    if result.get("status") == "error":
-        return result
-
-    # Insert a SUBMITTED placeholder into Lakebase so the UI sees it immediately
-    try:
-        placeholder = await insert_submitted_placeholder(
-            simulation_type, parameters, num_simulations, seed,
-            job_run_id=str(result.get("job_run_id", "")),
-        )
-        if placeholder:
-            result["run_id"] = placeholder["run_id"]
-    except Exception:
-        logger.warning("Failed to insert SUBMITTED placeholder", exc_info=True)
-
-    return result
-
-
-def _trigger_via_sdk(
-    settings,
-    simulation_type: str,
-    parameters: dict,
-    num_simulations: int,
-    seed: int,
-) -> dict:
-    """Trigger simulation job directly via Databricks SDK Jobs API."""
-    from server.services.sql_client import _get_client
-
-    client = _get_client(settings)
-    job_id = int(settings.simulation_job_id)
-    params_json = json.dumps(parameters, sort_keys=True)
-
-    response = client.jobs.run_now(
-        job_id=job_id,
-        job_parameters={
-            "simulation_type": simulation_type,
-            "parameters": params_json,
-            "num_simulations": str(num_simulations),
-            "seed": str(seed),
-        },
-    )
-
-    return {
-        "status": "triggered",
-        "simulation_type": simulation_type,
-        "parameters": parameters,
-        "num_simulations": num_simulations,
-        "seed": seed,
-        "job_run_id": response.run_id,
-        "message": (
-            f"Distributed Spark Monte Carlo simulation triggered. "
-            f"The job runs ~5-10 minutes with {num_simulations} trials across multiple Spark executors. "
-            f"Call check_simulation with the same parameters to poll for completion."
-        ),
-    }
+    """Trigger a simulation by writing a SUBMITTED row to Delta."""
+    return await submit_to_delta(simulation_type, parameters, num_simulations, seed)
 
 
 async def insert_submitted_placeholder(

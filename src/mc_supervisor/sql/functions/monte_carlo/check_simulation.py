@@ -82,20 +82,28 @@ RETURN (
                 'Call check_simulation again with the same parameters to poll for completion."}}'
             )
 
+            -- Simulation is queued (SUBMITTED, waiting for table trigger)
+            WHEN latest.run_status = 'SUBMITTED' AND latest.run_id IS NOT NULL
+            THEN concat(
+                '{{"status":"submitted","simulation_type":"', p_simulation_type,
+                '","run_id":"', latest.run_id,
+                '","message":"Simulation is queued and will start within ~2 minutes. Keep polling."}}'
+            )
+
             -- Simulation failed
             WHEN latest.run_status = 'FAILED' AND latest.run_id IS NOT NULL
             THEN concat(
                 '{{"status":"failed","simulation_type":"', p_simulation_type,
                 '","run_id":"', latest.run_id,
                 '","message":"The simulation failed. This may be a transient error. ',
-                'You can call trigger_simulation with the same parameters to retry."}}'
+                'You can call simulation_trigger_mcp with the same parameters to retry."}}'
             )
 
             -- No matching run found
             ELSE concat(
                 '{{"status":"not_found","simulation_type":"', p_simulation_type,
                 '","message":"No matching simulation found for these parameters. ',
-                'Call trigger_simulation with the same parameters to start a new distributed Spark job, OR if you already triggered, keep polling — the Spark cluster may still be starting up."}}'
+                'Call simulation_trigger_mcp with the same parameters to start a new distributed Spark job, OR if you already triggered, keep polling — the Spark cluster may still be starting up."}}'
             )
         END
     FROM (SELECT 1 AS x) dummy
@@ -110,7 +118,7 @@ RETURN (
                    ORDER BY created_at DESC
                ) AS rn
         FROM {catalog}.{schema}.simulation_runs
-        WHERE status IN ('COMPLETED', 'RUNNING', 'FAILED')
+        WHERE status IN ('COMPLETED', 'RUNNING', 'FAILED', 'SUBMITTED')
     ) latest ON latest.sim_type = p_simulation_type
            AND latest.sim_params = COALESCE(p_parameters, '{{}}')
            AND latest.sim_seed = COALESCE(p_seed, 42)

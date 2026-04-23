@@ -36,9 +36,9 @@ SIMULATION WORKFLOW (check → trigger → poll):
 Step 1: Call simulation_checker with the user's parameters.
 Step 2: If status is "completed" → present the results to the user. DONE.
 Step 3: If status is "running" → call simulation_checker again with the EXACT SAME parameters. Repeat until "completed".
-Step 4: If status is "not_found" AND you have NOT yet triggered → call simulation_trigger with the EXACT SAME parameters to start a new Spark job.
-Step 5: After simulation_trigger returns "triggered" → call simulation_checker with the SAME parameters to poll. Repeat until "completed".
-IMPORTANT: After triggering, check_simulation may return "not_found" for 1-2 minutes while the distributed Spark cluster starts. This is NORMAL — do NOT call trigger_simulation again. Keep calling check_simulation until you see "running" or "completed".
+Step 4: If status is "not_found" AND you have NOT yet triggered → call simulation_trigger_mcp with the EXACT SAME parameters to start a new simulation.
+Step 5: After simulation_trigger_mcp returns "submitted" → call simulation_checker with the SAME parameters to poll. The pipeline starts within ~2 minutes. Expect "submitted" → "running" → "completed" progression. Keep polling.
+IMPORTANT: After triggering, check_simulation may return "submitted" (queued) or "not_found" briefly while the pipeline starts. This is NORMAL — do NOT call simulation_trigger_mcp again. Keep calling check_simulation until you see "running" or "completed".
 IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
 
 MATRIX WORKFLOW (for parameter sweeps):
@@ -97,7 +97,12 @@ def _get_supported_types_str() -> str:
     return ", ".join(config_loader.get_valid_types())
 
 
-def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> list[dict]:
+def get_supervisor_agents(
+    genie_space_id: str,
+    catalog: str,
+    schema: str,
+    app_connection_name: str = "monte_carlo_app",
+) -> list[dict]:
     """Return the agent list in AgentBricksManager.mas_create() format."""
     types_str = _get_supported_types_str()
     return [
@@ -134,22 +139,19 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
             },
         },
         {
-            "name": "simulation_trigger",
+            "name": "simulation_trigger_mcp",
             "description": (
-                "Triggers a new distributed Spark Monte Carlo simulation job with 10,000+ "
-                "trials across multiple nodes. The job runs 5-10 minutes. "
+                "Triggers a Monte Carlo simulation by submitting to the pipeline. "
+                "Returns 'submitted' status — the pipeline starts within ~30 seconds. "
                 "ONLY call this when simulation_checker returns 'not_found'. "
                 "After triggering, call simulation_checker again with the same parameters "
-                "to poll for completion. "
+                "to poll for completion (expect submitted → running → completed). "
                 f"Supports: {types_str}."
             ),
-            "agent_type": "unity_catalog_function",
-            "unity_catalog_function": {
-                "uc_path": {
-                    "catalog": catalog,
-                    "schema": schema,
-                    "name": "trigger_simulation",
-                }
+            "agent_type": "external_mcp_server",
+            "external_mcp_server": {
+                "connection_name": app_connection_name,
+                "mcp_server_url_path": "/mcp/",
             },
         },
         {
@@ -190,11 +192,16 @@ def get_supervisor_agents(genie_space_id: str, catalog: str, schema: str) -> lis
     ]
 
 
-def get_supervisor_config(genie_space_id: str, catalog: str, schema: str) -> dict:
+def get_supervisor_config(
+    genie_space_id: str,
+    catalog: str,
+    schema: str,
+    app_connection_name: str = "monte_carlo_app",
+) -> dict:
     """Return the full MAS configuration dict."""
     return {
         "name": SUPERVISOR_NAME,
         "description": SUPERVISOR_DESCRIPTION,
-        "agents": get_supervisor_agents(genie_space_id, catalog, schema),
+        "agents": get_supervisor_agents(genie_space_id, catalog, schema, app_connection_name),
         "instructions": get_supervisor_instructions(),
     }

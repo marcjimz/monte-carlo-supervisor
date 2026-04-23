@@ -4,6 +4,21 @@ resources:
       name: "monte-carlo-ui"
       description: "Monte Carlo Simulation UI with Agent Chat"
       source_code_path: ../../app
+      # Resource bindings — auto-grant app SP the required permissions
+      resources:
+        - name: simulation-job
+          job:
+            id: ${resources.jobs.monte_carlo_pipeline.id}
+            permission: CAN_MANAGE_RUN
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
+        - name: lakebase-db
+          postgres:
+            branch: projects/${resources.postgres_projects.monte_carlo_db.project_id}/branches/production
+            database: projects/${resources.postgres_projects.monte_carlo_db.project_id}/branches/production/databases/db-6bo2-vh49dzaxs6
+            permission: CAN_CONNECT_AND_CREATE
       config:
         command:
           - uvicorn
@@ -19,20 +34,20 @@ resources:
             value: ${var.schema}
           - name: SEED_DEMO_DATA
             value: "true"
-          # Dynamic IDs — populated by setup task 08_configure_app
-          - name: MAS_ENDPOINT_NAME
-            value: ""
-          - name: GENIE_SPACE_ID
-            value: ""
+          # LangGraph agent model endpoints
+          - name: SUPERVISOR_ENDPOINT
+            value: "databricks-claude-opus-4-7"
+          - name: EXECUTOR_ENDPOINT
+            value: "databricks-claude-sonnet-4"
+          # DAB-resolved IDs
           - name: SQL_WAREHOUSE_ID
-            value: ""
+            value: ${var.warehouse_id}
+          - name: SIMULATION_JOB_ID
+            value: ${resources.jobs.monte_carlo_pipeline.id}
           - name: DASHBOARD_ID
-            value: ""
-          - name: PGHOST
-            value: ""
-          - name: PGPORT
-            value: "5432"
+            value: ${resources.dashboards.wh_analytics.id}
+          # Lakebase — PGHOST and PGUSER auto-populated by lakebase-db resource binding
           - name: PGDATABASE
             value: "mcapp"
-          - name: PGUSER
-            value: ""
+          - name: GENIE_SPACE_ID
+            value: ${var.genie_space_id}

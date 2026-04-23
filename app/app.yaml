@@ -5,3 +5,23 @@ command:
   - 0.0.0.0
   - --port
   - "8000"
+
+env:
+  - name: UC_CATALOG
+    value: monte_carlo_supervisor_catalog
+  - name: UC_SCHEMA
+    value: hospital_data
+  - name: SEED_DEMO_DATA
+    value: "true"
+  - name: SUPERVISOR_ENDPOINT
+    value: "databricks-claude-opus-4-7"
+  - name: EXECUTOR_ENDPOINT
+    value: "databricks-claude-sonnet-4"
+  - name: SQL_WAREHOUSE_ID
+    value: "39aeb4605bfae41b"
+  - name: SIMULATION_JOB_ID
+    value: "696519232381137"
+  - name: PGDATABASE
+    value: "mcapp"
+  - name: GENIE_SPACE_ID
+    value: "01f13defcdc91885b9acceca99aa8c09"

@@ -18,14 +18,14 @@ const SIM_TYPE_LABELS: Record<string, string> = {
 };
 
 const THINKING_MESSAGES = [
-  "Agent thinking...",
+  "Analyzing your question...",
   "Consulting the data...",
   "Querying the warehouse...",
-  "Orchestrating agents...",
+  "Running simulation...",
   "Analyzing patterns...",
   "Crunching numbers...",
   "Connecting the dots...",
-  "Routing to the right agent...",
+  "Evaluating parameters...",
   "Searching for insights...",
   "Running the numbers...",
 ];

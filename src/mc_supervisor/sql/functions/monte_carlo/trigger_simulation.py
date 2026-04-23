@@ -1,24 +1,26 @@
-"""UC Function definition for trigger_simulation — triggers a Spark simulation job.
+"""UC Function definition for trigger_simulation — submits via App endpoint.
 
 Calls ``http_request()`` via a UC HTTP Connection to POST to the
-Databricks Jobs API ``/api/2.1/jobs/run-now``.  This function performs
-**no table reads** — it only fires the job and returns the API response.
+Databricks App's ``/api/simulations/internal/submit-simulation`` endpoint.
+The App writes a SUBMITTED row to Delta, which triggers the pipeline
+via a table-update trigger.
 
-Separated from the old ``run_simulation`` to avoid Spark SQL evaluating
-``http_request()`` in non-matching CASE branches.
+This avoids the workspace IP ACL issue where the SQL warehouse's egress
+IP is not in the workspace allow-list (the App URL is on
+``*.databricksapps.com`` — outside workspace IP ACL).
 """
 
 
 class TriggerSimulationFunction:
-    """UC SQL Function that triggers a distributed Spark Monte Carlo simulation job."""
+    """UC SQL Function that triggers a Monte Carlo simulation via the App endpoint."""
 
     name = "trigger_simulation"
 
     @classmethod
     def _description(cls, types_str: str) -> str:
         return (
-            "Triggers a new distributed Spark Monte Carlo simulation job with "
-            "10,000+ trials across multiple nodes. The job runs 5-10 minutes. "
+            "Triggers a Monte Carlo simulation by submitting to the App endpoint. "
+            "The simulation pipeline starts within ~2 minutes via table trigger. "
             "Only call this when check_simulation returns not_found. "
             "After triggering, call check_simulation to poll for completion. "
             f"Supports: {types_str}."
@@ -30,7 +32,7 @@ class TriggerSimulationFunction:
         catalog: str,
         schema: str,
         mc_job_id: str = "0",
-        connection_name: str = "monte_carlo_ws",
+        connection_name: str = "monte_carlo_app",
         valid_types: list[str] | None = None,
     ) -> str:
         if valid_types is None:
@@ -54,27 +56,23 @@ RETURN (
             WHEN p_simulation_type NOT IN ({not_in_str})
             THEN '{{"error":"Invalid simulation_type. Must be one of: {types_str}"}}'
             ELSE concat(
-                '{{"status":"triggered","simulation_type":"', p_simulation_type,
+                '{{"status":"submitted","simulation_type":"', p_simulation_type,
                 '","parameters":', COALESCE(p_parameters, '{{}}'),
                 ',"num_simulations":', CAST(COALESCE(p_num_simulations, 10000) AS STRING),
                 ',"seed":', CAST(COALESCE(p_seed, 42) AS STRING),
-                ',"job_response":',
+                ',"app_response":',
                 (http_request(
                     conn => '{connection_name}',
                     method => 'POST',
-                    path => '/api/2.1/jobs/run-now',
+                    path => '/api/simulations/internal/submit-simulation',
                     json => to_json(named_struct(
-                        'job_id', CAST({mc_job_id} AS BIGINT),
-                        'job_parameters', named_struct(
-                            'simulation_type', p_simulation_type,
-                            'parameters', COALESCE(p_parameters, '{{}}'),
-                            'num_simulations', CAST(COALESCE(p_num_simulations, 10000) AS STRING),
-                            'seed', CAST(COALESCE(p_seed, 42) AS STRING)
-                        )
+                        'simulation_type', p_simulation_type,
+                        'parameters', COALESCE(p_parameters, '{{}}'),
+                        'num_simulations', CAST(COALESCE(p_num_simulations, 10000) AS STRING),
+                        'seed', CAST(COALESCE(p_seed, 42) AS STRING)
                     ))
                 )).text,
-                ',"message":"Distributed Spark Monte Carlo simulation triggered. ',
-                'The job runs ~5-10 minutes with ', CAST(COALESCE(p_num_simulations, 10000) AS STRING), ' trials across multiple Spark executors. ',
+                ',"message":"Simulation queued. The pipeline starts within ~2 minutes via table trigger. ',
                 'Call check_simulation with the same parameters to poll for completion."}}'
             )
         END

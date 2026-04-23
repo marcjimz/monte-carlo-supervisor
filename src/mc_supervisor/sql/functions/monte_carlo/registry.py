@@ -23,13 +23,13 @@ class MonteCarloRegistry:
 
     FUNCTIONS = [
         CheckSimulationFunction,
-        TriggerSimulationFunction,
         CreateMatrixFunction,
         ListDistributionsFunction,
     ]
 
     DEPRECATED_FUNCTIONS = [
         RunSimulationFunction,
+        TriggerSimulationFunction,
     ]
 
     def __init__(
