@@ -86,6 +86,12 @@ class TestRouteAfterGenie:
 class TestToolExecutorNode:
     @pytest.mark.asyncio
     async def test_executes_tool_call(self):
+        """Tool executor passes config through and returns tool result."""
+        from unittest.mock import patch
+        from uuid import UUID
+
+        from server.services import matrix_service as real_ms
+
         tool_call_msg = AIMessage(
             content="",
             tool_calls=[{
@@ -101,14 +107,21 @@ class TestToolExecutorNode:
             }],
         )
         state = AgentState(messages=[tool_call_msg])
-        config = {"configurable": {}}
+        fake_analysis_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        config = {"configurable": {"analysis_id": fake_analysis_id}}
 
-        result = await tool_executor_node(state, config)
+        mock_create = AsyncMock(return_value={"id": UUID(fake_analysis_id)})
+        mock_run = AsyncMock(return_value={"total": 4, "triggered": 4})
+
+        with patch("server.agent.tools.ensure_config", return_value=config), \
+             patch.object(real_ms, "create_matrix", mock_create), \
+             patch.object(real_ms, "run_matrix", mock_run):
+            result = await tool_executor_node(state, config)
         assert len(result["messages"]) == 1
         msg = result["messages"][0]
         assert isinstance(msg, ToolMessage)
         parsed = json.loads(msg.content)
-        assert parsed["status"] == "validated"
+        assert parsed["status"] == "created"
         assert parsed["total_cells"] == 4
 
     @pytest.mark.asyncio

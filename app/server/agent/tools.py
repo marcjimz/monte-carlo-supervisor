@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from uuid import UUID
 
 from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables.config import ensure_config
 from langchain_core.tools import tool
 
 logger = logging.getLogger(__name__)
@@ -120,7 +122,8 @@ async def create_matrix(
     """Create a parameter sweep matrix for sensitivity analysis.
 
     Creates a grid of simulations varying two parameters. Cell simulations
-    are automatically triggered after creation.
+    are automatically triggered after creation. Results appear in the
+    Matrix Builder UI.
 
     Args:
         simulation_type: The type of simulation.
@@ -133,6 +136,8 @@ async def create_matrix(
         num_simulations: Trials per cell (default 10000).
         seed: Random seed (default 42).
     """
+    from server.services import matrix_service
+
     row_vals = json.loads(row_values) if isinstance(row_values, str) else row_values
     col_vals = json.loads(col_values) if isinstance(col_values, str) else col_values
     base_params = json.loads(base_parameters) if isinstance(base_parameters, str) else base_parameters
@@ -140,19 +145,74 @@ async def create_matrix(
     if not name:
         name = f"{simulation_type} — {row_parameter} vs {col_parameter}"
 
+    # Get analysis_id from LangGraph config
+    config = ensure_config()
+    analysis_id = config.get("configurable", {}).get("analysis_id")
+    if not analysis_id:
+        return json.dumps({
+            "status": "error",
+            "message": "No analysis context — matrix cannot be created outside of a thread.",
+        })
+
+    # Resolve output_metric and output_group_key from config.yaml
+    output_metric, output_group_key, output_group_value = _resolve_output_config(simulation_type)
+
+    # Create matrix in Lakebase (same as UI's POST /api/analyses/{id}/matrices)
+    matrix = await matrix_service.create_matrix(
+        analysis_id=UUID(analysis_id),
+        name=name,
+        simulation_type=simulation_type,
+        row_parameter=row_parameter,
+        row_values=row_vals,
+        col_parameter=col_parameter,
+        col_values=col_vals,
+        base_parameters=base_params,
+        output_metric=output_metric,
+        output_group_key=output_group_key,
+        output_group_value=output_group_value,
+        num_simulations=num_simulations,
+        seed=seed,
+    )
+
+    matrix_id = matrix["id"]
+
+    # Trigger all cell simulations (same as UI's POST /matrices/{id}/run)
+    await matrix_service.run_matrix(matrix_id)
+
     return json.dumps({
-        "status": "validated",
+        "status": "created",
+        "id": str(matrix_id),
+        "name": name,
         "simulation_type": simulation_type,
         "row_parameter": row_parameter,
-        "row_values": row_vals,
         "col_parameter": col_parameter,
+        "row_values": row_vals,
         "col_values": col_vals,
-        "base_parameters": base_params,
-        "name": name,
-        "num_simulations": num_simulations,
-        "seed": seed,
+        "rows": len(row_vals),
+        "cols": len(col_vals),
         "total_cells": len(row_vals) * len(col_vals),
     })
+
+
+def _resolve_output_config(simulation_type: str) -> tuple[str, str | None, str | None]:
+    """Resolve output_metric and output_group from config.yaml."""
+    output_metric = "mean_value"
+    output_group_key = None
+    output_group_value = None
+    try:
+        import yaml
+        from pathlib import Path
+
+        cfg_path = Path(__file__).resolve().parent.parent / "config.yaml"
+        with open(cfg_path) as f:
+            cfg = yaml.safe_load(f)
+        sim_cfg = cfg.get("simulation_types", {}).get(simulation_type, {})
+        agg = sim_cfg.get("aggregation", {})
+        output_metric = agg.get("value_column", "mean_value")
+        output_group_key = agg.get("group_column")
+    except Exception:
+        logger.debug("Could not resolve agg config for %s", simulation_type)
+    return output_metric, output_group_key, output_group_value
 
 
 @tool

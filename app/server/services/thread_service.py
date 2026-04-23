@@ -263,7 +263,10 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
                 async for event in graph.astream_events(
                     {"messages": lc_messages},
                     config={
-                        "configurable": configurable,
+                        "configurable": {
+                            **configurable,
+                            "analysis_id": str(analysis_id) if analysis_id else None,
+                        },
                         "recursion_limit": 25,
                     },
                     version="v2",
@@ -401,107 +404,48 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
 async def _handle_matrix_builder(
     thread_id: UUID, output: str, created_matrix_ids: set[str],
 ) -> str | None:
-    """Intercept a create_matrix tool result and create the matrix via Lakebase."""
-    from server.services import matrix_service
+    """Emit SSE event for a matrix created by the create_matrix tool.
 
+    The tool now does the actual creation + run via matrix_service.
+    This handler just emits the SSE event and starts background polling.
+    """
     try:
         result = json.loads(output) if isinstance(output, str) else output
     except (json.JSONDecodeError, TypeError):
         return None
 
-    if result.get("status") != "validated":
+    if result.get("status") != "created":
         return None
 
-    sim_type = result.get("simulation_type", "")
-    row_param = result.get("row_parameter", "")
-    col_param = result.get("col_parameter", "")
-    row_values = result.get("row_values", [])
-    col_values = result.get("col_values", [])
-
-    if not sim_type or not row_param or not col_param or not row_values or not col_values:
+    matrix_id = result.get("id")
+    if not matrix_id or matrix_id in created_matrix_ids:
         return None
+    created_matrix_ids.add(matrix_id)
 
-    dedup_key = f"{sim_type}|{row_param}|{col_param}|{json.dumps(row_values, sort_keys=True)}|{json.dumps(col_values, sort_keys=True)}"
-    if dedup_key in created_matrix_ids:
-        return None
-    created_matrix_ids.add(dedup_key)
+    # Start background polling (matrix already created + running from the tool)
+    asyncio.create_task(_poll_matrix_background(UUID(matrix_id), thread_id))
 
-    # Resolve output_metric from config
-    output_metric = "mean_value"
-    output_group_key = None
-    try:
-        import yaml
-        from pathlib import Path
-        cfg_path = Path(__file__).parent.parent / "config.yaml"
-        with open(cfg_path) as f:
-            cfg = yaml.safe_load(f)
-        sim_cfg = cfg.get("simulation_types", {}).get(sim_type, {})
-        agg = sim_cfg.get("aggregation", {})
-        output_metric = agg.get("value_column", "mean_value")
-        output_group_key = agg.get("group_column")
-    except Exception:
-        logger.debug("Could not resolve agg config for %s", sim_type)
-
-    base_params = result.get("base_parameters", {})
-    num_sims = int(result.get("num_simulations", 10000))
-    seed = int(result.get("seed", 42))
-    name = result.get("name", f"{sim_type} — {row_param} vs {col_param}")
-
-    # Look up analysis_id
-    thread = await db.fetch_one(
-        "SELECT analysis_id FROM agent_threads WHERE id = $1",
-        thread_id,
-    )
-    if not thread:
-        return None
-    analysis_id = thread["analysis_id"]
-
-    try:
-        matrix = await matrix_service.create_matrix(
-            analysis_id=analysis_id,
-            name=name,
-            simulation_type=sim_type,
-            row_parameter=row_param,
-            row_values=row_values,
-            col_parameter=col_param,
-            col_values=col_values,
-            base_parameters=base_params,
-            output_metric=output_metric,
-            output_group_key=output_group_key,
-            num_simulations=num_sims,
-            seed=seed,
-        )
-
-        asyncio.create_task(_run_matrix_background(matrix["id"], thread_id))
-
-        matrix_payload = {
-            "id": str(matrix["id"]),
-            "name": name,
-            "simulation_type": sim_type,
-            "row_parameter": row_param,
-            "col_parameter": col_param,
-            "rows": len(row_values),
-            "cols": len(col_values),
-            "total_cells": len(row_values) * len(col_values),
-            "auto_running": True,
-        }
-        return f"data: {json.dumps({'type': 'matrix_created', 'matrix': matrix_payload})}\n\n"
-
-    except Exception:
-        logger.warning("Failed to create matrix", exc_info=True)
-        return None
+    matrix_payload = {
+        "id": matrix_id,
+        "name": result.get("name", ""),
+        "simulation_type": result.get("simulation_type", ""),
+        "row_parameter": result.get("row_parameter", ""),
+        "col_parameter": result.get("col_parameter", ""),
+        "rows": result.get("rows", 0),
+        "cols": result.get("cols", 0),
+        "total_cells": result.get("total_cells", 0),
+        "auto_running": True,
+    }
+    return f"data: {json.dumps({'type': 'matrix_created', 'matrix': matrix_payload})}\n\n"
 
 
-async def _run_matrix_background(matrix_id, thread_id=None):
-    """Run all matrix cell simulations, poll until done, and save results to thread."""
+async def _poll_matrix_background(matrix_id, thread_id=None):
+    """Poll matrix cell statuses until done, then save results to thread.
+
+    The matrix has already been created and run_matrix() already called
+    by the create_matrix tool. This function only polls for completion.
+    """
     from server.services import matrix_service
-
-    try:
-        result = await matrix_service.run_matrix(matrix_id)
-        logger.info("Background matrix run completed for %s: %s", matrix_id, result)
-    except Exception:
-        logger.warning("Background matrix run failed for %s", matrix_id, exc_info=True)
-        return
 
     if not thread_id:
         return

@@ -96,7 +96,7 @@ async def tool_executor_node(state: AgentState, config: RunnableConfig) -> dict:
             continue
 
         try:
-            result = await tool_map[tool_name].ainvoke(tool_args)
+            result = await tool_map[tool_name].ainvoke(tool_args, config=config)
 
             # Track run_simulation calls for non-completed statuses
             if tool_name == "run_simulation":
