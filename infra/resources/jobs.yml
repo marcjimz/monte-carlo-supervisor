@@ -84,27 +84,16 @@ resources:
               schema: ${var.schema}
             warehouse_id: ${var.warehouse_id}
 
-        - task_key: create_base_views
+        - task_key: create_views
           depends_on:
             - task_key: load_data
-          sql_task:
-            file:
-              path: ../../infra/sql/create_base_views.sql
-            parameters:
+          notebook_task:
+            notebook_path: ../../notebooks/setup/02a_create_views.py
+            base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-            warehouse_id: ${var.warehouse_id}
-
-        - task_key: create_metric_views
-          depends_on:
-            - task_key: create_base_views
-          sql_task:
-            file:
-              path: ../../infra/sql/create_metric_views.sql
-            parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-            warehouse_id: ${var.warehouse_id}
+              warehouse_id: ${var.warehouse_id}
+              skip_views: ${var.skip_views}
 
         # Phase 3: Computation
         - task_key: fit_distributions
@@ -121,7 +110,7 @@ resources:
         # Phase 4: Genie Space (import from versioned JSON export)
         - task_key: deploy_genie
           depends_on:
-            - task_key: create_metric_views
+            - task_key: create_views
             - task_key: create_sim_tables
           notebook_task:
             notebook_path: ../../notebooks/setup/02_deploy_genie_space.py

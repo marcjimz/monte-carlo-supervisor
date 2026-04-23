@@ -24,6 +24,9 @@ variables:
   skip_genie:
     description: "Skip Genie Space deployment (true if customer has existing space)"
     default: "false"
+  skip_views:
+    description: "Skip base/metric view creation (true if customer has existing metric view)"
+    default: "false"
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
