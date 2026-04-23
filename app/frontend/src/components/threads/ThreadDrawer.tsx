@@ -3,7 +3,8 @@ import { X, Plus, Send, MessageSquare, Pencil, Bot, Play, Grid3X3 } from "lucide
 import { api } from "../../lib/api";
 import { useUser } from "../../lib/user-context";
 import { getInitials } from "../../lib/utils";
-import type { Thread, Message, SimulationTriggeredEvent, MatrixCreatedEvent } from "../../lib/types";
+import type { Thread, Message, SimulationTriggeredEvent, MatrixCreatedEvent, ChartDataEvent } from "../../lib/types";
+import { InlineChart } from "./InlineChart";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
@@ -51,6 +52,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
   const [thinkingMsg, setThinkingMsg] = useState("");
   const [triggeredSims, setTriggeredSims] = useState<SimulationTriggeredEvent[]>([]);
   const [createdMatrices, setCreatedMatrices] = useState<MatrixCreatedEvent[]>([]);
+  const [chartData, setChartData] = useState<ChartDataEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Thread title editing
@@ -172,6 +174,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
     setStreamingContent("");
     setTriggeredSims([]);
     setCreatedMatrices([]);
+    setChartData([]);
     const content = message;
     setMessage("");
 
@@ -230,6 +233,8 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
             } else if (data.type === "matrix_created") {
               setCreatedMatrices((prev) => [...prev, data.matrix]);
               onMatrixCreated?.();
+            } else if (data.type === "chart_data") {
+              setChartData((prev) => [...prev, data.chart]);
             } else if (data.type === "done") {
               finalMessage = data.message;
             }
@@ -460,6 +465,11 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
                 </div>
               </div>
             )}
+
+            {/* Inline charts from Genie data */}
+            {chartData.map((chart, i) => (
+              <InlineChart key={i} chart={chart} />
+            ))}
 
             {/* Simulation triggered notifications */}
             {triggeredSims.map((sim) => (

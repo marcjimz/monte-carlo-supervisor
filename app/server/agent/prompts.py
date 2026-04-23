@@ -11,6 +11,16 @@ import json
 
 from server.agent.config import AgentConfig
 
+CONVERSATIONAL_STYLE = """IMPORTANT — Conversational style:
+Before calling ANY tool, ALWAYS first emit a brief, natural acknowledgment telling the user what you're about to do. Examples:
+- "Let me pull up the monthly patient data for you." → then call query_analytics
+- "I'll check if we have cached results for that simulation." → then call check_simulation
+- "Great question — let me query the cost breakdown." → then call query_analytics
+- "I'll set up a sensitivity matrix for those parameters." → then call create_matrix
+This gives the user immediate feedback that their request is being processed. Never silently call a tool without acknowledging first.
+
+After receiving tool results, present them conversationally with context, insights, and suggested follow-ups."""
+
 ROUTING_INSTRUCTIONS = """Route queries as follows:
 1. Historical data questions (costs, trends, volumes, demographics, 'show me', 'what was') → query_analytics tool (Genie)
 2. Previously-run simulation results ('show me past simulations', 'what were the results of') → query_analytics tool (Genie queries simulation_results table)
@@ -94,6 +104,8 @@ def get_system_prompt(config: AgentConfig) -> str:
     """Compose the full system prompt: persona + routing + tool guide + param reference."""
     parts = [
         config.prompt.persona,
+        "",
+        CONVERSATIONAL_STYLE,
         "",
         ROUTING_INSTRUCTIONS,
         TOOL_GUIDE,

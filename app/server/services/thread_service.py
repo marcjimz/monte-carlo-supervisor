@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 from collections.abc import AsyncGenerator
 from uuid import UUID
 
@@ -180,7 +179,7 @@ async def send_message(thread_id: UUID, content: str) -> dict:
         graph, configurable = _get_graph_and_config()
         result = await graph.ainvoke(
             {"messages": lc_messages},
-            config={"configurable": configurable},
+            config={"configurable": configurable, "recursion_limit": 50},
         )
         last_msg = result["messages"][-1]
         assistant_content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
@@ -262,7 +261,10 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
             try:
                 async for event in graph.astream_events(
                     {"messages": lc_messages},
-                    config={"configurable": configurable},
+                    config={
+                        "configurable": configurable,
+                        "recursion_limit": 50,
+                    },
                     version="v2",
                 ):
                     await queue.put(event)
@@ -362,6 +364,14 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
     if not full_content.strip():
         full_content = "No response from agent."
         yield f"data: {json.dumps({'type': 'delta', 'content': full_content})}\n\n"
+
+    # 3b. Emit chart data if the response contains a data table
+    try:
+        chart_payload = _infer_chart_from_markdown(full_content)
+        if chart_payload:
+            yield f"data: {json.dumps({'type': 'chart_data', 'chart': chart_payload}, default=str)}\n\n"
+    except Exception:
+        logger.debug("Chart inference from markdown failed", exc_info=True)
 
     # 4. Save final assistant message
     assistant_msg = await db.fetch_one(
@@ -646,6 +656,102 @@ def _format_matrix_results(matrix: dict) -> str | None:
                          f"{col_param}={_fmt_param(col_param, worst[2])} → {_fmt_result(worst[0])}")
 
     return "\n".join(lines)
+
+
+def _infer_chart_from_markdown(text: str) -> dict | None:
+    """Parse a markdown table from the response and infer a chart."""
+    lines = text.split("\n")
+    table_lines: list[str] = []
+    in_table = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            if re.match(r"^\|[\s\-:|]+\|$", stripped):
+                in_table = True
+                continue
+            table_lines.append(stripped)
+            in_table = True
+        elif in_table:
+            break
+
+    if len(table_lines) < 3:
+        return None
+
+    header_cells = [c.strip() for c in table_lines[0].split("|")[1:-1]]
+
+    rows: list[dict] = []
+    for line in table_lines[1:]:
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        if len(cells) != len(header_cells):
+            continue
+        rows.append(dict(zip(header_cells, cells)))
+
+    if len(rows) < 2:
+        return None
+
+    def _parse_number(s: str) -> float | None:
+        s = re.sub(r"\*\*(.+?)\*\*", r"\1", s).strip()
+        s = re.sub(r"^[$\u20ac\u00a3]", "", s)
+        s = s.replace(",", "")
+        if not s or s in ("\u2014", "---", "~", "N/A", "n/a") or "next" in s.lower():
+            return None
+        try:
+            return float(s)
+        except ValueError:
+            return None
+
+    label_col = None
+    value_cols: list[str] = []
+
+    for col in header_cells:
+        if col.lower() in ("rank", "#", "no", "no.", "trend"):
+            continue
+        nums = [_parse_number(r.get(col, "")) for r in rows]
+        valid_nums = [n for n in nums if n is not None]
+        if len(valid_nums) >= len(rows) * 0.5:
+            value_cols.append(col)
+        elif label_col is None:
+            label_col = col
+
+    if not label_col or not value_cols:
+        return None
+
+    chart_rows: list[dict] = []
+    for row in rows:
+        label = row.get(label_col, "")
+        label = re.sub(r"\*\*(.+?)\*\*", r"\1", label)
+        label = re.sub(
+            r"[\U0001f300-\U0001f9ff\u2b07\ufe0f\u2b06\ufe0f\U0001fa00-\U0001faff]+\s*",
+            "", label,
+        ).strip()
+        if not label:
+            continue
+        d: dict = {label_col: label}
+        has_value = False
+        for vc in value_cols:
+            num = _parse_number(row.get(vc, ""))
+            if num is not None:
+                d[vc] = num
+                has_value = True
+            else:
+                d[vc] = 0
+        if has_value:
+            chart_rows.append(d)
+
+    if len(chart_rows) < 2:
+        return None
+
+    time_keywords = ("month", "date", "year", "quarter", "week", "period", "time")
+    is_time = any(kw in label_col.lower() for kw in time_keywords)
+    chart_type = "line" if is_time else "bar"
+
+    return {
+        "chart_type": chart_type,
+        "x_key": label_col,
+        "y_keys": value_cols[:3],
+        "data": chart_rows,
+    }
 
 
 def _msg_dict(row) -> dict:
