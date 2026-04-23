@@ -285,16 +285,17 @@ async def submit_to_delta(
     (run_id, simulation_type, parameters, params_hash, seed, num_simulations, status, created_at, updated_at)
     VALUES ('{run_id}', '{simulation_type}', '{params_json}', '{params_hash}', {seed}, {num_simulations}, 'SUBMITTED', '{now}', '{now}')"""
 
-    # Retry on Delta concurrent append conflicts
-    max_retries = 3
+    # Retry on Delta concurrent append conflicts with exponential backoff
+    max_retries = 10
     for attempt in range(max_retries):
         try:
             await asyncio.to_thread(execute_query, sql)
             break
         except Exception as e:
             if "DELTA_CONCURRENT_APPEND" in str(e) and attempt < max_retries - 1:
-                logger.warning("Delta concurrent append conflict (attempt %d/%d), retrying...", attempt + 1, max_retries)
-                await asyncio.sleep(1 + attempt)
+                delay = min(2 ** attempt, 30)  # 1, 2, 4, 8, 16, 30, 30...
+                logger.warning("Delta concurrent append conflict (attempt %d/%d), retrying in %ds...", attempt + 1, max_retries, delay)
+                await asyncio.sleep(delay)
             else:
                 raise
 
