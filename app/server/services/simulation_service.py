@@ -80,14 +80,18 @@ async def check_simulation(
 
     params_hash = compute_params_hash(simulation_type, parameters, num_simulations, seed)
 
-    # Exact hash match — only look at COMPLETED or RUNNING runs.
-    # SUBMITTED may be stale; FAILED should allow re-triggering.
-    # If nothing useful found, return "not_found" so caller can trigger.
+    # Exact hash match — only look at COMPLETED or fresh RUNNING runs.
+    # SUBMITTED/FAILED are ignored so caller can re-trigger.
+    # RUNNING rows older than 30 min are treated as stale (job likely failed).
     run_sql = f"""
         SELECT run_id, simulation_type, parameters, status, seed, num_simulations
         FROM {catalog}.{schema}.simulation_runs
         WHERE params_hash = '{params_hash}'
-          AND status IN ('COMPLETED', 'RUNNING')
+          AND (
+              status = 'COMPLETED'
+              OR (status = 'RUNNING'
+                  AND updated_at >= (current_timestamp() - INTERVAL 30 MINUTES))
+          )
         ORDER BY
           CASE status WHEN 'COMPLETED' THEN 0 ELSE 1 END,
           created_at DESC
@@ -158,7 +162,7 @@ async def check_simulations_batch(
     hashes = [c["params_hash"] for c in cells]
     hash_list = ", ".join(f"'{h}'" for h in hashes)
 
-    # Single query for all hashes — only COMPLETED or RUNNING (same as check_simulation)
+    # Single query for all hashes — COMPLETED or fresh RUNNING (same staleness guard as check_simulation)
     run_sql = f"""
         WITH ranked AS (
             SELECT run_id, params_hash, simulation_type, parameters, status,
@@ -171,7 +175,11 @@ async def check_simulations_batch(
                    ) AS rn
             FROM {catalog}.{schema}.simulation_runs
             WHERE params_hash IN ({hash_list})
-              AND status IN ('COMPLETED', 'RUNNING')
+              AND (
+                  status = 'COMPLETED'
+                  OR (status = 'RUNNING'
+                      AND updated_at >= (current_timestamp() - INTERVAL 30 MINUTES))
+              )
         )
         SELECT run_id, params_hash, simulation_type, parameters, status,
                seed, num_simulations

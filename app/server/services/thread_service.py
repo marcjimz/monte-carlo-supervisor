@@ -375,13 +375,13 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
         full_content = "No response from agent."
         yield f"data: {json.dumps({'type': 'delta', 'content': full_content})}\n\n"
 
-    # 3b. Emit chart data if the response contains a data table
-    try:
-        chart_payload = _infer_chart_from_markdown(full_content)
-        if chart_payload:
-            yield f"data: {json.dumps({'type': 'chart_data', 'chart': chart_payload}, default=str)}\n\n"
-    except Exception:
-        logger.debug("Chart inference from markdown failed", exc_info=True)
+    # 3b. Chart inference disabled — re-enable when chart rendering is stable
+    # try:
+    #     chart_payload = _infer_chart_from_markdown(full_content)
+    #     if chart_payload:
+    #         yield f"data: {json.dumps({'type': 'chart_data', 'chart': chart_payload}, default=str)}\n\n"
+    # except Exception:
+    #     logger.debug("Chart inference from markdown failed", exc_info=True)
 
     # 4. Save final assistant message
     assistant_msg = await db.fetch_one(
