@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # --- Ali's published showcase ---
 
-DEMO_OWNER = "ali.ghodsi@databricks.com"
+DEMO_OWNER = "rob.allen@imail.org"
 DEMO_ANALYSIS_NAME = "Encounter Margin Sensitivity Study"
 
 # --- Presenter's draft walkthrough ---
