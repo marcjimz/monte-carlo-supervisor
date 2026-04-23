@@ -250,6 +250,7 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
     full_content = ""
     triggered_hashes: set[str] = set()
     created_matrix_ids: set[str] = set()
+    current_model_run_id: str | None = None
 
     try:
         graph, configurable = _get_graph_and_config()
@@ -290,6 +291,17 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
 
                 # Stream text deltas from the supervisor model
                 if event_kind == "on_chat_model_stream":
+                    run_id = event.get("run_id", "")
+                    # Insert newline separator between different model invocations
+                    # so markdown headings from the second call render correctly
+                    if run_id and run_id != current_model_run_id:
+                        if current_model_run_id is not None and full_content:
+                            separator = "\n\n"
+                            full_content += separator
+                            sep_payload = json.dumps({"type": "delta", "content": separator})
+                            yield f"data: {sep_payload}\n\n"
+                        current_model_run_id = run_id
+
                     chunk = event.get("data", {}).get("chunk")
                     if chunk and hasattr(chunk, "content") and chunk.content:
                         text = chunk.content
