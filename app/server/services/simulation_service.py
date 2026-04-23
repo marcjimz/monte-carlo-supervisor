@@ -90,18 +90,6 @@ async def check_simulation(
     """
     rows = await asyncio.to_thread(execute_query, run_sql)
 
-    # Fallback: most recent COMPLETED run of this simulation_type
-    if not rows:
-        fallback_sql = f"""
-            SELECT run_id, simulation_type, parameters, status, seed, num_simulations
-            FROM {catalog}.{schema}.simulation_runs
-            WHERE simulation_type = '{simulation_type}'
-              AND status = 'COMPLETED'
-            ORDER BY created_at DESC
-            LIMIT 1
-        """
-        rows = await asyncio.to_thread(execute_query, fallback_sql)
-
     if not rows:
         return {
             "status": "not_found",
