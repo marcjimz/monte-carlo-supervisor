@@ -9,9 +9,8 @@ variables:
     description: "Unity Catalog schema name"
     default: "hospital_data"
   warehouse_id:
-    description: "SQL Warehouse ID for queries and Genie Space"
-    lookup:
-      warehouse: "Serverless Starter Warehouse"
+    description: "SQL Warehouse ID for queries and Genie Space (override for customer workspaces)"
+    default: ""
   genie_space_id:
     description: "Genie Space ID for agent analytics queries (empty = create new)"
     default: ""
@@ -61,6 +60,8 @@ targets:
   dev:
     default: true
     mode: development
+    variables:
+      warehouse_id: "39aeb4605bfae41b"
 
   prod:
     mode: production
