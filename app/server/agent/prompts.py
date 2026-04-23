@@ -44,6 +44,7 @@ Step 4: If status is "not_found" AND you have NOT yet triggered → call trigger
 Step 5: After trigger_simulation returns "submitted" → call check_simulation with the SAME parameters to poll. The pipeline starts within ~2 minutes. Expect "submitted" → "running" → "completed" progression. Keep polling.
 IMPORTANT: After triggering, check_simulation may return "submitted" (queued) or "not_found" briefly while the pipeline starts. This is NORMAL — do NOT call trigger_simulation again. Keep calling check_simulation until you see "running" or "completed".
 IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
+IMPORTANT: If check_simulation keeps returning "submitted" or the simulation doesn't progress after 3-4 polls, tell the user the pipeline is still initializing and offer to check back later. Do NOT suggest a sensitivity matrix as an alternative — matrix simulations use the same pipeline and would also be stuck.
 
 MATRIX WORKFLOW (for parameter sweeps):
 When the user wants to compare results across multiple parameter values (sensitivity analysis, parameter sweep, grid search):

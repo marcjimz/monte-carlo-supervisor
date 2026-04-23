@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     supervisor_endpoint: str = "databricks-claude-opus-4-7"
     executor_endpoint: str = "databricks-claude-sonnet-4"
     sql_warehouse_id: str = "39aeb4605bfae41b"
+    simulation_job_id: str = ""
 
     # Lakebase (auto-populated by resource binding in Databricks Apps)
     pghost: str = ""
