@@ -354,10 +354,13 @@ else:
 
 # COMMAND ----------
 
-# PGHOST/PGUSER: auto-populated by Lakebase resource binding in apps.yml
-# GENIE_SPACE_ID: set in app.yaml (static for this workspace)
-# Only inject Genie Space ID here if dynamically created by deploy_genie task
+# PGHOST/PGUSER: injected here (resource binding removed due to deploy ordering)
+# GENIE_SPACE_ID: set dynamically if created by deploy_genie task
 env_vars = []
+if pg_host:
+    env_vars.append({"name": "PGHOST", "value": pg_host})
+if sp_client_id:
+    env_vars.append({"name": "PGUSER", "value": sp_client_id})
 if genie_space_id:
     env_vars.append({"name": "GENIE_SPACE_ID", "value": genie_space_id})
 

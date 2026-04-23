@@ -13,8 +13,8 @@ variables:
     lookup:
       warehouse: "Serverless Starter Warehouse"
   genie_space_id:
-    description: "Genie Space ID for agent analytics queries"
-    default: "01f13defcdc91885b9acceca99aa8c09"
+    description: "Genie Space ID for agent analytics queries (empty = create new)"
+    default: ""
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

@@ -14,11 +14,8 @@ resources:
           sql_warehouse:
             id: ${var.warehouse_id}
             permission: CAN_USE
-        - name: lakebase-db
-          postgres:
-            branch: projects/${resources.postgres_projects.monte_carlo_db.project_id}/branches/production
-            database: projects/${resources.postgres_projects.monte_carlo_db.project_id}/branches/production/databases/db-6bo2-vh49dzaxs6
-            permission: CAN_CONNECT_AND_CREATE
+        # Lakebase resource binding removed — PGHOST/PGUSER injected by setup pipeline (04_configure_app)
+        # because the database must be created before the binding can reference it.
       config:
         command:
           - uvicorn

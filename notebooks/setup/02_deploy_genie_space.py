@@ -58,8 +58,8 @@ for p in json_candidates:
 
 if json_path is None:
     print("WARNING: Genie Space JSON not found — skipping deployment")
-    dbutils.taskValues.set(key="genie_space_id", value="")
-    dbutils.taskValues.set(key="warehouse_id", value=warehouse_id)
+    dbutils.jobs.taskValues.set(key="genie_space_id", value="")
+    dbutils.jobs.taskValues.set(key="warehouse_id", value=warehouse_id)
     dbutils.notebook.exit("SKIPPED — no exported JSON found")
 
 # COMMAND ----------
@@ -158,7 +158,7 @@ print(f"Genie Space ID: {space_id}")
 
 # COMMAND ----------
 
-dbutils.taskValues.set(key="genie_space_id", value=space_id)
-dbutils.taskValues.set(key="warehouse_id", value=warehouse_id)
+dbutils.jobs.taskValues.set(key="genie_space_id", value=space_id)
+dbutils.jobs.taskValues.set(key="warehouse_id", value=warehouse_id)
 print(f"\nGenie Space ID : {space_id}")
 print(f"Warehouse ID   : {warehouse_id}")

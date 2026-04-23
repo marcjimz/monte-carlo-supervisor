@@ -26,6 +26,16 @@ subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/mo
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Create Schema (if needed)
+
+# COMMAND ----------
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
+print(f"Schema {catalog}.{schema} ready.")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Load All Tables
 
 # COMMAND ----------
