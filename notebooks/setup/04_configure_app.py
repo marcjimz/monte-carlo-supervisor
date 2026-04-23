@@ -23,7 +23,7 @@
 dbutils.widgets.text("catalog", "monte_carlo_supervisor_catalog", "UC Catalog")
 dbutils.widgets.text("schema", "hospital_data", "UC Schema")
 dbutils.widgets.text("app_name", "monte-carlo-ui", "App Name")
-dbutils.widgets.text("lakebase_project", "monte-carlo-app", "Lakebase Project")
+dbutils.widgets.text("lakebase_project", "mc-supervisor-app", "Lakebase Project")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
