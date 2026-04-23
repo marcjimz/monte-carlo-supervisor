@@ -28,7 +28,7 @@ class TestRouteAfterSupervisor:
             content="",
             tool_calls=[{
                 "id": "tc1",
-                "name": "check_simulation",
+                "name": "run_simulation",
                 "args": {"simulation_type": "test"},
             }],
         )

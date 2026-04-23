@@ -316,7 +316,7 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
                     tool_name = event.get("name", "")
                     output = event.get("data", {}).get("output", "")
 
-                    if tool_name == "trigger_simulation":
+                    if tool_name == "run_simulation":
                         try:
                             result = json.loads(output) if isinstance(output, str) else output
                             sim_type = result.get("simulation_type", "")

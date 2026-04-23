@@ -14,7 +14,7 @@ from server.agent.config import AgentConfig
 CONVERSATIONAL_STYLE = """IMPORTANT — Conversational style:
 Before calling ANY tool, ALWAYS first emit a brief, natural acknowledgment telling the user what you're about to do. Examples:
 - "Let me pull up the monthly patient data for you." → then call query_analytics
-- "I'll check if we have cached results for that simulation." → then call check_simulation
+- "I'll run that simulation for you." → then call run_simulation
 - "Great question — let me query the cost breakdown." → then call query_analytics
 - "I'll set up a sensitivity matrix for those parameters." → then call create_matrix
 This gives the user immediate feedback that their request is being processed. Never silently call a tool without acknowledging first.
@@ -24,7 +24,7 @@ After receiving tool results, present them conversationally with context, insigh
 ROUTING_INSTRUCTIONS = """Route queries as follows:
 1. Historical data questions (costs, trends, volumes, demographics, 'show me', 'what was') → query_analytics tool (Genie)
 2. Previously-run simulation results ('show me past simulations', 'what were the results of') → query_analytics tool (Genie queries simulation_results table)
-3. NEW single simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability', 'ROI', 'cost comparison') → simulation workflow below
+3. NEW single simulations or forecasts ('forecast', 'simulate', 'what if', 'predict', 'project', 'probability', 'ROI', 'cost comparison') → run_simulation tool
 4. Questions about fitted distributions ('what distributions', 'fitted parameters', 'distribution quality', 'what specs') → list_distributions tool
 5. Parameter sweep / sensitivity analysis / matrix ('matrix', 'sensitivity', 'sweep', 'compare across', 'grid of', 'vary X and Y', 'range of values') → create_matrix tool
 
@@ -33,18 +33,15 @@ Common simulation topics: virtual care cost comparison (H2), system cost ROI (H5
 
 For compound queries (e.g., "What was our OB/GYN cost per encounter last year, and simulate the 5-year ROI at 8% encounter reduction?"):
 - First use query_analytics for historical context
-- Then follow the simulation workflow below
+- Then call run_simulation
 - Synthesize both results in the response
 
-SIMULATION WORKFLOW (check → trigger → poll):
-Step 1: Call check_simulation with the user's parameters.
-Step 2: If status is "completed" → present the results to the user. DONE.
-Step 3: If status is "running" → call check_simulation again with the EXACT SAME parameters. Repeat until "completed".
-Step 4: If status is "not_found" AND you have NOT yet triggered → call trigger_simulation with the EXACT SAME parameters to start a new simulation.
-Step 5: After trigger_simulation returns "submitted" → call check_simulation with the SAME parameters to poll. The pipeline starts within ~2 minutes. Expect "submitted" → "running" → "completed" progression. Keep polling.
-IMPORTANT: After triggering, check_simulation may return "submitted" (queued) or "not_found" briefly while the pipeline starts. This is NORMAL — do NOT call trigger_simulation again. Keep calling check_simulation until you see "running" or "completed".
-IMPORTANT: Never change parameters between calls. Always use identical values for simulation_type, parameters, num_simulations, and seed across all calls in a single workflow.
-IMPORTANT: If check_simulation keeps returning "submitted" or the simulation doesn't progress after 3-4 polls, tell the user the pipeline is still initializing and offer to check back later. Do NOT suggest a sensitivity matrix as an alternative — matrix simulations use the same pipeline and would also be stuck.
+SIMULATION WORKFLOW:
+Call run_simulation once. It checks cache and triggers automatically:
+- If results exist → they're returned immediately. Present them to the user.
+- If a simulation is already running → status "running" is returned. Tell the user it's in progress and they can ask again shortly.
+- If no prior run exists → a new simulation job is launched and status "submitted" is returned. Tell the user the simulation has been started and results will be ready in a few minutes.
+IMPORTANT: Do NOT call run_simulation in a loop or repeatedly. Call it once per user request. Parameters are automatically normalized — passing '{}' uses all defaults, which is the same as explicitly passing the default values.
 
 MATRIX WORKFLOW (for parameter sweeps):
 When the user wants to compare results across multiple parameter values (sensitivity analysis, parameter sweep, grid search):
@@ -57,8 +54,7 @@ IMPORTANT: Only override base_parameters for non-swept parameters the user expli
 
 TOOL_GUIDE = """
 Available tools:
-- check_simulation: Check if a simulation has cached results or is running. ALWAYS call this first before triggering.
-- trigger_simulation: Submit a new simulation to the pipeline. Only call when check_simulation returns "not_found".
+- run_simulation: Run a Monte Carlo simulation. Checks cache first — returns results immediately if available, otherwise triggers a new job. Call once per request, never in a loop.
 - create_matrix: Create a parameter sweep matrix for sensitivity analysis.
 - list_distributions: List fitted distribution specs for simulation types.
 - query_analytics: Ask natural language questions about hospital data and past simulation results via Genie.

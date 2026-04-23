@@ -18,5 +18,5 @@ class AgentState(MessagesState):
     # Genie query result (populated by genie node)
     genie_result: dict[str, Any] | None = None
 
-    # Simulation polling counter — prevents infinite check_simulation loops
+    # Simulation polling counter — prevents infinite run_simulation loops
     simulation_poll_count: int = 0

@@ -77,17 +77,17 @@ async def tool_executor_node(state: AgentState, config: RunnableConfig) -> dict:
             )
             continue
 
-        # Enforce polling limit for check_simulation
-        if tool_name == "check_simulation" and poll_count >= _MAX_SIMULATION_POLLS:
+        # Enforce polling limit for run_simulation (safety net — should rarely trigger)
+        if tool_name == "run_simulation" and poll_count >= _MAX_SIMULATION_POLLS:
             tool_messages.append(
                 ToolMessage(
                     content=json.dumps({
                         "status": "poll_limit_reached",
                         "message": (
-                            "Polling limit reached. The simulation pipeline is still "
-                            "processing. Tell the user the simulation is running and "
-                            "they can ask again in a few minutes to check progress. "
-                            "Do NOT call check_simulation again."
+                            "You have already called run_simulation multiple times. "
+                            "The simulation pipeline is processing. Tell the user "
+                            "the simulation is running and they can ask again in a "
+                            "few minutes. Do NOT call run_simulation again."
                         ),
                     }),
                     tool_call_id=tool_call["id"],
@@ -98,8 +98,8 @@ async def tool_executor_node(state: AgentState, config: RunnableConfig) -> dict:
         try:
             result = await tool_map[tool_name].ainvoke(tool_args)
 
-            # Track check_simulation polls for non-completed statuses
-            if tool_name == "check_simulation":
+            # Track run_simulation calls for non-completed statuses
+            if tool_name == "run_simulation":
                 try:
                     parsed_check = json.loads(result)
                     if parsed_check.get("status") in ("submitted", "running", "not_found"):

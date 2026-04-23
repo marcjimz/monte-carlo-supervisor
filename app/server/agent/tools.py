@@ -15,47 +15,26 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-async def check_simulation(
+async def run_simulation(
     simulation_type: str,
     parameters: str = "{}",
     num_simulations: int = 10000,
     seed: int = 42,
 ) -> str:
-    """Check if a Monte Carlo simulation has cached results or is running.
+    """Run a Monte Carlo simulation — checks cache first, triggers if needed.
 
-    Returns JSON with status ('completed', 'running', or 'not_found') and
-    results if completed. ALWAYS call this before trigger_simulation.
+    This is the single entry point for simulations. It automatically:
+    1. Normalizes parameters (fills in defaults for omitted values).
+    2. Checks for a cached COMPLETED run with the same parameters.
+    3. If cached, returns results immediately.
+    4. If not cached, triggers a new simulation job and returns "submitted".
 
-    Args:
-        simulation_type: The type of simulation (e.g. encounter_cost_h2).
-        parameters: JSON string of simulation parameters.
-        num_simulations: Number of Monte Carlo trials (default 10000).
-        seed: Random seed for reproducibility (default 42).
-    """
-    from server.services import simulation_service
-
-    params = json.loads(parameters) if isinstance(parameters, str) else parameters
-    result = await simulation_service.check_simulation(
-        simulation_type, params, num_simulations, seed,
-    )
-    return json.dumps(result)
-
-
-@tool
-async def trigger_simulation(
-    simulation_type: str,
-    parameters: str = "{}",
-    num_simulations: int = 10000,
-    seed: int = 42,
-) -> str:
-    """Trigger a new Monte Carlo simulation by writing to Delta.
-
-    Only call when check_simulation returns 'not_found'. After triggering,
-    use check_simulation to poll for completion.
+    Do NOT call this in a loop. Call it once; if results are cached you get
+    them back immediately, otherwise tell the user a simulation was started.
 
     Args:
-        simulation_type: The type of simulation (e.g. encounter_cost_h2).
-        parameters: JSON string of simulation parameters.
+        simulation_type: The type of simulation (e.g. cost_comparison, system_cost_roi).
+        parameters: JSON string of simulation parameters. Use '{}' for defaults.
         num_simulations: Number of Monte Carlo trials (default 10000).
         seed: Random seed for reproducibility (default 42).
     """
@@ -153,8 +132,7 @@ async def query_analytics(question: str) -> str:
 def get_all_tools() -> list:
     """Return all tools for the agent."""
     return [
-        check_simulation,
-        trigger_simulation,
+        run_simulation,
         create_matrix,
         list_distributions,
         query_analytics,

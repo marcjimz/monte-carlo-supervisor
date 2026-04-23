@@ -228,19 +228,18 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
         await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "completed", "cell_id": str(cell["id"])}
 
-    elif status == "running":
+    elif status in ("running", "submitted"):
         run_id = result.get("run_id")
         await db.execute(
             "UPDATE matrix_cells SET status = 'running', run_id = $1, updated_at = NOW() WHERE id = $2",
             run_id, cell["id"],
         )
-        # Link real run_id from Delta (not a placeholder)
         await _link_run_to_analysis(matrix, run_id)
         await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "running", "cell_id": str(cell["id"])}
 
     elif status == "not_found":
-        # Trigger a new simulation — don't link the placeholder, it's temporary
+        # Trigger a new simulation (writes to Delta + launches job)
         await simulation_service.trigger_simulation(
             matrix["simulation_type"], params, matrix["num_simulations"], matrix["seed"],
         )

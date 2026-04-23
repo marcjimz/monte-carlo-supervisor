@@ -14,6 +14,35 @@ from server.services.sql_client import execute_query
 logger = logging.getLogger(__name__)
 
 
+def normalize_parameters(simulation_type: str, parameters: dict) -> dict:
+    """Merge user-supplied parameters with defaults, strip unknown keys, cast types.
+
+    Ensures that ``{}`` and ``{"member_count": 50000, "virtual_penetration": 0.3}``
+    produce the exact same dict (and therefore the same hash) for ``cost_comparison``.
+    """
+    try:
+        from mc_supervisor.monte_carlo import config_loader
+
+        defaults = config_loader.get_default_params(simulation_type)
+    except (ImportError, ValueError):
+        # Config not available — return as-is (e.g. during tests)
+        return parameters
+
+    merged: dict = {}
+    for key, default_value in defaults.items():
+        raw = parameters.get(key, default_value)
+        # Cast to the same type as the default
+        if isinstance(default_value, bool):
+            merged[key] = bool(raw)
+        elif isinstance(default_value, int):
+            merged[key] = int(raw)
+        elif isinstance(default_value, float):
+            merged[key] = float(raw)
+        else:
+            merged[key] = raw
+    return merged
+
+
 async def check_simulation(
     simulation_type: str,
     parameters: dict,
@@ -31,6 +60,8 @@ async def check_simulation(
     import asyncio
 
     from server.config import get_settings
+
+    parameters = normalize_parameters(simulation_type, parameters)
 
     settings = get_settings()
     catalog = settings.uc_catalog
@@ -75,7 +106,7 @@ async def check_simulation(
         return {
             "status": "not_found",
             "simulation_type": simulation_type,
-            "message": "No matching simulation found. Call trigger_simulation to start one.",
+            "message": "No matching simulation found.",
         }
 
     run = rows[0]
@@ -106,7 +137,7 @@ async def check_simulation(
             "status": "running",
             "run_id": run_id,
             "simulation_type": simulation_type,
-            "message": "Simulation is running. Call check_simulation again to poll.",
+            "message": "Simulation is currently running. Check back in a few minutes.",
         }
 
     if run_status == "SUBMITTED":
@@ -114,7 +145,7 @@ async def check_simulation(
             "status": "submitted",
             "run_id": run_id,
             "simulation_type": simulation_type,
-            "message": "Simulation is queued. Keep polling with check_simulation.",
+            "message": "Simulation is queued. Check back in a few minutes.",
         }
 
     # FAILED
@@ -122,7 +153,7 @@ async def check_simulation(
         "status": "failed",
         "run_id": run_id,
         "simulation_type": simulation_type,
-        "message": "Simulation failed. Call trigger_simulation to retry.",
+        "message": "Simulation failed. You can try again.",
     }
 
 
@@ -141,6 +172,9 @@ async def submit_to_delta(
 
     from server.config import get_settings
     from server.services.sql_client import execute_query
+
+    if isinstance(parameters, dict):
+        parameters = normalize_parameters(simulation_type, parameters)
 
     settings = get_settings()
     catalog = settings.uc_catalog
