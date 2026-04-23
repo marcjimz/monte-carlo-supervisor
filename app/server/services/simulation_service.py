@@ -222,16 +222,25 @@ async def trigger_simulation(
     from server.config import get_settings
     from server.services.sql_client import _get_client
 
-    result = await submit_to_delta(simulation_type, parameters, num_simulations, seed)
+    # Normalize before submit so we can pass the same values to the job
+    normalized = normalize_parameters(simulation_type, parameters)
+    result = await submit_to_delta(simulation_type, normalized, num_simulations, seed)
 
     # Explicitly launch the simulation job via SDK
     settings = get_settings()
     if settings.simulation_job_id:
         try:
             client = _get_client(settings)
+            params_json = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
             job_run = await asyncio.to_thread(
                 client.jobs.run_now,
                 job_id=int(settings.simulation_job_id),
+                job_parameters={
+                    "simulation_type": simulation_type,
+                    "parameters": params_json,
+                    "num_simulations": str(num_simulations),
+                    "seed": str(seed),
+                },
             )
             result["job_run_id"] = str(job_run.run_id)
             logger.info("Launched simulation job run %s", job_run.run_id)
