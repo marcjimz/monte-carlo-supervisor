@@ -30,6 +30,12 @@ variables:
   dashboard_id:
     description: "Dashboard ID (empty = use DAB-managed dashboard)"
     default: ""
+  pghost:
+    description: "Lakebase Postgres host (set by configure_app or manually)"
+    default: ""
+  pguser:
+    description: "Lakebase Postgres user (set by configure_app or manually)"
+    default: ""
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

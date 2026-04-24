@@ -43,7 +43,11 @@ resources:
             value: ${resources.jobs.monte_carlo_pipeline.id}
           - name: DASHBOARD_ID
             value: ${var.dashboard_id}
-          # Lakebase — PGHOST and PGUSER auto-populated by lakebase-db resource binding
+          # Lakebase connection
+          - name: PGHOST
+            value: ${var.pghost}
+          - name: PGUSER
+            value: ${var.pguser}
           - name: PGDATABASE
             value: "mcapp"
           - name: GENIE_SPACE_ID
