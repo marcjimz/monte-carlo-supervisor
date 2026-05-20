@@ -4,16 +4,12 @@ bundle:
 variables:
   catalog:
     description: "Unity Catalog catalog name"
-    default: "monte_carlo_supervisor_catalog"
+    default: "marcjimz_ih_demo_v1_catalog"
   schema:
     description: "Unity Catalog schema name"
     default: "hospital_data"
-  warehouse_id:
-    description: "SQL Warehouse ID for queries and Genie Space"
-    lookup:
-      warehouse: "Serverless Starter Warehouse"
   genie_space_id:
-    description: "Genie Space ID for agent analytics queries (empty = create new)"
+    description: "Genie Space ID for agent analytics queries (empty = discover at runtime)"
     default: ""
   skip_synthetic:
     description: "Skip synthetic data generation (true for customer deployments)"
@@ -21,21 +17,9 @@ variables:
   metric_view:
     description: "Fully qualified metric view name (e.g. gold_dev.core.project_accelerate_encounters_metrics)"
     default: ""
-  skip_genie:
-    description: "Skip Genie Space deployment (true if customer has existing space)"
-    default: "false"
   skip_views:
     description: "Skip base/metric view creation (true if customer has existing metric view)"
     default: "false"
-  dashboard_id:
-    description: "Dashboard ID (empty = use DAB-managed dashboard)"
-    default: ""
-  pghost:
-    description: "Lakebase Postgres host (set by configure_app or manually)"
-    default: ""
-  pguser:
-    description: "Lakebase Postgres user (set by configure_app or manually)"
-    default: ""
 
 workspace:
   root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}

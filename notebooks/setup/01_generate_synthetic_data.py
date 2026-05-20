@@ -32,6 +32,18 @@ print(f"Skip synthetic data: {skip_synthetic}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
 print(f"Schema {catalog}.{schema} ready.")
 
+# Grant UC privileges to app service principal (needed for SQL warehouse queries)
+try:
+    app_sp = dbutils.widgets.get("app_sp_client_id")
+except Exception:
+    app_sp = ""
+if app_sp:
+    spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app_sp}`")
+    spark.sql(f"GRANT USE SCHEMA ON SCHEMA {catalog}.{schema} TO `{app_sp}`")
+    spark.sql(f"GRANT SELECT ON SCHEMA {catalog}.{schema} TO `{app_sp}`")
+    spark.sql(f"GRANT MODIFY ON SCHEMA {catalog}.{schema} TO `{app_sp}`")
+    print(f"Granted USE CATALOG, USE SCHEMA, SELECT, MODIFY to {app_sp}")
+
 # COMMAND ----------
 
 if skip_synthetic:

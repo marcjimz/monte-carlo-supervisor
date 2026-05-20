@@ -1,10 +1,12 @@
 # Databricks notebook source
 # COMMAND ----------
 # MAGIC %md
-# MAGIC # 02 — Deploy Genie Space
+# MAGIC # 02 — Deploy Genie Space + Dashboard Publish
 # MAGIC
-# MAGIC Deploys or updates the Women's Health Analytics Genie Space using a
+# MAGIC Deploys or updates the Encounter Analytics Genie Space using a
 # MAGIC serialized JSON export and the `genie_import_export` module.
+# MAGIC Then grants the app SP CAN_MANAGE on the Genie Space and
+# MAGIC enables dashboard embedding + publish.
 # MAGIC
 # MAGIC **Pattern**: [Reusable IP — Genie Import/Export](https://github.com/databricks-field-eng/reusable-ip-ai)
 # MAGIC
@@ -17,27 +19,19 @@ dbutils.widgets.text("catalog", "monte_carlo_supervisor_catalog")
 dbutils.widgets.text("schema", "hospital_data")
 dbutils.widgets.text("warehouse_id", "")
 dbutils.widgets.text("target_genie_space_id", "")
-dbutils.widgets.text("skip_genie", "false", "Skip Genie Space deployment (use existing)")
+dbutils.widgets.text("app_sp_client_id", "", "App Service Principal Client ID")
+dbutils.widgets.text("lakebase_project", "", "Lakebase Project ID (unused — app self-provisions)")
 
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
 warehouse_id = dbutils.widgets.get("warehouse_id")
 target_genie_space_id = dbutils.widgets.get("target_genie_space_id")
-skip_genie = dbutils.widgets.get("skip_genie").lower() in ("true", "1", "yes")
-
+app_sp_client_id = dbutils.widgets.get("app_sp_client_id")
 print(f"Catalog                : {catalog}")
 print(f"Schema                 : {schema}")
 print(f"Warehouse ID           : {warehouse_id}")
 print(f"Target Genie Space ID  : {target_genie_space_id or '(will create new)'}")
-print(f"Skip Genie deployment  : {skip_genie}")
-
-# COMMAND ----------
-
-if skip_genie:
-    print(f"Skipping Genie deployment — using existing space: {target_genie_space_id}")
-    dbutils.jobs.taskValues.set(key="genie_space_id", value=target_genie_space_id)
-    dbutils.jobs.taskValues.set(key="warehouse_id", value=warehouse_id)
-    dbutils.notebook.exit(f"SKIPPED: using existing Genie Space {target_genie_space_id}")
+print(f"App SP Client ID       : {app_sp_client_id or '(not set)'}")
 
 # COMMAND ----------
 # MAGIC %md
@@ -148,7 +142,7 @@ else:
     # We need to find the new space by listing
     import requests
     token = _ctx.apiToken().get()
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     resp = requests.get(
         f"{host}/api/2.0/genie/spaces",
         headers=headers,
@@ -157,11 +151,141 @@ else:
     space_id = ""
     if resp.ok:
         for s in resp.json().get("spaces", []):
-            if s.get("title") == space_json.get("title", "Women's Health Analytics"):
+            if s.get("title") == space_json.get("title", "Encounter Analytics"):
                 space_id = s.get("space_id", "")
                 break
 
 print(f"Genie Space ID: {space_id}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Grant Genie CAN_MANAGE to App SP
+
+# COMMAND ----------
+
+if not "headers" in dir():
+    token = _ctx.apiToken().get()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+
+if space_id and app_sp_client_id:
+    genie_perm_resp = requests.patch(
+        f"{host}/api/2.0/permissions/genie/{space_id}",
+        headers=headers,
+        json={
+            "access_control_list": [
+                {
+                    "service_principal_name": app_sp_client_id,
+                    "permission_level": "CAN_MANAGE",
+                }
+            ]
+        },
+    )
+    print(f"Genie CAN_MANAGE for app SP: {'granted' if genie_perm_resp.ok else f'WARNING: {genie_perm_resp.status_code}: {genie_perm_resp.text}'}")
+else:
+    if not space_id:
+        print("Genie CAN_MANAGE: skipped (no Genie Space ID)")
+    if not app_sp_client_id:
+        print("Genie CAN_MANAGE: skipped (no app SP client ID)")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Grant UC Permissions to App SP
+# MAGIC
+# MAGIC The app SP needs USE_CATALOG, USE_SCHEMA, SELECT (for reads) and
+# MAGIC MODIFY (for simulation_runs/results writes).
+
+# COMMAND ----------
+
+if app_sp_client_id:
+    for grant_stmt in [
+        f"GRANT USE CATALOG ON CATALOG {catalog} TO `{app_sp_client_id}`",
+        f"GRANT USE SCHEMA ON SCHEMA {catalog}.{schema} TO `{app_sp_client_id}`",
+        f"GRANT SELECT ON SCHEMA {catalog}.{schema} TO `{app_sp_client_id}`",
+    ]:
+        try:
+            spark.sql(grant_stmt)
+            print(f"  {grant_stmt.split('GRANT ')[1].split(' TO')[0]}: granted")
+        except Exception as e:
+            if "already has" in str(e).lower() or "ALREADY_EXISTS" in str(e):
+                print(f"  {grant_stmt.split('GRANT ')[1].split(' TO')[0]}: already granted")
+            else:
+                print(f"  WARNING: {e}")
+
+    for table in ["simulation_runs", "simulation_results"]:
+        fqn = f"{catalog}.{schema}.{table}"
+        try:
+            spark.sql(f"GRANT MODIFY ON TABLE {fqn} TO `{app_sp_client_id}`")
+            print(f"  MODIFY on {fqn}: granted")
+        except Exception as e:
+            if "already has" in str(e).lower() or "ALREADY_EXISTS" in str(e):
+                print(f"  MODIFY on {fqn}: already granted")
+            else:
+                print(f"  MODIFY on {fqn}: WARNING: {e}")
+else:
+    print("UC grants: skipped (no app SP client ID)")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Dashboard: Enable Embedding & Publish
+# MAGIC
+# MAGIC Look up the DAB-deployed dashboard by name, enable workspace-level
+# MAGIC embedding, and publish with embed credentials.
+
+# COMMAND ----------
+
+dashboard_display_name = "Women's Health Analytics"
+dashboard_id = ""
+
+print(f"Looking up dashboard: {dashboard_display_name}")
+page_token = ""
+while True:
+    params = {"page_size": 100}
+    if page_token:
+        params["page_token"] = page_token
+    dash_resp = requests.get(f"{host}/api/2.0/lakeview/dashboards", headers=headers, params=params)
+    if not dash_resp.ok:
+        print(f"  WARNING: {dash_resp.status_code}: {dash_resp.text}")
+        break
+    dash_data = dash_resp.json()
+    for d in dash_data.get("dashboards", []):
+        name = d.get("display_name", "")
+        if name == dashboard_display_name or name.startswith(f"{dashboard_display_name} ["):
+            dashboard_id = d.get("dashboard_id", "")
+            print(f"  Found: {name} (ID: {dashboard_id})")
+            break
+    if dashboard_id:
+        break
+    page_token = dash_data.get("next_page_token", "")
+    if not page_token:
+        break
+
+if not dashboard_id:
+    print("  WARNING: Dashboard not found — embedding/publish skipped.")
+else:
+    # Enable embedding (workspace setting — idempotent)
+    embed_resp = requests.patch(
+        f"{host}/api/2.0/settings/types/aibi_dash_embed_ws_acc_policy/names/default",
+        headers=headers,
+        json={
+            "allow_missing": True,
+            "field_mask": "aibi_dashboard_embedding_access_policy.access_policy_type",
+            "setting": {
+                "setting_name": "default",
+                "aibi_dashboard_embedding_access_policy": {
+                    "access_policy_type": "ALLOW_ALL_DOMAINS"
+                }
+            }
+        },
+    )
+    print(f"  Embedding: {'enabled' if embed_resp.ok else f'WARNING: {embed_resp.status_code}'}")
+
+    # Publish
+    pub_resp = requests.post(
+        f"{host}/api/2.0/lakeview/dashboards/{dashboard_id}/published",
+        headers=headers,
+        json={"embed_credentials": True, "warehouse_id": warehouse_id},
+    )
+    print(f"  Publish: {'OK' if pub_resp.ok else f'WARNING: {pub_resp.status_code}'}")
 
 # COMMAND ----------
 # MAGIC %md
@@ -173,3 +297,4 @@ dbutils.jobs.taskValues.set(key="genie_space_id", value=space_id)
 dbutils.jobs.taskValues.set(key="warehouse_id", value=warehouse_id)
 print(f"\nGenie Space ID : {space_id}")
 print(f"Warehouse ID   : {warehouse_id}")
+print(f"Dashboard ID   : {dashboard_id}")

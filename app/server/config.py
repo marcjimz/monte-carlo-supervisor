@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Databricks
     databricks_host: str = ""
-    uc_catalog: str = "monte_carlo_supervisor_catalog"
+    uc_catalog: str = "marcjimz_ih_demo_v1_catalog"
     uc_schema: str = "hospital_data"
     supervisor_endpoint: str = "databricks-claude-opus-4-7"
     executor_endpoint: str = "databricks-claude-sonnet-4"
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         return self
 
     # Lakebase Autoscaling (for credential generation)
-    lakebase_project: str = "mc-supervisor-db"
+    lakebase_project: str = "mc-supervisor-db-v4"
     lakebase_branch: str = "production"
     lakebase_endpoint: str = "primary"
 

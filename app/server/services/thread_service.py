@@ -23,8 +23,10 @@ def _get_graph_and_config():
     from server.agent.graph import build_graph
     from server.agent.models import get_supervisor_model
     from server.config import get_settings
+    from server.services.genie_discovery import get_genie_space_id
 
     settings = get_settings()
+    resolved_space_id = get_genie_space_id()
 
     model_config = ModelConfig(
         supervisor_endpoint=os.environ.get(
@@ -35,7 +37,7 @@ def _get_graph_and_config():
         ),
     )
 
-    genie_config = GenieConfig(space_id=settings.genie_space_id)
+    genie_config = GenieConfig(space_id=resolved_space_id)
 
     agent_config = AgentConfig(
         model=model_config,
@@ -48,7 +50,7 @@ def _get_graph_and_config():
 
     # Build Genie client if configured
     genie_client = None
-    if settings.genie_space_id:
+    if resolved_space_id:
         from databricks.sdk import WorkspaceClient
 
         if settings.is_databricks_app:
@@ -60,7 +62,7 @@ def _get_graph_and_config():
         if host and not host.startswith("http"):
             host = f"https://{host}"
         genie_client = GenieClient(
-            space_id=settings.genie_space_id,
+            space_id=resolved_space_id,
             databricks_host=host,
             auth_headers=w.config.authenticate(),
             config=genie_config,

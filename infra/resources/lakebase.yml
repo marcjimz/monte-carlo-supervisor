@@ -1,8 +1,11 @@
 resources:
   postgres_projects:
     monte_carlo_db:
-      project_id: "mc-supervisor-db"
+      project_id: "mc-supervisor-db-v4"
       display_name: "Monte Carlo App"
       pg_version: 17
       # A default 'production' branch with a read-write 'primary' endpoint
       # is auto-provisioned when the project is created.
+      permissions:
+        - level: CAN_MANAGE
+          service_principal_name: ${resources.apps.monte_carlo_ui.service_principal_client_id}

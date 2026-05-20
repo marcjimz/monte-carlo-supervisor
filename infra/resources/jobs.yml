@@ -57,13 +57,12 @@ resources:
         - name: seed
           default: "42"
 
-    setup_pipeline:
-      name: "monte-carlo-setup-pipeline"
-      description: "One-click setup: loads data, creates schema objects, deploys Genie Space, configures app"
+    data_pipeline:
+      name: "monte-carlo-data-pipeline"
+      description: "Load data, create tables/views, fit distributions"
       tags:
         project: monte-carlo-supervisor
       tasks:
-        # Phase 1: Data (depends on DAB-managed catalog/schema)
         - task_key: load_data
           notebook_task:
             notebook_path: ../../notebooks/setup/01_generate_synthetic_data.py
@@ -71,18 +70,16 @@ resources:
               catalog: ${var.catalog}
               schema: ${var.schema}
               skip_synthetic: ${var.skip_synthetic}
+              app_sp_client_id: ${resources.apps.monte_carlo_ui.service_principal_client_id}
 
-        # Phase 2: Schema objects (SQL files)
         - task_key: create_sim_tables
           depends_on:
             - task_key: load_data
-          sql_task:
-            file:
-              path: ../../infra/sql/create_simulation_tables.sql
-            parameters:
+          notebook_task:
+            notebook_path: ../../notebooks/setup/01a_create_simulation_tables.py
+            base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-            warehouse_id: ${var.warehouse_id}
 
         - task_key: create_views
           depends_on:
@@ -92,10 +89,9 @@ resources:
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-              warehouse_id: ${var.warehouse_id}
+              warehouse_id: ${resources.sql_warehouses.mc_warehouse.id}
               skip_views: ${var.skip_views}
 
-        # Phase 3: Computation
         - task_key: fit_distributions
           depends_on:
             - task_key: load_data
@@ -107,29 +103,26 @@ resources:
               schema: ${var.schema}
               metric_view: ${var.metric_view}
 
-        # Phase 4: Genie Space (import from versioned JSON export)
-        - task_key: deploy_genie
+        - task_key: activate_trigger
           depends_on:
-            - task_key: create_views
             - task_key: create_sim_tables
+          notebook_task:
+            notebook_path: ../../notebooks/setup/05_activate_trigger.py
+            base_parameters:
+              simulation_job_id: ${resources.jobs.monte_carlo_pipeline.id}
+
+    genie_import:
+      name: "monte-carlo-genie-import"
+      description: "Deploy Genie Space + dashboard publish/embed"
+      tags:
+        project: monte-carlo-supervisor
+      tasks:
+        - task_key: deploy_genie
           notebook_task:
             notebook_path: ../../notebooks/setup/02_deploy_genie_space.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-              warehouse_id: ${var.warehouse_id}
+              warehouse_id: ${resources.sql_warehouses.mc_warehouse.id}
               target_genie_space_id: ${var.genie_space_id}
-              skip_genie: ${var.skip_genie}
-
-        # Phase 5: App wiring (runtime-only: Lakebase setup, permissions, dashboard)
-        - task_key: configure_app
-          depends_on:
-            - task_key: deploy_genie
-            - task_key: fit_distributions
-          notebook_task:
-            notebook_path: ../../notebooks/setup/04_configure_app.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-              app_name: ${resources.apps.monte_carlo_ui.name}
-              lakebase_project: ${resources.postgres_projects.monte_carlo_db.project_id}
+              app_sp_client_id: ${resources.apps.monte_carlo_ui.service_principal_client_id}

@@ -7,27 +7,16 @@ command:
   - "8000"
 
 env:
-  - name: UC_CATALOG
-    value: monte_carlo_supervisor_catalog
-  - name: UC_SCHEMA
-    value: hospital_data
   - name: SEED_DEMO_DATA
     value: "true"
   - name: SUPERVISOR_ENDPOINT
     value: "databricks-claude-opus-4-7"
   - name: EXECUTOR_ENDPOINT
     value: "databricks-claude-sonnet-4"
-  - name: SQL_WAREHOUSE_ID
-    value: "39aeb4605bfae41b"
-  - name: SIMULATION_JOB_ID
-    value: ""
   - name: PGDATABASE
     value: "mcapp"
-  - name: PGHOST
-    value: ""
-  - name: PGUSER
-    value: ""
-  - name: GENIE_SPACE_ID
-    value: ""
-  - name: DASHBOARD_ID
-    value: ""
+  # Resource binding references — resolved at runtime by the platform
+  - name: SQL_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: SIMULATION_JOB_ID
+    valueFrom: simulation-job

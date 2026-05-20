@@ -12,10 +12,10 @@ resources:
             permission: CAN_MANAGE_RUN
         - name: sql-warehouse
           sql_warehouse:
-            id: ${var.warehouse_id}
+            id: ${resources.sql_warehouses.mc_warehouse.id}
             permission: CAN_USE
-        # Lakebase resource binding removed — PGHOST/PGUSER injected by setup pipeline (04_configure_app)
-        # because the database must be created before the binding can reference it.
+        # Lakebase: app self-provisions via db.py _ensure_database()
+        # (postgres resource binding is private preview and requires explicit branch resource)
       config:
         command:
           - uvicorn
@@ -38,17 +38,11 @@ resources:
             value: "databricks-claude-sonnet-4"
           # DAB-resolved IDs
           - name: SQL_WAREHOUSE_ID
-            value: ${var.warehouse_id}
+            value: ${resources.sql_warehouses.mc_warehouse.id}
           - name: SIMULATION_JOB_ID
             value: ${resources.jobs.monte_carlo_pipeline.id}
           - name: DASHBOARD_ID
-            value: ${var.dashboard_id}
-          # Lakebase connection
-          - name: PGHOST
-            value: ${var.pghost}
-          - name: PGUSER
-            value: ${var.pguser}
+            value: ${resources.dashboards.wh_analytics.id}
+          # Lakebase connection (PGHOST/PGUSER auto-discovered by app at runtime)
           - name: PGDATABASE
             value: "mcapp"
-          - name: GENIE_SPACE_ID
-            value: ${var.genie_space_id}
