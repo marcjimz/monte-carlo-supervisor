@@ -21,24 +21,28 @@ dbutils.widgets.text("schema", "hospital_data", "Schema Name")
 
 # COMMAND ----------
 
-# Add bundle root to sys.path so `src` package is importable
-import sys
+# Install project package from bundled wheel and restart Python
+import subprocess, sys
 _nb = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 _root = "/Workspace" + "/".join(_nb.split("/")[:-3])
-if _root not in sys.path:
-    sys.path.insert(0, _root)
+subprocess.check_call([sys.executable, "-m", "pip", "install", f"{_root}/dist/monte_carlo_supervisor-1.0.0-py3-none-any.whl", "-q", "--disable-pip-version-check"])
+
+# COMMAND ----------
+
+# Restart Python REPL to propagate installed package to Spark executors
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
 import json
 import uuid
 
-from src.databricks.monte_carlo.engine import get_available_simulation_types
-from src.databricks.monte_carlo.config_loader import (
+from mc_supervisor.monte_carlo.engine import get_available_simulation_types
+from mc_supervisor.monte_carlo.config_loader import (
     get_required_distributions,
     get_default_distribution_specs,
 )
-from src.databricks.monte_carlo.results import (
+from mc_supervisor.monte_carlo.results import (
     check_cache,
     compute_cache_key,
     get_latest_distribution_version,
@@ -48,13 +52,35 @@ from src.databricks.monte_carlo.results import (
 
 # COMMAND ----------
 
-# Read widget values
-simulation_type = dbutils.widgets.get("simulation_type")
-parameters_json = dbutils.widgets.get("parameters")
-num_simulations = int(dbutils.widgets.get("num_simulations"))
-seed = int(dbutils.widgets.get("seed"))
+# --- Dispatch-aware parameter loading ---
+dispatch_mode = None
+dispatch_run_id = None
+dispatch_params_hash = None
+
+try:
+    dispatch_mode = dbutils.jobs.taskValues.get("dispatch", "dispatch_mode", debugValue=None)
+except Exception:
+    pass
+
 catalog = dbutils.widgets.get("catalog")
 schema = dbutils.widgets.get("schema")
+
+if dispatch_mode:
+    simulation_type = dbutils.jobs.taskValues.get("dispatch", "simulation_type")
+    parameters_json = dbutils.jobs.taskValues.get("dispatch", "parameters")
+    seed = int(dbutils.jobs.taskValues.get("dispatch", "seed"))
+    num_simulations = int(dbutils.jobs.taskValues.get("dispatch", "num_simulations"))
+    if dispatch_mode == "table_trigger":
+        dispatch_run_id = dbutils.jobs.taskValues.get("dispatch", "run_id")
+        dispatch_params_hash = dbutils.jobs.taskValues.get("dispatch", "params_hash")
+    print(f"Dispatch mode={dispatch_mode}, type={simulation_type}")
+else:
+    # Legacy: read from widgets (direct jobs.run_now without dispatch)
+    simulation_type = dbutils.widgets.get("simulation_type")
+    parameters_json = dbutils.widgets.get("parameters")
+    num_simulations = int(dbutils.widgets.get("num_simulations"))
+    seed = int(dbutils.widgets.get("seed"))
+    print(f"Legacy widget mode, type={simulation_type}")
 
 print(f"Simulation type : {simulation_type}")
 print(f"Parameters      : {parameters_json}")
@@ -160,25 +186,30 @@ if cache_result is not None:
 
 print("[CACHE MISS] No completed run found for this configuration.")
 
-run_id = str(uuid.uuid4())
-print(f"Generated new run_id: {run_id}")
+if dispatch_mode == "table_trigger" and dispatch_run_id:
+    run_id = dispatch_run_id
+    params_hash = dispatch_params_hash
+    print(f"Reusing dispatch run_id={run_id} (status already RUNNING)")
+else:
+    run_id = str(uuid.uuid4())
+    print(f"Generated new run_id: {run_id}")
 
-try:
-    write_run_metadata(
-        spark=spark,
-        catalog=catalog,
-        schema=schema,
-        run_id=run_id,
-        simulation_type=simulation_type,
-        parameters=parameters_json,
-        params_hash=params_hash,
-        seed=seed,
-        num_simulations=num_simulations,
-    )
-    print(f"Run metadata written to {catalog}.{schema}.simulation_runs")
-except Exception as exc:
-    print(f"[ERROR] Failed to write run metadata: {exc}")
-    raise
+    try:
+        write_run_metadata(
+            spark=spark,
+            catalog=catalog,
+            schema=schema,
+            run_id=run_id,
+            simulation_type=simulation_type,
+            parameters=parameters_json,
+            params_hash=params_hash,
+            seed=seed,
+            num_simulations=num_simulations,
+        )
+        print(f"Run metadata written to {catalog}.{schema}.simulation_runs")
+    except Exception as exc:
+        print(f"[ERROR] Failed to write run metadata: {exc}")
+        raise
 
 # COMMAND ----------
 

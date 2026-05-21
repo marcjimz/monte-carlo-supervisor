@@ -234,13 +234,12 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
             "UPDATE matrix_cells SET status = 'running', run_id = $1, updated_at = NOW() WHERE id = $2",
             run_id, cell["id"],
         )
-        # Link real run_id from Delta (not a placeholder)
         await _link_run_to_analysis(matrix, run_id)
         await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
         return {"status": "running", "cell_id": str(cell["id"])}
 
-    elif status == "not_found":
-        # Trigger a new simulation — don't link the placeholder, it's temporary
+    else:
+        # not_found — trigger a new simulation (writes to Delta + launches job)
         await simulation_service.trigger_simulation(
             matrix["simulation_type"], params, matrix["num_simulations"], matrix["seed"],
         )
@@ -249,13 +248,6 @@ async def _process_cell(matrix: dict, cell: dict) -> dict:
             cell["id"],
         )
         return {"status": "triggered", "cell_id": str(cell["id"])}
-
-    else:
-        await db.execute(
-            "UPDATE matrix_cells SET status = 'failed', updated_at = NOW() WHERE id = $1",
-            cell["id"],
-        )
-        return {"status": "failed", "cell_id": str(cell["id"])}
 
 
 def _extract_metric(
@@ -372,7 +364,11 @@ async def run_cell(matrix_id: UUID, cell_id: UUID) -> dict:
 
 
 async def poll_status(matrix_id: UUID) -> dict | None:
-    """Re-check all non-completed cells and return updated matrix."""
+    """Re-check all non-completed cells and return updated matrix.
+
+    Uses batch SQL queries (2 total: one for statuses, one for results)
+    instead of per-cell queries to minimize warehouse round-trips.
+    """
     matrix = await get_matrix(matrix_id)
     if not matrix:
         return None
@@ -383,11 +379,95 @@ async def poll_status(matrix_id: UUID) -> dict | None:
         if c["status"] in ("running", "queued", "pending")
     ]
 
+    if not active_cells:
+        return matrix
+
+    # Pre-compute hashes and batch-check all cells in 2 SQL queries
+    batch_inputs = []
+    cell_hash_map: dict[str, list[dict]] = {}  # hash → list of cells (may share hash)
     for cell in active_cells:
-        try:
-            await _process_cell(matrix, cell)
-        except Exception as e:
-            logger.warning("Error polling cell %s: %s", cell["id"], e)
+        params = await _build_cell_params(matrix, cell["row_value"], cell["col_value"])
+        normalized = simulation_service.normalize_parameters(matrix["simulation_type"], params)
+        h = simulation_service.compute_params_hash(
+            matrix["simulation_type"], normalized, matrix["num_simulations"], matrix["seed"],
+        )
+        batch_inputs.append({
+            "params_hash": h,
+            "simulation_type": matrix["simulation_type"],
+            "num_simulations": matrix["num_simulations"],
+            "seed": matrix["seed"],
+        })
+        cell_hash_map.setdefault(h, []).append(cell)
+
+    # 2 SQL queries total (regardless of cell count)
+    batch_results = await simulation_service.check_simulations_batch(batch_inputs)
+
+    # Update cells based on batch results
+    for h, cells_for_hash in cell_hash_map.items():
+        result = batch_results.get(h, {"status": "not_found"})
+        for cell in cells_for_hash:
+            try:
+                await _update_cell_from_result(matrix, cell, result)
+            except Exception as e:
+                logger.warning("Error updating cell %s: %s", cell["id"], e)
 
     # Return refreshed matrix
     return await get_matrix(matrix_id)
+
+
+async def _update_cell_from_result(matrix: dict, cell: dict, result: dict) -> dict:
+    """Update a matrix cell based on a check_simulation result (from batch)."""
+    old_run_id = cell.get("run_id")
+    status = result.get("status", "not_found")
+
+    if status == "completed":
+        run_id = result.get("run_id")
+        mean_val, p05_val, p50_val, p95_val = _extract_metric(
+            result.get("results", []),
+            matrix["output_metric"],
+            matrix.get("output_group_key"),
+            matrix.get("output_group_value"),
+        )
+
+        # Guard: completed but no metrics → keep as running for retry
+        if mean_val is None and p05_val is None and p50_val is None and p95_val is None:
+            await db.execute(
+                "UPDATE matrix_cells SET status = 'running', run_id = $1, updated_at = NOW() WHERE id = $2",
+                run_id, cell["id"],
+            )
+            await _link_run_to_analysis(matrix, run_id)
+            return {"status": "running", "cell_id": str(cell["id"])}
+
+        await db.execute(
+            """UPDATE matrix_cells
+               SET status = 'completed', run_id = $1,
+                   result_mean = $2, result_p05 = $3, result_p50 = $4, result_p95 = $5,
+                   updated_at = NOW()
+               WHERE id = $6""",
+            run_id, mean_val, p05_val, p50_val, p95_val, cell["id"],
+        )
+        await _link_run_to_analysis(matrix, run_id)
+        await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
+        return {"status": "completed", "cell_id": str(cell["id"])}
+
+    elif status in ("running", "submitted"):
+        run_id = result.get("run_id")
+        await db.execute(
+            "UPDATE matrix_cells SET status = 'running', run_id = $1, updated_at = NOW() WHERE id = $2",
+            run_id, cell["id"],
+        )
+        await _link_run_to_analysis(matrix, run_id)
+        await _cleanup_stale_placeholder(old_run_id, run_id, matrix)
+        return {"status": "running", "cell_id": str(cell["id"])}
+
+    elif status == "not_found":
+        # During polling, don't trigger new jobs — just mark as pending
+        # (triggering should only happen via run_matrix/run_cell)
+        return {"status": "pending", "cell_id": str(cell["id"])}
+
+    else:
+        await db.execute(
+            "UPDATE matrix_cells SET status = 'failed', updated_at = NOW() WHERE id = $1",
+            cell["id"],
+        )
+        return {"status": "failed", "cell_id": str(cell["id"])}

@@ -5,21 +5,21 @@ Validates that generated configs match the AgentBricks API contract
 types from config.yaml are propagated to instructions, examples, and agents.
 """
 
-from src.databricks.agentbricks.supervisor import (
+from src.mc_supervisor.agentbricks.supervisor import (
     get_supervisor_config,
     get_supervisor_agents,
     get_supervisor_instructions,
 )
-from src.databricks.agentbricks.examples import get_supervisor_examples
-from src.databricks.genie.space_config import get_genie_space_config
-from src.databricks.genie.sample_questions import get_sample_questions
-from src.databricks.metric_views.definitions import (
+from src.mc_supervisor.agentbricks.examples import get_supervisor_examples
+from src.mc_supervisor.genie.space_config import get_genie_space_config
+from src.mc_supervisor.genie.sample_questions import get_sample_questions
+from src.mc_supervisor.metric_views.definitions import (
     get_base_view_definitions,
     get_metric_view_definitions,
 )
-from src.databricks.monte_carlo import config_loader
-from src.databricks.monte_carlo.results import compute_cache_key, get_simulation_tables_ddl
-from src.databricks.sql.connections.workspace import WorkspaceConnection
+from src.mc_supervisor.monte_carlo import config_loader
+from src.mc_supervisor.monte_carlo.results import compute_cache_key, get_simulation_tables_ddl
+from src.mc_supervisor.sql.connections.workspace import WorkspaceConnection
 
 # Dummy catalog/schema values used throughout tests
 CATALOG = "test_catalog"

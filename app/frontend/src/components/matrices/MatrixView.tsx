@@ -16,10 +16,8 @@ interface Props {
 }
 
 const SIM_TYPE_LABELS: Record<string, string> = {
-  patient_volume: "Patient Volume",
-  revenue: "Revenue Projection",
-  cost_comparison: "Cost Comparison",
-  system_cost_roi: "System Cost ROI",
+  encounter_margin: "Encounter Margin Forecast",
+  wh_margin_comparison: "WH Margin Comparison",
 };
 
 /** Format a parameter name to human-readable label. */
@@ -43,7 +41,7 @@ function formatCellValue(param: string, value: number): string {
   ) {
     return `${(value * 100).toFixed(0)}%`;
   }
-  if (param.includes("cost") || param.includes("savings") || param.includes("revenue") || param.includes("charge")) {
+  if (param.includes("cost") || param.includes("savings") || param.includes("revenue") || param.includes("charge") || param.includes("margin")) {
     if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(1)}B`;
     if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(0)}M`;
     if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;

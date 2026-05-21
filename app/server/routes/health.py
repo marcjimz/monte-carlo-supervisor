@@ -15,6 +15,11 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health():
+    from app import get_startup_errors
+
+    errors = get_startup_errors()
+    if errors:
+        return {"status": "degraded", "errors": errors}
     return {"status": "ok"}
 
 
@@ -62,10 +67,13 @@ async def simulation_types():
             if settings.databricks_host
             else ""
         )
-    if settings.genie_space_id:
-        result["genie_space_id"] = settings.genie_space_id
+    from server.services.genie_discovery import get_genie_space_id
+
+    genie_id = get_genie_space_id()
+    if genie_id:
+        result["genie_space_id"] = genie_id
         result["genie_url"] = (
-            f"https://{settings.databricks_host}/genie/rooms/{settings.genie_space_id}"
+            f"https://{settings.databricks_host}/genie/rooms/{genie_id}"
             if settings.databricks_host
             else ""
         )

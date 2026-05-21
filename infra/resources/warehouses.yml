@@ -1,0 +1,11 @@
+resources:
+  sql_warehouses:
+    mc_warehouse:
+      name: "Monte Carlo Warehouse"
+      cluster_size: "2X-Small"
+      enable_serverless_compute: true
+      auto_stop_mins: 10
+      warehouse_type: PRO
+      permissions:
+        - level: CAN_USE
+          service_principal_name: ${resources.apps.monte_carlo_ui.service_principal_client_id}

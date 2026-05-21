@@ -1,9 +1,9 @@
 """Tests for UC SQL function definitions — pure Python, no Spark required."""
 
-from src.databricks.monte_carlo import config_loader
-from src.databricks.sql.functions.monte_carlo.check_simulation import CheckSimulationFunction
-from src.databricks.sql.functions.monte_carlo.trigger_simulation import TriggerSimulationFunction
-from src.databricks.sql.functions.monte_carlo.registry import MonteCarloRegistry
+from src.mc_supervisor.monte_carlo import config_loader
+from src.mc_supervisor.sql.functions.monte_carlo.check_simulation import CheckSimulationFunction
+from src.mc_supervisor.sql.functions.monte_carlo.trigger_simulation import TriggerSimulationFunction
+from src.mc_supervisor.sql.functions.monte_carlo.registry import MonteCarloRegistry
 
 CATALOG = "test_catalog"
 SCHEMA = "test_schema"

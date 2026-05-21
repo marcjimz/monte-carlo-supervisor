@@ -3,7 +3,8 @@ import { X, Plus, Send, MessageSquare, Pencil, Bot, Play, Grid3X3 } from "lucide
 import { api } from "../../lib/api";
 import { useUser } from "../../lib/user-context";
 import { getInitials } from "../../lib/utils";
-import type { Thread, Message, SimulationTriggeredEvent, MatrixCreatedEvent } from "../../lib/types";
+import type { Thread, Message, SimulationTriggeredEvent, MatrixCreatedEvent, ChartDataEvent } from "../../lib/types";
+import { InlineChart } from "./InlineChart";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
@@ -11,21 +12,19 @@ import { Spinner } from "../ui/spinner";
 import { MarkdownContent } from "../ui/markdown";
 
 const SIM_TYPE_LABELS: Record<string, string> = {
-  cost_comparison: "Cost Comparison",
-  system_cost_roi: "System Cost ROI",
-  patient_volume: "Patient Volume",
-  revenue_projection: "Revenue Projection",
+  encounter_margin: "Encounter Margin Forecast",
+  wh_margin_comparison: "WH Margin Comparison",
 };
 
 const THINKING_MESSAGES = [
-  "Agent thinking...",
+  "Analyzing your question...",
   "Consulting the data...",
   "Querying the warehouse...",
-  "Orchestrating agents...",
+  "Running simulation...",
   "Analyzing patterns...",
   "Crunching numbers...",
   "Connecting the dots...",
-  "Routing to the right agent...",
+  "Evaluating parameters...",
   "Searching for insights...",
   "Running the numbers...",
 ];
@@ -51,6 +50,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
   const [thinkingMsg, setThinkingMsg] = useState("");
   const [triggeredSims, setTriggeredSims] = useState<SimulationTriggeredEvent[]>([]);
   const [createdMatrices, setCreatedMatrices] = useState<MatrixCreatedEvent[]>([]);
+  const [chartData, setChartData] = useState<ChartDataEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Thread title editing
@@ -172,6 +172,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
     setStreamingContent("");
     setTriggeredSims([]);
     setCreatedMatrices([]);
+    setChartData([]);
     const content = message;
     setMessage("");
 
@@ -230,6 +231,8 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
             } else if (data.type === "matrix_created") {
               setCreatedMatrices((prev) => [...prev, data.matrix]);
               onMatrixCreated?.();
+            } else if (data.type === "chart_data") {
+              setChartData((prev) => [...prev, data.chart]);
             } else if (data.type === "done") {
               finalMessage = data.message;
             }
@@ -461,6 +464,11 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
               </div>
             )}
 
+            {/* Inline charts from Genie data */}
+            {chartData.map((chart, i) => (
+              <InlineChart key={i} chart={chart} />
+            ))}
+
             {/* Simulation triggered notifications */}
             {triggeredSims.map((sim) => (
               <div
@@ -496,7 +504,7 @@ export function ThreadDrawer({ analysisId, onClose, width, onWidthChange, onMatr
                   {matrix.rows}x{matrix.cols} ({matrix.total_cells} cells)
                 </span>
                 <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
-                  Ready to run
+                  {matrix.auto_running ? "Running..." : "Ready to run"}
                 </Badge>
               </div>
             ))}

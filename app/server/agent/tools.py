@@ -1,0 +1,264 @@
+"""Tool definitions wrapping existing services for the LangGraph agent.
+
+Each tool is a plain async function decorated with @tool. The agent calls
+these directly — no UC functions or MCP indirection.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from uuid import UUID
+
+from langchain_core.callbacks import adispatch_custom_event
+from langchain_core.runnables.config import ensure_config
+from langchain_core.tools import tool
+
+logger = logging.getLogger(__name__)
+
+# Polling config for run_simulation
+_POLL_INTERVAL_SECONDS = 15
+_MAX_POLL_ATTEMPTS = 40  # 40 × 15s = 10 minutes max wait
+
+
+@tool
+async def run_simulation(
+    simulation_type: str,
+    parameters: str = "{}",
+    num_simulations: int = 10000,
+    seed: int = 42,
+) -> str:
+    """Run a Monte Carlo simulation and return results.
+
+    This is a long-running tool. It:
+    1. Normalizes parameters (fills in defaults for omitted values).
+    2. Checks for a cached COMPLETED run with the same parameters.
+    3. If cached, returns results immediately.
+    4. If not cached, triggers a new simulation job and polls until completion.
+
+    Do NOT call this in a loop. Call it once — it handles polling internally
+    and returns only when results are ready (or after timeout).
+
+    Args:
+        simulation_type: The type of simulation (e.g. encounter_margin, wh_margin_comparison).
+        parameters: JSON string of simulation parameters. Use '{}' for defaults.
+        num_simulations: Number of Monte Carlo trials (default 10000).
+        seed: Random seed for reproducibility (default 42).
+    """
+    from server.services import simulation_service
+
+    params = json.loads(parameters) if isinstance(parameters, str) else parameters
+
+    # Trigger (or get cached result)
+    result = await simulation_service.trigger_simulation(
+        simulation_type, params, num_simulations, seed,
+    )
+
+    # If already completed (cache hit), return immediately
+    if result.get("status") == "completed":
+        return json.dumps(result)
+
+    # Emit progress event so the SSE stream shows feedback
+    await adispatch_custom_event(
+        "simulation_progress",
+        {"message": f"Simulation triggered — job is starting up. This typically takes 3-5 minutes.\n\n"},
+    )
+
+    # Poll until completion
+    logger.info("Simulation %s — polling for results (status: %s)", simulation_type, result.get("status"))
+    for attempt in range(1, _MAX_POLL_ATTEMPTS + 1):
+        await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+        check = await simulation_service.check_simulation(
+            simulation_type, params, num_simulations, seed,
+        )
+        status = check.get("status")
+        elapsed = attempt * _POLL_INTERVAL_SECONDS
+        elapsed_str = f"{elapsed // 60}m {elapsed % 60}s" if elapsed >= 60 else f"{elapsed}s"
+        logger.info("Poll %d/%d for %s: status=%s", attempt, _MAX_POLL_ATTEMPTS, simulation_type, status)
+
+        if status == "completed":
+            await adispatch_custom_event(
+                "simulation_progress",
+                {"message": f"Results ready ({elapsed_str}).\n\n"},
+            )
+            return json.dumps(check)
+
+        if status == "failed":
+            await adispatch_custom_event(
+                "simulation_progress",
+                {"message": f"Simulation failed after {elapsed_str}.\n\n"},
+            )
+            return json.dumps(check)
+
+        # Emit periodic progress
+        if attempt % 2 == 0:  # Every 30 seconds
+            status_label = "running" if status == "running" else "queued"
+            await adispatch_custom_event(
+                "simulation_progress",
+                {"message": f"Still {status_label}... ({elapsed_str} elapsed)\n\n"},
+            )
+
+    # Timeout — return last known status
+    return json.dumps({
+        "status": "timeout",
+        "simulation_type": simulation_type,
+        "message": "Simulation did not complete within 10 minutes. Check the Simulation Builder for results.",
+    })
+
+
+@tool
+async def create_matrix(
+    simulation_type: str,
+    row_parameter: str,
+    row_values: str,
+    col_parameter: str,
+    col_values: str,
+    base_parameters: str = "{}",
+    name: str = "",
+    num_simulations: int = 10000,
+    seed: int = 42,
+) -> str:
+    """Create a parameter sweep matrix for sensitivity analysis.
+
+    Creates a grid of simulations varying two parameters. Cell simulations
+    are automatically triggered after creation. Results appear in the
+    Matrix Builder UI.
+
+    Args:
+        simulation_type: The type of simulation.
+        row_parameter: Parameter name for rows.
+        row_values: JSON array of values for the row parameter.
+        col_parameter: Parameter name for columns.
+        col_values: JSON array of values for the column parameter.
+        base_parameters: JSON string of non-swept parameters.
+        name: Optional matrix name.
+        num_simulations: Trials per cell (default 10000).
+        seed: Random seed (default 42).
+    """
+    from server.services import matrix_service
+
+    row_vals = json.loads(row_values) if isinstance(row_values, str) else row_values
+    col_vals = json.loads(col_values) if isinstance(col_values, str) else col_values
+    base_params = json.loads(base_parameters) if isinstance(base_parameters, str) else base_parameters
+
+    if not name:
+        name = f"{simulation_type} — {row_parameter} vs {col_parameter}"
+
+    # Get analysis_id from LangGraph config
+    config = ensure_config()
+    analysis_id = config.get("configurable", {}).get("analysis_id")
+    if not analysis_id:
+        return json.dumps({
+            "status": "error",
+            "message": "No analysis context — matrix cannot be created outside of a thread.",
+        })
+
+    # Resolve output_metric and output_group_key from config.yaml
+    output_metric, output_group_key, output_group_value = _resolve_output_config(simulation_type)
+
+    # Create matrix in Lakebase (same as UI's POST /api/analyses/{id}/matrices)
+    matrix = await matrix_service.create_matrix(
+        analysis_id=UUID(analysis_id),
+        name=name,
+        simulation_type=simulation_type,
+        row_parameter=row_parameter,
+        row_values=row_vals,
+        col_parameter=col_parameter,
+        col_values=col_vals,
+        base_parameters=base_params,
+        output_metric=output_metric,
+        output_group_key=output_group_key,
+        output_group_value=output_group_value,
+        num_simulations=num_simulations,
+        seed=seed,
+    )
+
+    matrix_id = matrix["id"]
+
+    # Trigger all cell simulations (same as UI's POST /matrices/{id}/run)
+    await matrix_service.run_matrix(matrix_id)
+
+    return json.dumps({
+        "status": "created",
+        "id": str(matrix_id),
+        "name": name,
+        "simulation_type": simulation_type,
+        "row_parameter": row_parameter,
+        "col_parameter": col_parameter,
+        "row_values": row_vals,
+        "col_values": col_vals,
+        "rows": len(row_vals),
+        "cols": len(col_vals),
+        "total_cells": len(row_vals) * len(col_vals),
+    })
+
+
+def _resolve_output_config(simulation_type: str) -> tuple[str, str | None, str | None]:
+    """Resolve output_metric and output_group from config.yaml."""
+    output_metric = "mean_value"
+    output_group_key = None
+    output_group_value = None
+    try:
+        import yaml
+        from pathlib import Path
+
+        cfg_path = Path(__file__).resolve().parent.parent / "config.yaml"
+        with open(cfg_path) as f:
+            cfg = yaml.safe_load(f)
+        sim_cfg = cfg.get("simulation_types", {}).get(simulation_type, {})
+        agg = sim_cfg.get("aggregation", {})
+        output_metric = agg.get("value_column", "mean_value")
+        output_group_key = agg.get("group_column")
+
+        # Default group_value: last month for time-series, expanded scenario for comparisons
+        if output_group_key == "month":
+            num_months = sim_cfg.get("parameters", {}).get("num_months", {}).get("default", 12)
+            output_group_value = f"M{num_months:02d}"
+        elif output_group_key == "scenario":
+            output_group_value = "wh_expanded"
+    except Exception:
+        logger.debug("Could not resolve agg config for %s", simulation_type)
+    return output_metric, output_group_key, output_group_value
+
+
+@tool
+async def list_distributions(simulation_type: str = "") -> str:
+    """List fitted distribution specs for simulation types.
+
+    Optionally filter by simulation_type. Returns JSON array of distribution
+    specs with parameters and goodness-of-fit metrics.
+
+    Args:
+        simulation_type: Optional filter — leave empty for all types.
+    """
+    from server.services import distribution_service
+
+    result = await distribution_service.list_distribution_specs(simulation_type or None)
+    return json.dumps(result, default=str)
+
+
+@tool
+async def query_analytics(question: str) -> str:
+    """Ask a natural language question about hospital data via Genie.
+
+    Use for historical data queries: costs, trends, volumes, demographics,
+    diagnosis prevalence, payer mix, department throughput, and past
+    simulation results.
+
+    Args:
+        question: Natural language question about women's health data.
+    """
+    # Genie integration is handled by the genie node, not this tool.
+    # This tool returns a marker that the graph routes to the genie node.
+    return json.dumps({"route": "genie", "question": question})
+
+
+def get_all_tools() -> list:
+    """Return all tools for the agent."""
+    return [
+        run_simulation,
+        create_matrix,
+        list_distributions,
+        query_analytics,
+    ]

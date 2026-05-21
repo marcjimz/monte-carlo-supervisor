@@ -12,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 # --- Ali's published showcase ---
 
-DEMO_OWNER = "ali.ghodsi@databricks.com"
-DEMO_ANALYSIS_NAME = "Virtual Care Cost Impact Study"
+DEMO_OWNER = "rob.allen@imail.org"
+DEMO_ANALYSIS_NAME = "Encounter Margin Sensitivity Study"
 
 # --- Presenter's draft walkthrough ---
 
 PRESENTER_OWNER = "marcin.jimenez@databricks.com"
-PRESENTER_ANALYSIS_NAME = "Postpartum Care Virtual Pilot"
+PRESENTER_ANALYSIS_NAME = "WH Penetration Impact Analysis"
 
 
 # =========================================================================
@@ -84,15 +84,15 @@ async def _seed_ali_showcase():
            VALUES ($1, $2, $3, $4)
            RETURNING id""",
         DEMO_ANALYSIS_NAME,
-        "Analyzing the cost impact of virtual care adoption for women's health "
-        "services across Intermountain Health. Compares blended cost per encounter "
-        "at varying virtual penetration rates and population sizes.",
+        "Analyzing the sensitivity of encounter direct margin to growth rate and "
+        "cost inflation assumptions. Builds a matrix of scenarios to identify "
+        "the conditions under which margin erodes or improves over 12 months.",
         DEMO_OWNER,
         "published",
     )
     analysis_id = analysis["id"]
 
-    # 2. Cost comparison matrix (3x3)
+    # 2. Encounter margin sensitivity matrix (3x3: growth_rate vs cost_inflation)
     matrix = await db.fetch_one(
         """INSERT INTO analysis_matrices
            (analysis_id, name, description, simulation_type, row_parameter, row_values,
@@ -101,33 +101,34 @@ async def _seed_ali_showcase():
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
            RETURNING id""",
         analysis_id,
-        "Virtual Penetration vs Population Size",
-        "Blended cost per encounter at 20-40% virtual care penetration across 30K-70K member populations",
-        "cost_comparison",
-        "virtual_penetration",
-        json.dumps([0.20, 0.30, 0.40]),
-        "member_count",
-        json.dumps([30000, 50000, 70000]),
-        json.dumps({"annual_encounter_rate": 2.5, "num_months": 12}),
-        "simulated_cost_per_encounter",
-        "care_model",
-        "blended",
+        "Growth Rate vs Cost Inflation",
+        "Direct margin per encounter across growth and inflation scenarios over 12 months",
+        "encounter_margin",
+        "growth_rate",
+        json.dumps([0.01, 0.02, 0.03]),
+        "cost_inflation",
+        json.dumps([0.02, 0.035, 0.05]),
+        json.dumps({"num_months": 12}),
+        "simulated_direct_margin",
+        "month",
+        "M12",
         10000,
         42,
     )
     matrix_id = matrix["id"]
 
-    # 3. Matrix cells — realistic results (cost decreases with penetration)
+    # 3. Matrix cells — realistic results (margin improves with growth, erodes with inflation)
     cells = [
-        (0.20, 30000, 1102.0, 1048.0, 1100.0, 1158.0),
-        (0.20, 50000, 1098.0, 1045.0, 1097.0, 1153.0),
-        (0.20, 70000, 1105.0, 1051.0, 1104.0, 1161.0),
-        (0.30, 30000, 1018.0, 968.0, 1017.0, 1070.0),
-        (0.30, 50000, 1022.0, 972.0, 1021.0, 1074.0),
-        (0.30, 70000, 1025.0, 974.0, 1024.0, 1078.0),
-        (0.40, 30000, 948.0, 901.0, 947.0, 997.0),
-        (0.40, 50000, 952.0, 904.0, 951.0, 1002.0),
-        (0.40, 70000, 955.0, 907.0, 954.0, 1005.0),
+        # (growth_rate, cost_inflation, mean, p05, p50, p95)
+        (0.01, 0.02, 4620000, 3200000, 4610000, 6050000),
+        (0.01, 0.035, 4480000, 3100000, 4470000, 5870000),
+        (0.01, 0.05, 4340000, 3000000, 4330000, 5690000),
+        (0.02, 0.02, 4720000, 3270000, 4710000, 6180000),
+        (0.02, 0.035, 4580000, 3170000, 4570000, 6000000),
+        (0.02, 0.05, 4440000, 3070000, 4430000, 5820000),
+        (0.03, 0.02, 4820000, 3340000, 4810000, 6310000),
+        (0.03, 0.035, 4680000, 3240000, 4670000, 6130000),
+        (0.03, 0.05, 4540000, 3140000, 4530000, 5950000),
     ]
 
     for rv, cv, mean, p05, p50, p95 in cells:
@@ -145,84 +146,77 @@ async def _seed_ali_showcase():
         """INSERT INTO agent_threads (analysis_id, owner_email, title, icon)
            VALUES ($1, $2, $3, $4)
            RETURNING id""",
-        analysis_id, DEMO_OWNER, "Virtual Care Cost Hypothesis", "chat",
+        analysis_id, DEMO_OWNER, "Margin Sensitivity Hypothesis", "chat",
     )
     thread_id = thread["id"]
 
     messages = [
         (
             "user",
-            "I believe increasing virtual care penetration to 40% could reduce "
-            "blended costs by 10-15%. Can we test this?",
+            "I want to understand how sensitive our encounter margin is to "
+            "different growth and cost inflation assumptions over the next year.",
         ),
         (
             "assistant",
-            "Great hypothesis! Let me structure a simulation plan to test it.\n\n"
-            "I'll run a **cost_comparison** simulation matrix comparing virtual "
-            "penetration rates against population sizes:\n\n"
+            "Great question! Let me set up a sensitivity analysis.\n\n"
+            "I'll run an **encounter_margin** simulation matrix varying growth rate "
+            "against cost inflation:\n\n"
             "| Parameter | Values |\n"
             "|---|---|\n"
-            "| Virtual Penetration | 20%, 30%, 40% |\n"
-            "| Population Size | 30K, 50K, 70K |\n"
-            "| Encounters/Member/Year | 2.5 |\n"
+            "| Growth Rate | 1%, 2%, 3% |\n"
+            "| Cost Inflation | 2%, 3.5%, 5% |\n"
+            "| Forecast Horizon | 12 months |\n"
             "| Trials per Cell | 10,000 |\n\n"
-            "This gives us **9 scenarios** with confidence intervals. "
-            "The baseline (20% penetration) serves as our control.\n\n"
+            "This gives us **9 scenarios** showing how margin evolves under "
+            "different economic conditions.\n\n"
             "Shall I run this matrix?",
         ),
         (
             "user",
-            "Yes, run that matrix. I want confidence intervals too.",
+            "Yes, run it. I want to see which scenarios erode margin the most.",
         ),
         (
             "assistant",
             "The matrix has completed — all 9 cells finished (10,000 trials each). "
-            "Here are the results:\n\n"
-            "### Blended Cost per Encounter\n\n"
-            "| Penetration | 30K Members | 50K Members | 70K Members |\n"
+            "Here are the Month 12 direct margin results:\n\n"
+            "### Direct Margin at Month 12\n\n"
+            "| Growth \\ Inflation | 2% | 3.5% | 5% |\n"
             "|---|---|---|---|\n"
-            "| **20%** (baseline) | $1,102 | $1,098 | $1,105 |\n"
-            "| **30%** | $1,018 | $1,022 | $1,025 |\n"
-            "| **40%** | $948 | $952 | $955 |\n\n"
+            "| **1%** | $4.6M | $4.5M | $4.3M |\n"
+            "| **2%** | $4.7M | $4.6M | $4.4M |\n"
+            "| **3%** | $4.8M | $4.7M | $4.5M |\n\n"
             "### Key Findings\n\n"
-            "1. **Your hypothesis is confirmed** — at 40% penetration, blended cost "
-            "drops to ~$950/encounter vs ~$1,100 at baseline, a **13.3% reduction**\n"
-            "2. **Confidence intervals are tight** — P05-P95 spans ~$100 across all "
-            "scenarios, indicating stable projections\n"
-            "3. **Scale-independent** — costs remain consistent across 30K-70K "
-            "members, suggesting the model scales well\n"
-            "4. **30% is the sweet spot** for moderate risk — $1,020/encounter "
-            "(7.2% reduction) with less operational change\n\n"
-            "Would you like to calculate total annual savings, or run a "
-            "**system_cost_roi** simulation to model net ROI including "
-            "infrastructure investment?",
+            "1. **Growth outpaces inflation** — even at 1% growth vs 5% inflation, "
+            "margin stays positive at $4.3M\n"
+            "2. **Sweet spot at 3% growth / 2% inflation** — highest margin at $4.8M, "
+            "a 7% improvement over the worst case\n"
+            "3. **Cost inflation is the bigger risk** — moving from 2% to 5% inflation "
+            "erodes ~$280K regardless of growth rate\n"
+            "4. **Confidence intervals are wide** — P05-P95 spans ~$2.8M, suggesting "
+            "high variance in monthly outcomes\n\n"
+            "Would you like to drill into the month-by-month trajectory for any "
+            "specific scenario, or compare this with WH vs non-WH margin splits?",
         ),
         (
             "user",
-            "What are total annual savings for 50K members at 40%?",
+            "What's the margin per encounter at 2% growth and 3.5% inflation?",
         ),
         (
             "assistant",
-            "Based on the simulation results for **50K members at 40% virtual "
-            "penetration**:\n\n"
+            "Based on the simulation at **2% growth / 3.5% inflation**:\n\n"
             "```\n"
-            "Baseline cost (20%):    $1,098/encounter\n"
-            "Target cost (40%):      $  952/encounter\n"
-            "Savings per encounter:  $  146 (13.3%)\n"
-            "\n"
-            "Annual encounters:      50,000 × 2.5 = 125,000\n"
-            "Annual gross savings:   125,000 × $146 = $18.3M\n"
+            "Month 12 Direct Margin:     $4,580,000\n"
+            "Month 12 Encounter Volume:  ~6,400\n"
+            "Margin per Encounter:       ~$716\n"
             "```\n\n"
-            "**Important caveats:**\n"
-            "- These are **gross savings** before implementation costs\n"
-            "- Technology platform, training, and change management are not included\n"
-            "- Savings assume full adoption ramp is achieved within the modeled period\n"
-            "- Actual encounter mix may shift as virtual care attracts different acuity\n\n"
-            "I'd recommend running the **system_cost_roi** simulation next — it "
-            "models net ROI including technology investment, phased rollout, and "
-            "fixed-cost absorption. This will tell you whether the $18.3M in gross "
-            "savings translates to a positive net return.\n\n"
-            "Shall I set that up?",
+            "This is our baseline scenario (using config defaults). The margin "
+            "per encounter stays relatively stable month over month because growth "
+            "and inflation roughly offset each other at these rates.\n\n"
+            "To understand the WH population's contribution to this margin, "
+            "I'd recommend running a **wh_margin_comparison** simulation — it "
+            "shows how WH encounters ($850/encounter) lift the blended average "
+            "and what happens if we increase WH penetration from 35% to 50%.\n\n"
+            "Want me to set that up?",
         ),
     ]
 
@@ -261,9 +255,9 @@ async def _seed_presenter_draft():
            VALUES ($1, $2, $3, $4)
            RETURNING id""",
         PRESENTER_ANALYSIS_NAME,
-        "Evaluating the financial impact of introducing virtual follow-up visits "
-        "for postpartum care. Comparing blended cost per encounter across adoption "
-        "rates and population sizes to build the business case for a pilot program.",
+        "Evaluating the financial impact of increasing Women's Health program "
+        "penetration from 35% to 50%. Comparing per-encounter margins between "
+        "WH and non-WH populations to build the business case for expansion.",
         PRESENTER_OWNER,
         "draft",
     )

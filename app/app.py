@@ -22,6 +22,13 @@ logger = logging.getLogger(__name__)
 
 FRONTEND_DIR = Path(__file__).parent / "frontend" / "dist"
 
+# Startup error state — surfaced via /api/health
+_startup_errors: list[str] = []
+
+
+def get_startup_errors() -> list[str]:
+    return list(_startup_errors)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,9 +38,17 @@ async def lifespan(app: FastAPI):
     # Initialize Lakebase pool + run migrations
     refresh_task = None
     sync_task = None
-    if settings.pghost:
-        from server.db import close_pool, init_pool, refresh_token_loop, run_migrations
+    from server.db import _ensure_database, close_pool, init_pool, refresh_token_loop, run_migrations
 
+    try:
+        # Self-provision Lakebase (discover host, create role/db) in Databricks Apps
+        await _ensure_database(settings)
+    except Exception as e:
+        msg = f"Lakebase self-provisioning failed: {e}"
+        logger.exception(msg)
+        _startup_errors.append(msg)
+
+    if settings.pghost:
         try:
             pool = await init_pool(settings)
             await run_migrations(pool)
@@ -53,10 +68,15 @@ async def lifespan(app: FastAPI):
             from server.services.sync_service import periodic_sync
 
             sync_task = asyncio.create_task(periodic_sync())
-        except Exception:
-            logger.exception("Failed to initialize Lakebase — DB routes will 500")
+        except Exception as e:
+            msg = f"Lakebase pool init failed: {e}"
+            logger.exception(msg)
+            _startup_errors.append(msg)
     else:
-        logger.warning("No PGHOST configured — running without Lakebase")
+        msg = "No PGHOST configured — running without Lakebase"
+        logger.warning(msg)
+        if settings.is_databricks_app:
+            _startup_errors.append(msg)
 
     yield
 

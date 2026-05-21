@@ -1,0 +1,48 @@
+resources:
+  apps:
+    monte_carlo_ui:
+      name: "monte-carlo-ui"
+      description: "Monte Carlo Simulation UI with Agent Chat"
+      source_code_path: ../../app
+      # Resource bindings — auto-grant app SP the required permissions
+      resources:
+        - name: simulation-job
+          job:
+            id: ${resources.jobs.monte_carlo_pipeline.id}
+            permission: CAN_MANAGE_RUN
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${resources.sql_warehouses.mc_warehouse.id}
+            permission: CAN_USE
+        # Lakebase: app self-provisions via db.py _ensure_database()
+        # (postgres resource binding is private preview and requires explicit branch resource)
+      config:
+        command:
+          - uvicorn
+          - app:app
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8000"
+        env:
+          - name: UC_CATALOG
+            value: ${var.catalog}
+          - name: UC_SCHEMA
+            value: ${var.schema}
+          - name: SEED_DEMO_DATA
+            value: "true"
+          # LangGraph agent model endpoints
+          - name: SUPERVISOR_ENDPOINT
+            value: "databricks-claude-opus-4-7"
+          - name: EXECUTOR_ENDPOINT
+            value: "databricks-claude-sonnet-4"
+          # DAB-resolved IDs
+          - name: SQL_WAREHOUSE_ID
+            value: ${resources.sql_warehouses.mc_warehouse.id}
+          - name: SIMULATION_JOB_ID
+            value: ${resources.jobs.monte_carlo_pipeline.id}
+          - name: DASHBOARD_ID
+            value: ${resources.dashboards.wh_analytics.id}
+          # Lakebase connection (PGHOST/PGUSER auto-discovered by app at runtime)
+          - name: PGDATABASE
+            value: "mcapp"

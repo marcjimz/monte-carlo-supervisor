@@ -11,16 +11,19 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     # Databricks
     databricks_host: str = ""
-    uc_catalog: str = "lakebase_hls_workshop_catalog"
+    uc_catalog: str = "marcjimz_ih_demo_v1_catalog"
     uc_schema: str = "hospital_data"
-    mas_endpoint_name: str = ""
-    sql_warehouse_id: str = ""
+    supervisor_endpoint: str = "databricks-claude-opus-4-7"
+    executor_endpoint: str = "databricks-claude-sonnet-4"
+    sql_warehouse_id: str = "39aeb4605bfae41b"
+    simulation_job_id: str = ""
 
     # Lakebase (auto-populated by resource binding in Databricks Apps)
     pghost: str = ""
@@ -28,8 +31,20 @@ class Settings(BaseSettings):
     pgdatabase: str = "mcapp"
     pguser: str = ""
 
+    @model_validator(mode="after")
+    def _resolve_pguser(self) -> "Settings":
+        """Fall back to DATABRICKS_CLIENT_ID if PGUSER is not set.
+
+        In Databricks Apps, the platform injects the app's service principal
+        UUID as DATABRICKS_CLIENT_ID. This is the same value needed for PGUSER
+        when connecting to Lakebase.
+        """
+        if not self.pguser:
+            self.pguser = os.environ.get("DATABRICKS_CLIENT_ID", "")
+        return self
+
     # Lakebase Autoscaling (for credential generation)
-    lakebase_project: str = "monte-carlo-app"
+    lakebase_project: str = "mc-supervisor-db-v4"
     lakebase_branch: str = "production"
     lakebase_endpoint: str = "primary"
 
@@ -43,14 +58,14 @@ class Settings(BaseSettings):
     seed_demo_data: bool = True
 
     # Auth
-    databricks_profile: str = "fe-vm-lakebase-hls-workshop"
+    databricks_profile: str = "mc-supervisor"
 
     # Config path — bundled copy in server/ dir, fallback to parent repo
     config_yaml_path: str = str(
         Path(__file__).resolve().parent / "config.yaml"
         if (Path(__file__).resolve().parent / "config.yaml").exists()
         else Path(__file__).resolve().parent.parent.parent
-        / "src" / "databricks" / "monte_carlo" / "config.yaml"
+        / "src" / "mc_supervisor" / "monte_carlo" / "config.yaml"
     )
 
     @property

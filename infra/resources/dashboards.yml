@@ -1,0 +1,10 @@
+resources:
+  dashboards:
+    wh_analytics:
+      display_name: "Women's Health Analytics"
+      warehouse_id: ${resources.sql_warehouses.mc_warehouse.id}
+      file_path: ../../dashboards/wh_analytics.lvdash.json
+      embed_credentials: true
+      permissions:
+        - level: CAN_READ
+          group_name: users

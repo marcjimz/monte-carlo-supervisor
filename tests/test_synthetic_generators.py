@@ -3,14 +3,14 @@
 import pandas as pd
 import pytest
 
-from src.databricks.synthetic_data.generators.patients import generate_patients
-from src.databricks.synthetic_data.generators.providers import (
+from src.mc_supervisor.synthetic_data.generators.patients import generate_patients
+from src.mc_supervisor.synthetic_data.generators.providers import (
     generate_facilities,
     generate_providers,
 )
-from src.databricks.synthetic_data.generators.encounters import generate_encounters
-from src.databricks.synthetic_data.generators.diagnoses import generate_diagnoses
-from src.databricks.synthetic_data.generators.reference_data import (
+from src.mc_supervisor.synthetic_data.generators.encounters import generate_encounters
+from src.mc_supervisor.synthetic_data.generators.diagnoses import generate_diagnoses
+from src.mc_supervisor.synthetic_data.generators.reference_data import (
     generate_cpt_codes,
     generate_departments,
     generate_icd10_codes,

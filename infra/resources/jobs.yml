@@ -5,8 +5,24 @@ resources:
       description: "Spark-distributed Monte Carlo simulation pipeline with caching and Delta Lake storage"
       tags:
         project: monte-carlo-supervisor
+      trigger:
+        table_update:
+          table_names:
+            - ${var.catalog}.${var.schema}.simulation_runs
+          condition: ANY_UPDATED
+          min_time_between_triggers_seconds: 60
+          wait_after_last_change_seconds: 60
       tasks:
+        - task_key: dispatch
+          notebook_task:
+            notebook_path: ../../notebooks/jobs/mc_00_dispatch.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+
         - task_key: validate_and_check_cache
+          depends_on:
+            - task_key: dispatch
           notebook_task:
             notebook_path: ../../notebooks/jobs/mc_01_validate.py
             base_parameters:
@@ -33,7 +49,7 @@ resources:
 
       parameters:
         - name: simulation_type
-          default: "patient_volume"
+          default: "encounter_margin"
         - name: parameters
           default: "{}"
         - name: num_simulations
@@ -41,83 +57,72 @@ resources:
         - name: seed
           default: "42"
 
-    setup_pipeline:
-      name: "monte-carlo-setup-pipeline"
-      description: "One-click setup: loads data, creates views, registers functions, creates Genie Space and Agent Bricks MAS"
+    data_pipeline:
+      name: "monte-carlo-data-pipeline"
+      description: "Load data, create tables/views, fit distributions"
       tags:
         project: monte-carlo-supervisor
       tasks:
-        - task_key: setup_catalog
-          notebook_task:
-            notebook_path: ../../notebooks/setup/00_setup_catalog.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
-
         - task_key: load_data
-          depends_on:
-            - task_key: setup_catalog
           notebook_task:
             notebook_path: ../../notebooks/setup/01_generate_synthetic_data.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-
-        - task_key: create_metric_views
-          depends_on:
-            - task_key: load_data
-          notebook_task:
-            notebook_path: ../../notebooks/setup/02_create_metric_views.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
+              skip_synthetic: ${var.skip_synthetic}
+              app_sp_client_id: ${resources.apps.monte_carlo_ui.service_principal_client_id}
 
         - task_key: create_sim_tables
           depends_on:
-            - task_key: setup_catalog
+            - task_key: load_data
           notebook_task:
-            notebook_path: ../../notebooks/setup/04_create_simulation_tables.py
+            notebook_path: ../../notebooks/setup/01a_create_simulation_tables.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
+
+        - task_key: create_views
+          depends_on:
+            - task_key: load_data
+          notebook_task:
+            notebook_path: ../../notebooks/setup/02a_create_views.py
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+              warehouse_id: ${resources.sql_warehouses.mc_warehouse.id}
+              skip_views: ${var.skip_views}
 
         - task_key: fit_distributions
           depends_on:
             - task_key: load_data
             - task_key: create_sim_tables
           notebook_task:
-            notebook_path: ../../notebooks/setup/07_fit_distributions.py
+            notebook_path: ../../notebooks/setup/03_fit_distributions.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
+              metric_view: ${var.metric_view}
 
-        - task_key: register_functions
+        - task_key: activate_trigger
           depends_on:
             - task_key: create_sim_tables
-            - task_key: fit_distributions
           notebook_task:
-            notebook_path: ../../notebooks/setup/03_register_mc_functions.py
+            notebook_path: ../../notebooks/setup/05_activate_trigger.py
             base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
+              simulation_job_id: ${resources.jobs.monte_carlo_pipeline.id}
 
-        - task_key: configure_genie
-          depends_on:
-            - task_key: load_data
-            - task_key: create_metric_views
-            - task_key: create_sim_tables
+    genie_import:
+      name: "monte-carlo-genie-import"
+      description: "Deploy Genie Space + dashboard publish/embed"
+      tags:
+        project: monte-carlo-supervisor
+      tasks:
+        - task_key: deploy_genie
           notebook_task:
-            notebook_path: ../../notebooks/setup/05_configure_genie_space.py
+            notebook_path: ../../notebooks/setup/02_deploy_genie_space.py
             base_parameters:
               catalog: ${var.catalog}
               schema: ${var.schema}
-
-        - task_key: create_supervisor
-          depends_on:
-            - task_key: configure_genie
-            - task_key: register_functions
-          notebook_task:
-            notebook_path: ../../notebooks/setup/06_create_supervisor.py
-            base_parameters:
-              catalog: ${var.catalog}
-              schema: ${var.schema}
+              warehouse_id: ${resources.sql_warehouses.mc_warehouse.id}
+              target_genie_space_id: ${var.genie_space_id}
+              app_sp_client_id: ${resources.apps.monte_carlo_ui.service_principal_client_id}

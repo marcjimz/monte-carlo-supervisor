@@ -1,4 +1,4 @@
-"""Thread service — CRUD + MAS integration for agent chat."""
+"""Thread service — CRUD + LangGraph agent integration for chat."""
 
 from __future__ import annotations
 
@@ -10,9 +10,77 @@ from collections.abc import AsyncGenerator
 from uuid import UUID
 
 from server import db
-from server.services.mas_client import get_mas_client
 
 logger = logging.getLogger(__name__)
+
+
+def _get_graph_and_config():
+    """Lazy-initialize the LangGraph agent and its config."""
+    import os
+
+    from server.agent.config import AgentConfig, GenieConfig, ModelConfig
+    from server.agent.genie import GenieClient
+    from server.agent.graph import build_graph
+    from server.agent.models import get_supervisor_model
+    from server.config import get_settings
+    from server.services.genie_discovery import get_genie_space_id
+
+    settings = get_settings()
+    resolved_space_id = get_genie_space_id()
+
+    model_config = ModelConfig(
+        supervisor_endpoint=os.environ.get(
+            "SUPERVISOR_ENDPOINT", "databricks-claude-opus-4-7"
+        ),
+        executor_endpoint=os.environ.get(
+            "EXECUTOR_ENDPOINT", "databricks-claude-sonnet-4"
+        ),
+    )
+
+    genie_config = GenieConfig(space_id=resolved_space_id)
+
+    agent_config = AgentConfig(
+        model=model_config,
+        genie=genie_config,
+        catalog=settings.uc_catalog,
+        schema_name=settings.uc_schema,
+    )
+
+    supervisor_model = get_supervisor_model(model_config)
+
+    # Build Genie client if configured
+    genie_client = None
+    if resolved_space_id:
+        from databricks.sdk import WorkspaceClient
+
+        if settings.is_databricks_app:
+            w = WorkspaceClient()
+        else:
+            w = WorkspaceClient(profile=settings.databricks_profile)
+
+        host = w.config.host or ""
+        if host and not host.startswith("http"):
+            host = f"https://{host}"
+        genie_client = GenieClient(
+            space_id=resolved_space_id,
+            databricks_host=host,
+            auth_headers=w.config.authenticate(),
+            config=genie_config,
+        )
+
+    graph = build_graph(
+        agent_config=agent_config,
+        supervisor_model=supervisor_model,
+        genie_client=genie_client,
+    )
+
+    configurable = {
+        "agent_config": agent_config,
+        "supervisor_model": supervisor_model,
+        "genie_client": genie_client,
+    }
+
+    return graph, configurable
 
 
 async def create_thread(analysis_id: UUID, owner_email: str, title: str, icon: str) -> dict:
@@ -83,7 +151,9 @@ async def delete_thread(thread_id: UUID) -> bool:
 
 
 async def send_message(thread_id: UUID, content: str) -> dict:
-    """Send a user message, invoke MAS, and return both messages."""
+    """Send a user message, invoke LangGraph agent, return both messages."""
+    from langchain_core.messages import HumanMessage
+
     # 1. Save user message
     user_msg = await db.fetch_one(
         """INSERT INTO thread_messages (thread_id, role, content)
@@ -98,17 +168,27 @@ async def send_message(thread_id: UUID, content: str) -> dict:
         thread_id,
     )
 
-    # 3. Build messages array for MAS
-    mas_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+    # 3. Build LangGraph messages
+    lc_messages = []
+    for m in messages:
+        if m["role"] == "user":
+            lc_messages.append(HumanMessage(content=m["content"]))
+        else:
+            from langchain_core.messages import AIMessage
+            lc_messages.append(AIMessage(content=m["content"]))
 
-    # 4. Call MAS
+    # 4. Invoke LangGraph
     try:
-        mas_client = get_mas_client()
-        response = mas_client.invoke(mas_messages)
-        assistant_content = response.get("content", "I encountered an error processing your request.")
+        graph, configurable = _get_graph_and_config()
+        result = await graph.ainvoke(
+            {"messages": lc_messages},
+            config={"configurable": configurable, "recursion_limit": 25},
+        )
+        last_msg = result["messages"][-1]
+        assistant_content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
     except Exception as e:
-        logger.exception("MAS invocation failed")
-        assistant_content = f"I encountered an error: {str(e)}"
+        logger.exception("LangGraph invocation failed")
+        assistant_content = f"I encountered an error: {e}"
 
     # 5. Save assistant response
     assistant_msg = await db.fetch_one(
@@ -131,17 +211,17 @@ async def send_message(thread_id: UUID, content: str) -> dict:
 
 
 async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[str, None]:
-    """Send a user message, stream MAS response as SSE events, save when done.
+    """Send a user message, stream LangGraph response as SSE events.
 
-    The MAS client handles long-running task continuations internally via the
-    Agent API's task_continue_request/task_continue_response protocol.  This
-    function simply streams the events to the frontend and keeps the proxy
-    connection alive with heartbeats.
+    Translates LangGraph astream_events into the same SSE event types
+    the frontend expects: delta, simulation_triggered, matrix_created, done.
     """
+    from langchain_core.messages import AIMessage, HumanMessage
+
     from server.services.simulation_service import insert_submitted_placeholder
     from server.services import analysis_service
 
-    # 0. Resolve analysis_id from thread (needed for linking simulations)
+    # 0. Resolve analysis_id from thread
     thread_row = await db.fetch_one(
         "SELECT analysis_id FROM agent_threads WHERE id = $1", thread_id,
     )
@@ -156,33 +236,43 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
     )
     yield f"data: {json.dumps({'type': 'user_message', 'message': _msg_dict(user_msg)}, default=str)}\n\n"
 
-    # 2. Fetch full thread history for MAS context
+    # 2. Fetch full thread history
     messages = await db.fetch_all(
         "SELECT role, content FROM thread_messages WHERE thread_id = $1 ORDER BY created_at ASC",
         thread_id,
     )
-    mas_messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+    lc_messages = []
+    for m in messages:
+        if m["role"] == "user":
+            lc_messages.append(HumanMessage(content=m["content"]))
+        else:
+            lc_messages.append(AIMessage(content=m["content"]))
 
-    # 3. Stream from MAS — handle structured events
+    # 3. Stream from LangGraph
     full_content = ""
-    triggered_hashes: set[str] = set()  # dedup simulation triggers
-    created_matrix_ids: set[str] = set()  # dedup matrix creations
+    triggered_hashes: set[str] = set()
+    created_matrix_ids: set[str] = set()
+    current_model_run_id: str | None = None
 
     try:
-        mas_client = get_mas_client()
-        stream = mas_client.invoke_stream(mas_messages)
+        graph, configurable = _get_graph_and_config()
 
-        # Use a queue to decouple the MAS stream consumer from the SSE
-        # producer.  Previously we used asyncio.wait_for(stream.__anext__())
-        # for heartbeats, but that throws CancelledError into the async
-        # generator on timeout — destroying the httpx stream connection.
-        # The queue approach keeps the consumer running uninterrupted.
         _SENTINEL = object()
         queue: asyncio.Queue = asyncio.Queue()
 
         async def _consume_stream():
             try:
-                async for event in stream:
+                async for event in graph.astream_events(
+                    {"messages": lc_messages},
+                    config={
+                        "configurable": {
+                            **configurable,
+                            "analysis_id": str(analysis_id) if analysis_id else None,
+                        },
+                        "recursion_limit": 25,
+                    },
+                    version="v2",
+                ):
                     await queue.put(event)
             except Exception as exc:
                 await queue.put(exc)
@@ -205,57 +295,74 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
                     raise item
 
                 event = item
+                event_kind = event.get("event", "")
 
-                # Track whether we yield something to the client for this event.
-                yielded = False
+                # Stream text deltas from the supervisor model
+                if event_kind == "on_chat_model_stream":
+                    run_id = event.get("run_id", "")
+                    # Insert newline separator between different model invocations
+                    # so markdown headings from the second call render correctly
+                    if run_id and run_id != current_model_run_id:
+                        if current_model_run_id is not None and full_content:
+                            separator = "\n\n"
+                            full_content += separator
+                            sep_payload = json.dumps({"type": "delta", "content": separator})
+                            yield f"data: {sep_payload}\n\n"
+                        current_model_run_id = run_id
 
-                if event["type"] == "text_delta":
-                    full_content += event["content"]
-                    yield f"data: {json.dumps({'type': 'delta', 'content': event['content']})}\n\n"
-                    yielded = True
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and hasattr(chunk, "content") and chunk.content:
+                        text = chunk.content
+                        full_content += text
+                        yield f"data: {json.dumps({'type': 'delta', 'content': text})}\n\n"
 
-                elif event["type"] == "tool_call" and "trigger_simulation" in event.get("agent_name", ""):
-                    args = event.get("arguments", {})
-                    sim_type = args.get("p_simulation_type", "")
-                    params_str = args.get("p_parameters", "{}")
-                    try:
-                        params = json.loads(params_str) if isinstance(params_str, str) else (params_str or {})
-                    except json.JSONDecodeError:
-                        params = {}
-                    num_sims = int(args.get("p_num_simulations", 10000))
-                    seed = int(args.get("p_seed", 42))
+                # Stream progress events from long-running tools
+                elif event_kind == "on_custom_event":
+                    event_name = event.get("name", "")
+                    if event_name == "simulation_progress":
+                        msg = event.get("data", {}).get("message", "")
+                        if msg:
+                            full_content += msg
+                            yield f"data: {json.dumps({'type': 'delta', 'content': msg})}\n\n"
 
-                    dedup_key = f"{sim_type}|{json.dumps(params, sort_keys=True)}|{seed}|{num_sims}"
-                    if dedup_key not in triggered_hashes:
-                        triggered_hashes.add(dedup_key)
+                # Detect tool calls completing
+                elif event_kind == "on_tool_end":
+                    tool_name = event.get("name", "")
+                    output = event.get("data", {}).get("output", "")
+
+                    if tool_name == "run_simulation":
                         try:
-                            placeholder = await insert_submitted_placeholder(
-                                sim_type, params, num_sims, seed,
-                            )
-                            if analysis_id and placeholder.get("run_id"):
-                                try:
-                                    await analysis_service.link_simulation(
-                                        analysis_id, placeholder["run_id"], "agent",
-                                    )
-                                except Exception:
-                                    logger.warning("Failed to link sim to analysis", exc_info=True)
-                            yield f"data: {json.dumps({'type': 'simulation_triggered', 'simulation': placeholder})}\n\n"
-                            yielded = True
+                            result = json.loads(output) if isinstance(output, str) else output
+                            sim_type = result.get("simulation_type", "")
+                            params = result.get("parameters", {})
+                            if isinstance(params, str):
+                                params = json.loads(params)
+                            num_sims = int(result.get("num_simulations", 10000))
+                            seed = int(result.get("seed", 42))
+
+                            dedup_key = f"{sim_type}|{json.dumps(params, sort_keys=True)}|{seed}|{num_sims}"
+                            if dedup_key not in triggered_hashes:
+                                triggered_hashes.add(dedup_key)
+                                placeholder = await insert_submitted_placeholder(
+                                    sim_type, params, num_sims, seed,
+                                )
+                                if analysis_id and placeholder.get("run_id"):
+                                    try:
+                                        await analysis_service.link_simulation(
+                                            analysis_id, placeholder["run_id"], "agent",
+                                        )
+                                    except Exception:
+                                        logger.warning("Failed to link sim", exc_info=True)
+                                yield f"data: {json.dumps({'type': 'simulation_triggered', 'simulation': placeholder})}\n\n"
                         except Exception:
-                            logger.warning("Failed to insert placeholder from stream", exc_info=True)
+                            logger.warning("Failed to process trigger result", exc_info=True)
 
-                elif event["type"] == "tool_call" and "create_matrix" in event.get("agent_name", ""):
-                    sse_event = await _handle_matrix_builder(
-                        thread_id, event.get("arguments", {}), created_matrix_ids,
-                    )
-                    if sse_event:
-                        yield sse_event
-                        yielded = True
-
-                # Keep proxy alive during MAS internal polling (e.g. repeated
-                # check_simulation calls that we don't forward to the client).
-                if not yielded:
-                    yield ": heartbeat\n\n"
+                    elif tool_name == "create_matrix":
+                        sse_event = await _handle_matrix_builder(
+                            thread_id, output, created_matrix_ids,
+                        )
+                        if sse_event:
+                            yield sse_event
 
         finally:
             consumer_task.cancel()
@@ -265,23 +372,21 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
                 pass
 
     except Exception as e:
-        logger.exception("MAS streaming invocation failed")
+        logger.exception("LangGraph streaming failed")
         full_content = f"I encountered an error: {e}"
         yield f"data: {json.dumps({'type': 'delta', 'content': full_content})}\n\n"
-
-    # Text fallback: scan accumulated content for trigger results
-    for sse_event in await _extract_triggers_from_text(full_content, triggered_hashes, analysis_id):
-        yield sse_event
-
-    # Text fallback: scan for validated matrix results
-    for sse_event in await _extract_matrices_from_text(
-        full_content, thread_id, created_matrix_ids,
-    ):
-        yield sse_event
 
     if not full_content.strip():
         full_content = "No response from agent."
         yield f"data: {json.dumps({'type': 'delta', 'content': full_content})}\n\n"
+
+    # 3b. Chart inference disabled — re-enable when chart rendering is stable
+    # try:
+    #     chart_payload = _infer_chart_from_markdown(full_content)
+    #     if chart_payload:
+    #         yield f"data: {json.dumps({'type': 'chart_data', 'chart': chart_payload}, default=str)}\n\n"
+    # except Exception:
+    #     logger.debug("Chart inference from markdown failed", exc_info=True)
 
     # 4. Save final assistant message
     assistant_msg = await db.fetch_one(
@@ -298,210 +403,59 @@ async def send_message_stream(thread_id: UUID, content: str) -> AsyncGenerator[s
     yield f"data: {json.dumps({'type': 'done', 'message': _msg_dict(assistant_msg)}, default=str)}\n\n"
 
 
-async def _extract_triggers_from_text(
-    text: str, already_triggered: set[str], analysis_id=None,
-) -> list[str]:
-    """Text-based fallback: scan MAS response for trigger_simulation results.
-
-    The MAS agent often includes the UC function result JSON inline, e.g.:
-    {"status":"triggered","simulation_type":"cost_comparison",...}
-    """
-    from server.services.simulation_service import insert_submitted_placeholder
-    from server.services import analysis_service
-
-    sse_events: list[str] = []
-    for match in re.finditer(r'\{[^{}]*"status"\s*:\s*"triggered"[^{}]*\}', text):
-        try:
-            blob = json.loads(match.group())
-        except json.JSONDecodeError:
-            continue
-
-        sim_type = blob.get("simulation_type", "")
-        if not sim_type:
-            continue
-        params_str = blob.get("parameters", "{}")
-        try:
-            params = json.loads(params_str) if isinstance(params_str, str) else (params_str or {})
-        except json.JSONDecodeError:
-            params = {}
-        num_sims = int(blob.get("num_simulations", 10000))
-        seed = int(blob.get("seed", 42))
-
-        dedup_key = f"{sim_type}|{json.dumps(params, sort_keys=True)}|{seed}|{num_sims}"
-        if dedup_key in already_triggered:
-            continue
-        already_triggered.add(dedup_key)
-
-        try:
-            job_resp = blob.get("job_response", {})
-            if isinstance(job_resp, str):
-                try:
-                    job_resp = json.loads(job_resp)
-                except (json.JSONDecodeError, TypeError):
-                    job_resp = {}
-            job_run_id = str(job_resp.get("run_id", "")) if isinstance(job_resp, dict) else ""
-
-            placeholder = await insert_submitted_placeholder(
-                sim_type, params, num_sims, seed, job_run_id=job_run_id,
-            )
-            # Link to the current analysis
-            if analysis_id and placeholder.get("run_id"):
-                try:
-                    await analysis_service.link_simulation(
-                        analysis_id, placeholder["run_id"], "agent",
-                    )
-                except Exception:
-                    logger.warning("Failed to link sim to analysis (text fallback)", exc_info=True)
-            sse_events.append(
-                f"data: {json.dumps({'type': 'simulation_triggered', 'simulation': placeholder})}\n\n"
-            )
-        except Exception:
-            logger.warning("Failed to insert placeholder from text fallback", exc_info=True)
-
-    return sse_events
-
-
 async def _handle_matrix_builder(
-    thread_id: UUID, args: dict, created_matrix_ids: set[str],
+    thread_id: UUID, output: str, created_matrix_ids: set[str],
 ) -> str | None:
-    """Intercept a matrix_builder tool_call and create the matrix via Lakebase.
+    """Emit SSE event for a matrix created by the create_matrix tool.
 
-    Returns an SSE event string or None.
+    The tool now does the actual creation + run via matrix_service.
+    This handler just emits the SSE event and starts background polling.
+    """
+    try:
+        result = json.loads(output) if isinstance(output, str) else output
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    if result.get("status") != "created":
+        return None
+
+    matrix_id = result.get("id")
+    if not matrix_id or matrix_id in created_matrix_ids:
+        return None
+    created_matrix_ids.add(matrix_id)
+
+    # Start background polling (matrix already created + running from the tool)
+    asyncio.create_task(_poll_matrix_background(UUID(matrix_id), thread_id))
+
+    matrix_payload = {
+        "id": matrix_id,
+        "name": result.get("name", ""),
+        "simulation_type": result.get("simulation_type", ""),
+        "row_parameter": result.get("row_parameter", ""),
+        "col_parameter": result.get("col_parameter", ""),
+        "rows": result.get("rows", 0),
+        "cols": result.get("cols", 0),
+        "total_cells": result.get("total_cells", 0),
+        "auto_running": True,
+    }
+    return f"data: {json.dumps({'type': 'matrix_created', 'matrix': matrix_payload})}\n\n"
+
+
+async def _poll_matrix_background(matrix_id, thread_id=None):
+    """Poll matrix cell statuses until done, then save results to thread.
+
+    The matrix has already been created and run_matrix() already called
+    by the create_matrix tool. This function only polls for completion.
     """
     from server.services import matrix_service
-
-    sim_type = args.get("p_simulation_type", "")
-    if not sim_type:
-        return None
-
-    # Parse row/col values
-    try:
-        row_values = json.loads(args.get("p_row_values", "[]"))
-    except (json.JSONDecodeError, TypeError):
-        row_values = []
-    try:
-        col_values = json.loads(args.get("p_col_values", "[]"))
-    except (json.JSONDecodeError, TypeError):
-        col_values = []
-
-    if not row_values or not col_values:
-        return None
-
-    row_param = args.get("p_row_parameter", "")
-    col_param = args.get("p_col_parameter", "")
-    if not row_param or not col_param:
-        return None
-
-    # Dedup key
-    dedup_key = f"{sim_type}|{row_param}|{col_param}|{json.dumps(row_values, sort_keys=True)}|{json.dumps(col_values, sort_keys=True)}"
-    if dedup_key in created_matrix_ids:
-        return None
-    created_matrix_ids.add(dedup_key)
-
-    # Always resolve output_metric from config (MAS doesn't know correct metric names)
-    output_metric = ""
-    output_group_key = None
-    output_group_value = None
-    try:
-        import yaml
-        from pathlib import Path
-        cfg_path = Path(__file__).parent.parent / "config.yaml"
-        with open(cfg_path) as f:
-            cfg = yaml.safe_load(f)
-        sim_cfg = cfg.get("simulation_types", {}).get(sim_type, {})
-        agg = sim_cfg.get("aggregation", {})
-        output_metric = agg.get("value_column", "mean_value")
-        output_group_key = agg.get("group_column")
-    except Exception:
-        logger.debug("Could not resolve agg config for %s", sim_type)
-        output_metric = "mean_value"
-
-    # Parse base_parameters
-    try:
-        base_params = json.loads(args.get("p_base_parameters") or "{}")
-    except (json.JSONDecodeError, TypeError):
-        base_params = {}
-
-    num_sims = int(args.get("p_num_simulations") or 10000)
-    seed = int(args.get("p_seed") or 42)
-
-    # Auto-generate name if not provided
-    name = args.get("p_name") or ""
-    if not name:
-        name = f"{sim_type} — {row_param} vs {col_param}"
-
-    # Look up analysis_id from thread
-    thread = await db.fetch_one(
-        "SELECT analysis_id FROM agent_threads WHERE id = $1",
-        thread_id,
-    )
-    if not thread:
-        logger.warning("Thread %s not found — cannot create matrix", thread_id)
-        return None
-
-    analysis_id = thread["analysis_id"]
-
-    logger.info(
-        "Creating matrix: sim_type=%s, output_metric=%s, group_key=%s, group_value=%s, "
-        "rows=%d, cols=%d, base_params=%s",
-        sim_type, output_metric, output_group_key, output_group_value,
-        len(row_values), len(col_values), json.dumps(base_params)[:200],
-    )
-
-    try:
-        matrix = await matrix_service.create_matrix(
-            analysis_id=analysis_id,
-            name=name,
-            simulation_type=sim_type,
-            row_parameter=row_param,
-            row_values=row_values,
-            col_parameter=col_param,
-            col_values=col_values,
-            base_parameters=base_params,
-            output_metric=output_metric,
-            output_group_key=output_group_key,
-            output_group_value=output_group_value,
-            num_simulations=num_sims,
-            seed=seed,
-        )
-
-        # Matrix created — user runs simulations via the UI "Run All" button.
-        # (Auto-trigger removed for reliability; can be re-enabled later.)
-
-        # Build SSE payload
-        matrix_payload = {
-            "id": str(matrix["id"]),
-            "name": name,
-            "simulation_type": sim_type,
-            "row_parameter": row_param,
-            "col_parameter": col_param,
-            "rows": len(row_values),
-            "cols": len(col_values),
-            "total_cells": len(row_values) * len(col_values),
-        }
-        return f"data: {json.dumps({'type': 'matrix_created', 'matrix': matrix_payload})}\n\n"
-
-    except Exception:
-        logger.warning("Failed to create matrix from stream", exc_info=True)
-        return None
-
-
-async def _run_matrix_background(matrix_id, thread_id=None):
-    """Run all matrix cell simulations, poll until done, and save results to thread."""
-    from server.services import matrix_service
-
-    try:
-        result = await matrix_service.run_matrix(matrix_id)
-        logger.info("Background matrix run completed for %s: %s", matrix_id, result)
-    except Exception:
-        logger.warning("Background matrix run failed for %s", matrix_id, exc_info=True)
-        return
 
     if not thread_id:
         return
 
-    # Poll until all cells complete (check every 30s, up to 10 minutes)
-    max_polls = 20
+    await asyncio.sleep(10)
+
+    max_polls = 30
+    retried = False
     for attempt in range(max_polls):
         await asyncio.sleep(30)
         try:
@@ -509,24 +463,38 @@ async def _run_matrix_background(matrix_id, thread_id=None):
             if not matrix:
                 return
 
+            cells = matrix["cells"]
             incomplete = [
-                c for c in matrix["cells"]
+                c for c in cells
                 if c["status"] in ("running", "queued", "pending")
             ]
+            failed = [c for c in cells if c["status"] == "failed"]
+
+            if failed and not retried:
+                retried = True
+                logger.info(
+                    "Matrix %s: %d failed cells — retrying",
+                    matrix_id, len(failed),
+                )
+                try:
+                    await matrix_service.run_matrix(matrix_id)
+                except Exception:
+                    logger.warning("Matrix retry failed for %s", matrix_id, exc_info=True)
+                continue
+
             if not incomplete:
                 break
 
-            # Re-check incomplete cells
             await matrix_service.poll_status(matrix_id)
 
             logger.info(
-                "Matrix %s poll %d/%d: %d incomplete cells remaining",
+                "Matrix %s poll %d/%d: %d incomplete",
                 matrix_id, attempt + 1, max_polls, len(incomplete),
             )
         except Exception:
             logger.warning("Matrix poll failed for %s", matrix_id, exc_info=True)
 
-    # Fetch final state and save summary to thread
+    # Save summary to thread
     try:
         matrix = await matrix_service.get_matrix(matrix_id)
         if not matrix:
@@ -535,17 +503,17 @@ async def _run_matrix_background(matrix_id, thread_id=None):
         summary = _format_matrix_results(matrix)
         if summary:
             await db.execute(
-                """INSERT INTO thread_messages (thread_id, role, content)
-                   VALUES ($1, 'assistant', $2)""",
+                """INSERT INTO thread_messages (thread_id, role, content, metadata)
+                   VALUES ($1, 'assistant', $2, $3)""",
                 thread_id, summary,
+                json.dumps({"type": "matrix_results", "matrix_id": str(matrix_id)}),
             )
             await db.execute(
                 "UPDATE agent_threads SET updated_at = NOW() WHERE id = $1",
                 thread_id,
             )
-            logger.info("Saved matrix results summary to thread %s", thread_id)
     except Exception:
-        logger.warning("Failed to save matrix results to thread", exc_info=True)
+        logger.warning("Failed to save matrix results", exc_info=True)
 
 
 def _format_matrix_results(matrix: dict) -> str | None:
@@ -558,7 +526,7 @@ def _format_matrix_results(matrix: dict) -> str | None:
         if failed:
             return f"**Matrix results update:** {len(failed)} of {len(cells)} cells failed. You may want to retry."
         if running:
-            return None  # Still running, don't post yet
+            return None
         return None
 
     row_vals = matrix["row_values"]
@@ -567,16 +535,14 @@ def _format_matrix_results(matrix: dict) -> str | None:
     col_param = matrix["col_parameter"]
     metric = matrix["output_metric"]
 
-    # Build cell lookup
     cell_map = {}
     for c in cells:
         cell_map[(c["row_value"], c["col_value"])] = c
 
-    # Detect formatting
     def _fmt_param(param, val):
         if any(k in param for k in ("pct", "percent", "rate", "ratio", "fraction", "penetration")) and 0 < val <= 1:
             return f"{val * 100:.0f}%"
-        if any(k in param for k in ("cost", "savings", "revenue", "charge")):
+        if any(k in param for k in ("cost", "savings", "revenue", "charge", "margin")):
             if val >= 1e9:
                 return f"${val / 1e9:.1f}B"
             if val >= 1e6:
@@ -604,18 +570,15 @@ def _format_matrix_results(matrix: dict) -> str | None:
             return f"${val / 1e3:.0f}K"
         return f"{val:,.2f}"
 
-    # Build markdown table
     header_label = row_param.replace("_", " ").title()
     lines = [f"**Matrix Results: {matrix['name']}**", ""]
     lines.append(f"Metric: **{metric.replace('_', ' ').title()}** | {len(completed)} of {len(cells)} cells completed")
     lines.append("")
 
-    # Table header
     col_headers = [_fmt_param(col_param, cv) for cv in col_vals]
     lines.append(f"| {header_label} | " + " | ".join(col_headers) + " |")
     lines.append("|" + "---|" * (len(col_vals) + 1))
 
-    # Table rows
     for rv in row_vals:
         row_label = _fmt_param(row_param, rv)
         cells_in_row = []
@@ -637,7 +600,6 @@ def _format_matrix_results(matrix: dict) -> str | None:
                 cells_in_row.append("---")
         lines.append(f"| {row_label} | " + " | ".join(cells_in_row) + " |")
 
-    # Key findings
     if completed:
         means = [(c["result_mean"], c["row_value"], c["col_value"]) for c in completed if c.get("result_mean") is not None]
         if means:
@@ -652,47 +614,100 @@ def _format_matrix_results(matrix: dict) -> str | None:
     return "\n".join(lines)
 
 
-async def _extract_matrices_from_text(
-    text: str, thread_id: UUID, already_created: set[str],
-) -> list[str]:
-    """Text-based fallback: scan MAS response for validated matrix results."""
-    sse_events: list[str] = []
-    for match in re.finditer(r'\{[^{}]*"status"\s*:\s*"validated"[^{}]*\}', text):
+def _infer_chart_from_markdown(text: str) -> dict | None:
+    """Parse a markdown table from the response and infer a chart."""
+    lines = text.split("\n")
+    table_lines: list[str] = []
+    in_table = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            if re.match(r"^\|[\s\-:|]+\|$", stripped):
+                in_table = True
+                continue
+            table_lines.append(stripped)
+            in_table = True
+        elif in_table:
+            break
+
+    if len(table_lines) < 3:
+        return None
+
+    header_cells = [c.strip() for c in table_lines[0].split("|")[1:-1]]
+
+    rows: list[dict] = []
+    for line in table_lines[1:]:
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        if len(cells) != len(header_cells):
+            continue
+        rows.append(dict(zip(header_cells, cells)))
+
+    if len(rows) < 2:
+        return None
+
+    def _parse_number(s: str) -> float | None:
+        s = re.sub(r"\*\*(.+?)\*\*", r"\1", s).strip()
+        s = re.sub(r"^[$\u20ac\u00a3]", "", s)
+        s = s.replace(",", "")
+        if not s or s in ("\u2014", "---", "~", "N/A", "n/a") or "next" in s.lower():
+            return None
         try:
-            blob = json.loads(match.group())
-        except json.JSONDecodeError:
+            return float(s)
+        except ValueError:
+            return None
+
+    label_col = None
+    value_cols: list[str] = []
+
+    for col in header_cells:
+        if col.lower() in ("rank", "#", "no", "no.", "trend"):
             continue
+        nums = [_parse_number(r.get(col, "")) for r in rows]
+        valid_nums = [n for n in nums if n is not None]
+        if len(valid_nums) >= len(rows) * 0.5:
+            value_cols.append(col)
+        elif label_col is None:
+            label_col = col
 
-        sim_type = blob.get("simulation_type", "")
-        row_param = blob.get("row_parameter", "")
-        col_param = blob.get("col_parameter", "")
-        if not sim_type or not row_param or not col_param:
+    if not label_col or not value_cols:
+        return None
+
+    chart_rows: list[dict] = []
+    for row in rows:
+        label = row.get(label_col, "")
+        label = re.sub(r"\*\*(.+?)\*\*", r"\1", label)
+        label = re.sub(
+            r"[\U0001f300-\U0001f9ff\u2b07\ufe0f\u2b06\ufe0f\U0001fa00-\U0001faff]+\s*",
+            "", label,
+        ).strip()
+        if not label:
             continue
+        d: dict = {label_col: label}
+        has_value = False
+        for vc in value_cols:
+            num = _parse_number(row.get(vc, ""))
+            if num is not None:
+                d[vc] = num
+                has_value = True
+            else:
+                d[vc] = 0
+        if has_value:
+            chart_rows.append(d)
 
-        row_values = blob.get("row_values", [])
-        col_values = blob.get("col_values", [])
-        if not row_values or not col_values:
-            continue
+    if len(chart_rows) < 2:
+        return None
 
-        # Build args dict matching the tool_call format
-        args = {
-            "p_simulation_type": sim_type,
-            "p_row_parameter": row_param,
-            "p_row_values": json.dumps(row_values),
-            "p_col_parameter": col_param,
-            "p_col_values": json.dumps(col_values),
-            "p_output_metric": blob.get("output_metric", ""),
-            "p_base_parameters": json.dumps(blob.get("base_parameters", {})),
-            "p_name": blob.get("name", ""),
-            "p_num_simulations": blob.get("num_simulations", 10000),
-            "p_seed": blob.get("seed", 42),
-        }
+    time_keywords = ("month", "date", "year", "quarter", "week", "period", "time")
+    is_time = any(kw in label_col.lower() for kw in time_keywords)
+    chart_type = "line" if is_time else "bar"
 
-        sse_event = await _handle_matrix_builder(thread_id, args, already_created)
-        if sse_event:
-            sse_events.append(sse_event)
-
-    return sse_events
+    return {
+        "chart_type": chart_type,
+        "x_key": label_col,
+        "y_keys": value_cols[:3],
+        "data": chart_rows,
+    }
 
 
 def _msg_dict(row) -> dict:

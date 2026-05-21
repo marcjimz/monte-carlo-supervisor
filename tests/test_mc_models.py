@@ -11,8 +11,8 @@ defaults.
 import pandas as pd
 import pytest
 
-from src.databricks.monte_carlo import config_loader, model_templates
-from src.databricks.monte_carlo.engine import (
+from src.mc_supervisor.monte_carlo import config_loader, model_templates
+from src.mc_supervisor.monte_carlo.engine import (
     get_available_simulation_types,
     get_simulation_model,
 )

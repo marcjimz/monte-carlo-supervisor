@@ -6,7 +6,7 @@ aggregation columns match schemas, and config_loader functions return correct da
 
 import pytest
 
-from src.databricks.monte_carlo import config_loader, model_templates
+from src.mc_supervisor.monte_carlo import config_loader, model_templates
 
 
 # ---------------------------------------------------------------------------
@@ -30,19 +30,18 @@ class TestConfigStructure:
         assert "version" in self.config
 
     def test_expected_types_present(self):
-        """Verify the 4 WH simulation types are configured."""
+        """Verify the 2 encounter-based simulation types are configured."""
         types = set(self.config["simulation_types"].keys())
-        assert "patient_volume" in types
-        assert "revenue" in types
-        assert "cost_comparison" in types
-        assert "system_cost_roi" in types
+        assert "encounter_margin" in types
+        assert "wh_margin_comparison" in types
 
     def test_removed_types_absent(self):
-        """Verify removed general hospital types are gone."""
+        """Verify old simulation types are gone."""
         types = set(self.config["simulation_types"].keys())
-        assert "ed_wait_time" not in types
-        assert "length_of_stay" not in types
-        assert "readmission_rate" not in types
+        assert "patient_volume" not in types
+        assert "revenue" not in types
+        assert "cost_comparison" not in types
+        assert "system_cost_roi" not in types
 
     def test_every_type_has_distributions(self):
         """Every simulation type should have a distributions block."""
@@ -118,9 +117,9 @@ class TestModelTemplateRegistration:
         assert len(templates) == len(set(templates))
 
     def test_new_templates_registered(self):
-        """Verify hypothesis testing templates are registered."""
-        assert "cohort_cost_comparison" in model_templates.get_available_templates()
-        assert "multi_year_roi_projection" in model_templates.get_available_templates()
+        """Verify encounter-based templates are registered."""
+        assert "encounter_margin_forecast" in model_templates.get_available_templates()
+        assert "wh_margin_cohort" in model_templates.get_available_templates()
 
 
 # ---------------------------------------------------------------------------
@@ -198,19 +197,22 @@ class TestConfigLoader:
 
     def test_get_all_agg_metrics(self):
         """get_all_agg_metrics returns primary + additional metrics."""
-        metrics = config_loader.get_all_agg_metrics("cost_comparison")
+        metrics = config_loader.get_all_agg_metrics("encounter_margin")
         assert len(metrics) == 2  # primary + 1 additional
-        assert metrics[0] == ("simulated_cost_per_encounter", "care_model")
-        assert metrics[1] == ("simulated_total_cost", "care_model")
+        assert metrics[0] == ("simulated_direct_margin", "month")
+        assert metrics[1] == ("simulated_margin_per_encounter", "month")
 
-    def test_get_all_agg_metrics_system_cost_roi(self):
-        metrics = config_loader.get_all_agg_metrics("system_cost_roi")
-        assert len(metrics) == 3  # primary + 2 additional
+    def test_get_all_agg_metrics_wh_comparison(self):
+        metrics = config_loader.get_all_agg_metrics("wh_margin_comparison")
+        assert len(metrics) == 2  # primary + 1 additional
+        assert metrics[0] == ("simulated_margin_per_encounter", "scenario")
+        assert metrics[1] == ("simulated_direct_margin", "scenario")
 
-    def test_get_all_agg_metrics_no_additional(self):
-        """Types without additional_metrics return only primary."""
-        metrics = config_loader.get_all_agg_metrics("patient_volume")
-        assert len(metrics) == 1
+    def test_get_all_agg_metrics_all_types_have_metrics(self):
+        """All current types have at least one metric."""
+        for sim_type in config_loader.get_valid_types():
+            metrics = config_loader.get_all_agg_metrics(sim_type)
+            assert len(metrics) >= 1
 
     def test_get_default_params_returns_dict(self):
         for sim_type in config_loader.get_valid_types():
@@ -259,27 +261,20 @@ class TestConfigLoader:
                 assert "type" in spec, f"{sim_type}.{dist_name} spec missing 'type'"
                 assert "params" in spec, f"{sim_type}.{dist_name} spec missing 'params'"
 
-    def test_get_default_distribution_specs_patient_volume(self):
-        specs = config_loader.get_default_distribution_specs("patient_volume")
+    def test_get_default_distribution_specs_encounter_margin(self):
+        specs = config_loader.get_default_distribution_specs("encounter_margin")
+        assert "monthly_margin" in specs
         assert "encounter_volume" in specs
-        assert specs["encounter_volume"]["type"] == "normal"
+        assert "cost_per_encounter" in specs
+        assert specs["monthly_margin"]["type"] == "normal"
+        assert specs["cost_per_encounter"]["type"] == "lognormal"
 
-    def test_get_default_distribution_specs_cost_comparison(self):
-        specs = config_loader.get_default_distribution_specs("cost_comparison")
-        assert "inperson_cost" in specs
-        assert "virtual_cost" in specs
-        assert specs["inperson_cost"]["type"] == "lognormal"
-
-    def test_get_default_distribution_specs_system_cost_roi(self):
-        specs = config_loader.get_default_distribution_specs("system_cost_roi")
-        assert "baseline_cost" in specs
-        assert "reduction_noise" in specs
-
-    def test_get_default_distribution_specs_revenue(self):
-        specs = config_loader.get_default_distribution_specs("revenue")
-        assert "gross_charges" in specs
-        assert "denial_rate" in specs
-        assert specs["denial_rate"]["type"] == "beta"
+    def test_get_default_distribution_specs_wh_comparison(self):
+        specs = config_loader.get_default_distribution_specs("wh_margin_comparison")
+        assert "wh_margin" in specs
+        assert "non_wh_margin" in specs
+        assert specs["wh_margin"]["type"] == "normal"
+        assert specs["non_wh_margin"]["type"] == "normal"
 
     def test_reset_config_clears_cache(self):
         config_loader.load_config()
@@ -298,7 +293,7 @@ class TestUCFunctionValidTypes:
     """Verify UC SQL functions accept and use valid_types from config."""
 
     def test_check_simulation_uses_custom_types(self):
-        from src.databricks.sql.functions.monte_carlo.check_simulation import CheckSimulationFunction
+        from src.mc_supervisor.sql.functions.monte_carlo.check_simulation import CheckSimulationFunction
 
         custom_types = ["alpha", "beta"]
         sql = CheckSimulationFunction.get_registration_sql(
@@ -308,7 +303,7 @@ class TestUCFunctionValidTypes:
         assert "'beta'" in sql
 
     def test_trigger_simulation_uses_custom_types(self):
-        from src.databricks.sql.functions.monte_carlo.trigger_simulation import TriggerSimulationFunction
+        from src.mc_supervisor.sql.functions.monte_carlo.trigger_simulation import TriggerSimulationFunction
 
         custom_types = ["gamma", "delta"]
         sql = TriggerSimulationFunction.get_registration_sql(
@@ -318,7 +313,7 @@ class TestUCFunctionValidTypes:
         assert "'gamma'" in sql
 
     def test_registry_passes_valid_types(self):
-        from src.databricks.sql.functions.monte_carlo.registry import MonteCarloRegistry
+        from src.mc_supervisor.sql.functions.monte_carlo.registry import MonteCarloRegistry
 
         custom_types = ["foo", "bar"]
         registry = MonteCarloRegistry("cat", "sch", "123", "conn", valid_types=custom_types)

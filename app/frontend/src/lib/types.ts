@@ -143,6 +143,13 @@ export interface SimulationTriggeredEvent {
   updated_at: string;
 }
 
+export interface ChartDataEvent {
+  chart_type: "line" | "bar";
+  x_key: string;
+  y_keys: string[];
+  data: Record<string, unknown>[];
+}
+
 export interface MatrixCreatedEvent {
   id: string;
   name: string;
@@ -152,6 +159,7 @@ export interface MatrixCreatedEvent {
   rows: number;
   cols: number;
   total_cells: number;
+  auto_running?: boolean;
 }
 
 export interface DistributionSpec {
